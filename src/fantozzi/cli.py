@@ -76,6 +76,11 @@ from fantozzi.revision_report import (
     generate_revision_report,
     save_report as save_revision_report,
 )
+from fantozzi.relatorios_gerenciais_ok import (
+    RelatoriosGerenciaisOkError,
+    console_lines as relatorios_ok_console_lines,
+    gerar_relatorios_gerenciais_ok_provisorios,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -141,7 +146,12 @@ def build_parser() -> argparse.ArgumentParser:
             "gerar-pacote-revisao-contabil "
             "--csv reports\\revisao_classificacao_revisada.csv "
             "--saida-xlsx reports\\pacote_revisao_contabil.xlsx "
-            "--relatorio reports\\pacote_revisao_contabil.txt"
+            "--relatorio reports\\pacote_revisao_contabil.txt\n"
+            "  .\\.venv\\Scripts\\python.exe -m fantozzi.cli "
+            "gerar-relatorios-gerenciais-ok-provisorios "
+            "--entrada output\\importacao_real "
+            "--saida-xlsx reports\\relatorios_gerenciais_ok_provisorios.xlsx "
+            "--relatorio reports\\relatorios_gerenciais_ok_provisorios.txt"
         ),
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -493,6 +503,44 @@ def build_parser() -> argparse.ArgumentParser:
         help="Separador dos CSV de entrada.",
     )
     gerar_pacote_revisao.set_defaults(func=gerar_pacote_revisao_contabil_command)
+
+    gerar_relatorios_ok = subparsers.add_parser(
+        "gerar-relatorios-gerenciais-ok-provisorios",
+        help="Gera relatorios gerenciais provisorios somente com lancamentos OK.",
+        description=(
+            "Le Excel de lancamentos ou diretorios com Excel, inclui somente "
+            "status_revisao OK e exclui REVISAR e operacoes especiais auditadas. "
+            "Gera XLSX e TXT provisorios, sem alterar dados de origem ou config."
+        ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    gerar_relatorios_ok.add_argument(
+        "--entrada",
+        action="append",
+        required=True,
+        help="Arquivo Excel .xlsx ou diretorio com Excel de lancamentos.",
+    )
+    gerar_relatorios_ok.add_argument(
+        "--saida-xlsx",
+        required=True,
+        help="Arquivo XLSX de saida dos relatorios gerenciais OK provisorios.",
+    )
+    gerar_relatorios_ok.add_argument(
+        "--relatorio",
+        help="Arquivo TXT opcional para salvar o resumo dos relatorios.",
+    )
+    gerar_relatorios_ok.add_argument(
+        "--pasta-operacoes-especiais",
+        action="append",
+        default=[],
+        help=(
+            "Pasta XML opcional para auditar e excluir comodato, bonificacao "
+            "e outras operacoes especiais."
+        ),
+    )
+    gerar_relatorios_ok.set_defaults(
+        func=gerar_relatorios_gerenciais_ok_provisorios_command
+    )
 
     return parser
 
@@ -872,6 +920,31 @@ def gerar_pacote_revisao_contabil_command(args: argparse.Namespace) -> int:
         return 1
 
     for line in review_package_console_lines(result):
+        print(line)
+    return 0
+
+
+def gerar_relatorios_gerenciais_ok_provisorios_command(
+    args: argparse.Namespace,
+) -> int:
+    try:
+        result = gerar_relatorios_gerenciais_ok_provisorios(
+            [Path(entrada) for entrada in args.entrada],
+            Path(args.saida_xlsx),
+            Path(args.relatorio) if args.relatorio else None,
+            [Path(pasta) for pasta in (args.pasta_operacoes_especiais or [])],
+        )
+    except RelatoriosGerenciaisOkError as exc:
+        print(f"[ERRO] {exc}")
+        return 1
+    except Exception:
+        print(
+            "[ERRO] Nao foi possivel gerar relatorios gerenciais OK "
+            f"provisorios: {args.saida_xlsx}"
+        )
+        return 1
+
+    for line in relatorios_ok_console_lines(result):
         print(line)
     return 0
 

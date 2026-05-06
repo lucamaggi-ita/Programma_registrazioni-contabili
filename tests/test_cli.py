@@ -288,6 +288,38 @@ def test_parser_accepts_gerar_pacote_revisao_contabil_command():
     assert args.limite_top == 25
 
 
+def test_parser_accepts_gerar_relatorios_gerenciais_ok_provisorios_command():
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "gerar-relatorios-gerenciais-ok-provisorios",
+            "--entrada",
+            "output/importacao_real",
+            "--saida-xlsx",
+            "reports/importacao_real/relatorios_gerenciais_ok_provisorios.xlsx",
+            "--relatorio",
+            "reports/importacao_real/relatorios_gerenciais_ok_provisorios.txt",
+            "--pasta-operacoes-especiais",
+            "XML_fatture_acquisto/55746722000181/xml",
+        ]
+    )
+
+    assert args.command == "gerar-relatorios-gerenciais-ok-provisorios"
+    assert args.entrada == ["output/importacao_real"]
+    assert (
+        args.saida_xlsx
+        == "reports/importacao_real/relatorios_gerenciais_ok_provisorios.xlsx"
+    )
+    assert (
+        args.relatorio
+        == "reports/importacao_real/relatorios_gerenciais_ok_provisorios.txt"
+    )
+    assert args.pasta_operacoes_especiais == [
+        "XML_fatture_acquisto/55746722000181/xml"
+    ]
+
+
 def test_general_help_returns_zero_and_lists_commands(capsys):
     with pytest.raises(SystemExit) as exc_info:
         main(["--help"])
@@ -309,6 +341,7 @@ def test_general_help_returns_zero_and_lists_commands(capsys):
     assert "importar-planilha-revisao-classificacao" in captured.out
     assert "gerar-pre-livro-diario-teste" in captured.out
     assert "gerar-pacote-revisao-contabil" in captured.out
+    assert "gerar-relatorios-gerenciais-ok-provisorios" in captured.out
 
 
 def test_importar_nfe_help_returns_zero_and_lists_options(capsys):
@@ -472,6 +505,18 @@ def test_gerar_pacote_revisao_contabil_help_returns_zero_and_lists_options(capsy
     assert "--relatorio" in captured.out
     assert "--limite-top" in captured.out
     assert "--separador" in captured.out
+
+
+def test_gerar_relatorios_gerenciais_ok_provisorios_help_lists_options(capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        main(["gerar-relatorios-gerenciais-ok-provisorios", "--help"])
+
+    captured = capsys.readouterr()
+    assert exc_info.value.code == 0
+    assert "--entrada" in captured.out
+    assert "--saida-xlsx" in captured.out
+    assert "--relatorio" in captured.out
+    assert "--pasta-operacoes-especiais" in captured.out
 
 
 def test_importar_nfe_command_writes_excel_with_sample_xml(tmp_path):
@@ -1223,6 +1268,54 @@ def test_gerar_pacote_revisao_contabil_command_retorna_erro_csv_inexistente(
             "gerar-pacote-revisao-contabil",
             "--csv",
             str(missing_csv),
+            "--saida-xlsx",
+            str(output_path),
+        ]
+    )
+
+    assert result == 1
+    assert not output_path.exists()
+
+
+def test_gerar_relatorios_gerenciais_ok_provisorios_command_gera_xlsx_e_txt(
+    tmp_path,
+    capsys,
+):
+    excel_path = tmp_path / "55746722000181" / "lancamentos.xlsx"
+    excel_path.parent.mkdir(parents=True)
+    _save_revision_workbook(excel_path)
+    output_path = tmp_path / "reports" / "relatorios_ok.xlsx"
+    report_path = tmp_path / "reports" / "relatorios_ok.txt"
+
+    result = main(
+        [
+            "gerar-relatorios-gerenciais-ok-provisorios",
+            "--entrada",
+            str(excel_path.parent),
+            "--saida-xlsx",
+            str(output_path),
+            "--relatorio",
+            str(report_path),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert result == 0
+    assert output_path.exists()
+    assert report_path.exists()
+    assert "[OK] Relatorios gerenciais OK provisorios gerados." in captured.out
+
+
+def test_gerar_relatorios_gerenciais_ok_provisorios_command_retorna_erro_entrada_inexistente(
+    tmp_path,
+):
+    output_path = tmp_path / "reports" / "relatorios_ok.xlsx"
+
+    result = main(
+        [
+            "gerar-relatorios-gerenciais-ok-provisorios",
+            "--entrada",
+            str(tmp_path / "inexistente"),
             "--saida-xlsx",
             str(output_path),
         ]
