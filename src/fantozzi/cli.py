@@ -439,6 +439,10 @@ def build_parser() -> argparse.ArgumentParser:
             "operacoes especiais dentro do pre-livro de teste."
         ),
     )
+    gerar_pre_livro.add_argument(
+        "--relatorio-auditoria",
+        help="Arquivo TXT opcional para salvar os indicadores da aba Auditoria.",
+    )
     gerar_pre_livro.set_defaults(func=gerar_pre_livro_diario_teste_command)
 
     return parser
@@ -786,6 +790,7 @@ def gerar_pre_livro_diario_teste_command(args: argparse.Namespace) -> int:
                 Path(pasta_path)
                 for pasta_path in (args.pasta_operacoes_especiais or [])
             ],
+            Path(args.relatorio_auditoria) if args.relatorio_auditoria else None,
         )
     except PreLivroDiarioError as exc:
         print(f"[ERRO] {exc}")
@@ -796,6 +801,8 @@ def gerar_pre_livro_diario_teste_command(args: argparse.Namespace) -> int:
 
     for line in pre_livro_console_lines(result):
         print(line)
+    if args.relatorio_auditoria:
+        print(f"[OK] Relatorio de auditoria salvo em: {args.relatorio_auditoria}")
     return 0
 
 

@@ -9,6 +9,7 @@ import pytest
 from fantozzi.excel_writer import write_lancamentos_to_excel
 from fantozzi.models import Duplicata, Lancamento
 from fantozzi.pre_livro_diario import (
+    AUDITORIA_SHEET,
     INSTRUCOES_SHEET,
     LANCAMENTOS_OK_SHEET,
     LANCAMENTOS_REVISAR_SHEET,
@@ -56,12 +57,31 @@ def test_gera_pre_livro_diario_com_abas_e_resumos(tmp_path):
         OPERACOES_ESPECIAIS_SHEET,
         RESUMO_CONTA_SHEET,
         RESUMO_MENSAL_SHEET,
+        AUDITORIA_SHEET,
         INSTRUCOES_SHEET,
     ]
     assert workbook[LANCAMENTOS_OK_SHEET].max_row == 2
     assert workbook[LANCAMENTOS_REVISAR_SHEET].max_row == 2
     assert workbook[RESUMO_CONTA_SHEET].max_row == 3
     assert workbook[RESUMO_MENSAL_SHEET].max_row == 2
+    auditoria = _audit_rows(workbook)
+    assert set(auditoria) >= {
+        "total_lancamentos_ok",
+        "total_lancamentos_revisar",
+        "total_lancamentos_geral",
+        "total_operacoes_especiais",
+        "total_resumo_por_conta",
+        "total_resumo_mensal",
+        "valor_total_lancamentos_ok",
+        "valor_total_lancamentos_revisar",
+        "valor_total_lancamentos_geral",
+        "valor_total_operacoes_especiais",
+        "status_geral_auditoria",
+    }
+    assert auditoria["total_lancamentos_geral"]["Valor"] == 2
+    assert auditoria["total_lancamentos_geral"]["Status"] == "OK"
+    assert auditoria["total_lancamentos_revisar"]["Status"] == "ATENCAO"
+    assert auditoria["status_geral_auditoria"]["Valor"] == "ATENCAO"
     assert "nao um livro diario definitivo" in workbook[INSTRUCOES_SHEET]["A3"].value
     assert excel_path.read_bytes() == original_excel
 
@@ -81,6 +101,22 @@ def test_inclui_operacoes_especiais_quando_pasta_xml_e_informada(tmp_path):
     assert row["tipo_operacao_especial"] == "COMODATO"
     assert row["destino_gerencial_sugerido"] == "FORA_DRE"
     assert row["status_revisao_sugerido"] == "ANALISAR_COM_CONTADOR"
+    auditoria = _audit_rows(load_workbook(output_path, data_only=True))
+    assert auditoria["total_operacoes_especiais"]["Status"] == "ATENCAO_CONTABIL"
+    assert auditoria["status_geral_auditoria"]["Valor"] == "ATENCAO_CONTABIL"
+
+
+def test_salva_relatorio_txt_de_auditoria_quando_informado(tmp_path):
+    excel_path = tmp_path / "lancamentos.xlsx"
+    output_path = tmp_path / "reports" / "pre_livro.xlsx"
+    report_path = tmp_path / "reports" / "auditoria.txt"
+    write_lancamentos_to_excel(excel_path, [_lancamento("hash-ok")])
+
+    gerar_pre_livro_diario_teste([excel_path], output_path, relatorio_auditoria_path=report_path)
+
+    text = report_path.read_text(encoding="utf-8")
+    assert "AUDITORIA DO PRE-LIVRO DIARIO" in text
+    assert "total_lancamentos_ok;1;OK" in text
 
 
 def test_retorna_erro_quando_excel_nao_existe(tmp_path):
@@ -103,6 +139,16 @@ def _xml_dir_with_special_operation(tmp_path: Path) -> Path:
     text = text.replace("<CFOP>5102</CFOP>", "<CFOP>5908</CFOP>", 1)
     xml_path.write_text(text, encoding="utf-8")
     return xml_dir
+
+
+def _audit_rows(workbook) -> dict[str, dict[str, object]]:
+    sheet = workbook[AUDITORIA_SHEET]
+    headers = [cell.value for cell in sheet[1]]
+    rows = {}
+    for values in sheet.iter_rows(min_row=2, values_only=True):
+        row = dict(zip(headers, values))
+        rows[row["Indicador"]] = row
+    return rows
 
 
 def _lancamento(

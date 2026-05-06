@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections import defaultdict
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -23,6 +22,7 @@ LANCAMENTOS_REVISAR_SHEET = "Lancamentos_REVISAR"
 OPERACOES_ESPECIAIS_SHEET = "Operacoes_Especiais"
 RESUMO_CONTA_SHEET = "Resumo_por_Conta"
 RESUMO_MENSAL_SHEET = "Resumo_Mensal"
+AUDITORIA_SHEET = "Auditoria"
 INSTRUCOES_SHEET = "Instrucoes"
 
 SOURCE_HEADER = "arquivo_excel_origem"
@@ -72,9 +72,19 @@ RESUMO_MENSAL_HEADERS = [
     "valor_total",
 ]
 
+AUDITORIA_HEADERS = ["Indicador", "Valor", "Status", "Observacao"]
+
 
 class PreLivroDiarioError(Exception):
     pass
+
+
+@dataclass(frozen=True)
+class AuditoriaIndicador:
+    indicador: str
+    valor: object
+    status: str
+    observacao: str
 
 
 @dataclass(frozen=True)
@@ -87,16 +97,26 @@ class PreLivroDiarioResult:
     operacoes_especiais: int
     total_por_conta: int
     total_meses: int
+    valor_total_lancamentos_ok: Decimal
+    valor_total_lancamentos_revisar: Decimal
+    valor_total_lancamentos_geral: Decimal
+    valor_total_operacoes_especiais: Decimal
+    status_geral_auditoria: str
+    auditoria: tuple[AuditoriaIndicador, ...]
 
 
 def gerar_pre_livro_diario_teste(
     excel_paths: Iterable[Path | str],
     output_path: Path | str,
     pastas_operacoes_especiais: Iterable[Path | str] | None = None,
+    relatorio_auditoria_path: Path | str | None = None,
 ) -> PreLivroDiarioResult:
     excel_paths = tuple(Path(path) for path in excel_paths)
     output_path = Path(output_path)
     pastas_operacoes = tuple(Path(path) for path in (pastas_operacoes_especiais or ()))
+    relatorio_auditoria_path = (
+        Path(relatorio_auditoria_path) if relatorio_auditoria_path else None
+    )
 
     if not excel_paths:
         raise PreLivroDiarioError("Informe ao menos um Excel de lancamentos.")
@@ -118,6 +138,15 @@ def gerar_pre_livro_diario_teste(
             _accumulate_resumo_mensal(resumo_mensal, row)
 
     operacoes_especiais = _read_operacoes_especiais(pastas_operacoes)
+    resumo_conta_rows = _resumo_conta_rows(resumo_por_conta)
+    resumo_mensal_rows = _resumo_mensal_rows(resumo_mensal)
+    auditoria = _build_auditoria(
+        lancamentos_ok,
+        lancamentos_revisar,
+        operacoes_especiais,
+        resumo_conta_rows,
+        resumo_mensal_rows,
+    )
 
     workbook = Workbook()
     _write_lancamentos_sheet(
@@ -137,12 +166,16 @@ def gerar_pre_livro_diario_teste(
     _write_resumo_sheet(
         workbook.create_sheet(RESUMO_CONTA_SHEET),
         RESUMO_CONTA_HEADERS,
-        _resumo_conta_rows(resumo_por_conta),
+        resumo_conta_rows,
     )
     _write_resumo_sheet(
         workbook.create_sheet(RESUMO_MENSAL_SHEET),
         RESUMO_MENSAL_HEADERS,
-        _resumo_mensal_rows(resumo_mensal),
+        resumo_mensal_rows,
+    )
+    _write_auditoria_sheet(
+        workbook.create_sheet(AUDITORIA_SHEET),
+        auditoria,
     )
     _write_instrucoes_sheet(
         workbook.create_sheet(INSTRUCOES_SHEET),
@@ -152,6 +185,8 @@ def gerar_pre_livro_diario_teste(
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     workbook.save(output_path)
+    if relatorio_auditoria_path:
+        salvar_relatorio_auditoria(relatorio_auditoria_path, auditoria)
 
     return PreLivroDiarioResult(
         output_path=output_path,
@@ -162,6 +197,16 @@ def gerar_pre_livro_diario_teste(
         operacoes_especiais=len(operacoes_especiais),
         total_por_conta=len(resumo_por_conta),
         total_meses=len(resumo_mensal),
+        valor_total_lancamentos_ok=_sum_values(lancamentos_ok, "valor"),
+        valor_total_lancamentos_revisar=_sum_values(lancamentos_revisar, "valor"),
+        valor_total_lancamentos_geral=_sum_values(
+            [*lancamentos_ok, *lancamentos_revisar], "valor"
+        ),
+        valor_total_operacoes_especiais=_sum_values(
+            operacoes_especiais, "valor_total_nfe"
+        ),
+        status_geral_auditoria=_status_geral_auditoria(auditoria),
+        auditoria=tuple(auditoria),
     )
 
 
@@ -174,8 +219,39 @@ def console_lines(result: PreLivroDiarioResult) -> list[str]:
         f"     Operacoes especiais: {result.operacoes_especiais}",
         f"     Resumo por conta: {result.total_por_conta}",
         f"     Resumo mensal: {result.total_meses}",
+        f"     Status auditoria: {result.status_geral_auditoria}",
         f"     Arquivo gerado: {result.output_path}",
     ]
+
+
+def salvar_relatorio_auditoria(
+    report_path: Path | str,
+    auditoria: Iterable[AuditoriaIndicador],
+) -> None:
+    report_path = Path(report_path)
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(
+        relatorio_auditoria_text(auditoria),
+        encoding="utf-8",
+        newline="\n",
+    )
+
+
+def relatorio_auditoria_text(auditoria: Iterable[AuditoriaIndicador]) -> str:
+    lines = [
+        "FANTOZZI - AUDITORIA DO PRE-LIVRO DIARIO GERENCIAL DE TESTE",
+        "===========================================================",
+        "",
+        "Este relatorio e um controle preliminar. Nao e livro diario definitivo.",
+        "",
+        "Indicadores",
+        "-----------",
+    ]
+    for item in auditoria:
+        lines.append(
+            f"{item.indicador};{_audit_value_text(item.valor)};{item.status};{item.observacao}"
+        )
+    return "\n".join(lines) + "\n"
 
 
 def _read_lancamentos(excel_path: Path) -> list[dict[str, object]]:
@@ -336,6 +412,153 @@ def _with_totals(row: dict[str, object]) -> dict[str, object]:
     }
 
 
+def _build_auditoria(
+    lancamentos_ok: list[dict[str, object]],
+    lancamentos_revisar: list[dict[str, object]],
+    operacoes_especiais: list[dict[str, object]],
+    resumo_conta_rows: list[dict[str, object]],
+    resumo_mensal_rows: list[dict[str, object]],
+) -> list[AuditoriaIndicador]:
+    total_ok = len(lancamentos_ok)
+    total_revisar = len(lancamentos_revisar)
+    total_geral = total_ok + total_revisar
+    total_operacoes = len(operacoes_especiais)
+    valor_ok = _sum_values(lancamentos_ok, "valor")
+    valor_revisar = _sum_values(lancamentos_revisar, "valor")
+    valor_geral = valor_ok + valor_revisar
+    valor_operacoes = _sum_values(operacoes_especiais, "valor_total_nfe")
+    resumo_conta_total = _sum_int_values(resumo_conta_rows, "qtd_lancamentos_total")
+    resumo_conta_valor = _sum_values(resumo_conta_rows, "valor_total")
+    resumo_mensal_total = _sum_int_values(resumo_mensal_rows, "qtd_lancamentos_total")
+    resumo_mensal_valor = _sum_values(resumo_mensal_rows, "valor_total")
+    count_status = "OK" if total_ok + total_revisar == total_geral else "ERRO"
+    conta_status = (
+        "OK"
+        if resumo_conta_total == total_geral and resumo_conta_valor == valor_geral
+        else "ERRO"
+    )
+    mensal_status = (
+        "OK"
+        if resumo_mensal_total == total_geral and resumo_mensal_valor == valor_geral
+        else "ERRO"
+    )
+    operacoes_status = "ATENCAO_CONTABIL" if total_operacoes else "NAO_APLICAVEL"
+    revisao_status = "ATENCAO" if total_revisar else "OK"
+    status_geral = _derive_status_geral(
+        total_revisar=total_revisar,
+        total_operacoes=total_operacoes,
+        has_error=count_status == "ERRO" or conta_status == "ERRO" or mensal_status == "ERRO",
+    )
+
+    return [
+        AuditoriaIndicador(
+            "total_lancamentos_ok",
+            total_ok,
+            "OK",
+            "Lancamentos com status_revisao OK.",
+        ),
+        AuditoriaIndicador(
+            "total_lancamentos_revisar",
+            total_revisar,
+            revisao_status,
+            "Lancamentos que exigem revisao manual antes de qualquer livro definitivo.",
+        ),
+        AuditoriaIndicador(
+            "total_lancamentos_geral",
+            total_geral,
+            count_status,
+            "Total calculado como OK + REVISAR.",
+        ),
+        AuditoriaIndicador(
+            "total_operacoes_especiais",
+            total_operacoes,
+            operacoes_status,
+            "Operacoes especiais ficam separadas dos lancamentos normais.",
+        ),
+        AuditoriaIndicador(
+            "total_resumo_por_conta",
+            len(resumo_conta_rows),
+            conta_status,
+            "Resumo_por_Conta confere quantidade e valor total dos lancamentos.",
+        ),
+        AuditoriaIndicador(
+            "total_resumo_mensal",
+            len(resumo_mensal_rows),
+            mensal_status,
+            "Resumo_Mensal confere quantidade e valor total dos lancamentos.",
+        ),
+        AuditoriaIndicador(
+            "valor_total_lancamentos_ok",
+            valor_ok,
+            "OK",
+            "Soma dos valores dos lancamentos OK.",
+        ),
+        AuditoriaIndicador(
+            "valor_total_lancamentos_revisar",
+            valor_revisar,
+            revisao_status,
+            "Soma dos valores dos lancamentos em revisao.",
+        ),
+        AuditoriaIndicador(
+            "valor_total_lancamentos_geral",
+            valor_geral,
+            "OK" if conta_status == "OK" and mensal_status == "OK" else "ERRO",
+            "Soma dos lancamentos OK e REVISAR usados nos resumos.",
+        ),
+        AuditoriaIndicador(
+            "valor_total_operacoes_especiais",
+            valor_operacoes,
+            operacoes_status,
+            "Soma do valor total das NF-e classificadas como operacoes especiais.",
+        ),
+        AuditoriaIndicador(
+            "status_geral_auditoria",
+            status_geral,
+            status_geral,
+            "Status consolidado da auditoria do pre-livro diario de teste.",
+        ),
+    ]
+
+
+def _derive_status_geral(
+    *,
+    total_revisar: int,
+    total_operacoes: int,
+    has_error: bool,
+) -> str:
+    if has_error:
+        return "ERRO"
+    if total_operacoes:
+        return "ATENCAO_CONTABIL"
+    if total_revisar:
+        return "ATENCAO"
+    return "OK"
+
+
+def _status_geral_auditoria(auditoria: Iterable[AuditoriaIndicador]) -> str:
+    for item in auditoria:
+        if item.indicador == "status_geral_auditoria":
+            return _text(item.valor)
+    return "ERRO"
+
+
+def _sum_values(rows: Iterable[dict[str, object]], field: str) -> Decimal:
+    total = Decimal("0.00")
+    for row in rows:
+        total += _decimal_value(row.get(field))
+    return total.quantize(Decimal("0.01"))
+
+
+def _sum_int_values(rows: Iterable[dict[str, object]], field: str) -> int:
+    total = 0
+    for row in rows:
+        try:
+            total += int(row.get(field) or 0)
+        except (TypeError, ValueError):
+            continue
+    return total
+
+
 def _write_lancamentos_sheet(
     sheet,
     title: str,
@@ -369,6 +592,24 @@ def _write_resumo_sheet(
     _set_widths_for_headers(sheet, headers)
 
 
+def _write_auditoria_sheet(
+    sheet,
+    auditoria: list[AuditoriaIndicador],
+) -> None:
+    sheet.append(AUDITORIA_HEADERS)
+    for item in auditoria:
+        sheet.append(
+            [
+                item.indicador,
+                item.valor,
+                item.status,
+                item.observacao,
+            ]
+        )
+    _style_table(sheet)
+    _set_widths_for_headers(sheet, AUDITORIA_HEADERS)
+
+
 def _write_instrucoes_sheet(
     sheet,
     excel_paths: tuple[Path, ...],
@@ -388,8 +629,16 @@ def _write_instrucoes_sheet(
         "- Operacoes_Especiais: comodato, bonificacao e outros casos auditados a partir dos XML informados.",
         "- Resumo_por_Conta: totais por conta, separados entre OK e REVISAR.",
         "- Resumo_Mensal: totais por competencia, separados entre OK e REVISAR.",
+        "- Auditoria: indicadores de coerencia calculados em Python para controle preliminar.",
         "",
         "Observacao importante:",
+        "- Este arquivo e um pre-livro diario gerencial de teste.",
+        "- Nao e um livro diario definitivo.",
+        "- Lancamentos_REVISAR exigem revisao manual.",
+        "- Operacoes_Especiais nao devem ser tratadas automaticamente como compra normal.",
+        "- COMODATO deve permanecer fora da DRE ate validacao contabil.",
+        "- BONIFICACAO_RECEBIDA deve permanecer fora do custo de compra ate validacao contabil.",
+        "- A aba Auditoria serve somente para controle de coerencia.",
         "- Os resumos sao calculados a partir dos Excel originais de lancamentos.",
         "- Operacoes especiais aparecem em aba separada para controle e nao foram excluidas automaticamente dos resumos.",
         "- Antes de qualquer DRE ou livro definitivo, validar o tratamento das operacoes especiais com o contador.",
@@ -471,6 +720,10 @@ def _suggested_width(header: str) -> int:
         "natureza_operacao": 34,
         "produtos_envolvidos": 60,
         "motivos": 42,
+        "Indicador": 34,
+        "Valor": 22,
+        "Status": 20,
+        "Observacao": 76,
     }
     return widths.get(header, max(14, min(len(header) + 4, 40)))
 
@@ -493,6 +746,12 @@ def _decimal_value(value: object) -> Decimal:
 
 def _money_text(value: Decimal) -> str:
     return f"{value.quantize(Decimal('0.01')):.2f}".replace(".", ",")
+
+
+def _audit_value_text(value: object) -> str:
+    if isinstance(value, Decimal):
+        return _money_text(value)
+    return _text(value)
 
 
 def _text(value: object) -> str:

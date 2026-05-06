@@ -243,6 +243,8 @@ def test_parser_accepts_gerar_pre_livro_diario_teste_command():
             "output/empresa_2.xlsx",
             "--pasta-operacoes-especiais",
             "XML_fatture_acquisto/55746722000181/xml",
+            "--relatorio-auditoria",
+            "reports/auditoria_pre_livro.txt",
             "--saida",
             "reports/pre_livro_diario_teste.xlsx",
         ]
@@ -253,6 +255,7 @@ def test_parser_accepts_gerar_pre_livro_diario_teste_command():
     assert args.pasta_operacoes_especiais == [
         "XML_fatture_acquisto/55746722000181/xml"
     ]
+    assert args.relatorio_auditoria == "reports/auditoria_pre_livro.txt"
     assert args.saida == "reports/pre_livro_diario_teste.xlsx"
 
 
@@ -425,6 +428,7 @@ def test_gerar_pre_livro_diario_teste_help_returns_zero_and_lists_options(capsys
     assert "--excel" in captured.out
     assert "--saida" in captured.out
     assert "--pasta-operacoes-especiais" in captured.out
+    assert "--relatorio-auditoria" in captured.out
 
 
 def test_importar_nfe_command_writes_excel_with_sample_xml(tmp_path):
@@ -1089,6 +1093,32 @@ def test_gerar_pre_livro_diario_teste_command_gera_xlsx(tmp_path, capsys):
     assert result == 0
     assert output_path.exists()
     assert "[OK] Pre-livro diario gerencial de teste gerado." in captured.out
+
+
+def test_gerar_pre_livro_diario_teste_command_aceita_relatorio_auditoria(
+    tmp_path, capsys
+):
+    excel_path = tmp_path / "lancamentos.xlsx"
+    output_path = tmp_path / "reports" / "pre_livro.xlsx"
+    report_path = tmp_path / "reports" / "auditoria.txt"
+    _save_revision_workbook(excel_path)
+
+    result = main(
+        [
+            "gerar-pre-livro-diario-teste",
+            "--excel",
+            str(excel_path),
+            "--saida",
+            str(output_path),
+            "--relatorio-auditoria",
+            str(report_path),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert result == 0
+    assert report_path.exists()
+    assert "[OK] Relatorio de auditoria salvo em:" in captured.out
 
 
 def test_gerar_pre_livro_diario_teste_command_retorna_erro_excel_inexistente(
