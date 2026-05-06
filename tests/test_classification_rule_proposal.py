@@ -9,6 +9,7 @@ from fantozzi.classification_rule_proposal import (
     ClassificationRuleProposalError,
     escrever_proposta_yaml,
     gerar_proposta_classificacao,
+    gerar_proposta_regras_classificacao_real,
     gerar_relatorio_proposta_classificacao,
 )
 
@@ -226,6 +227,188 @@ def test_missing_csv_raises_clear_error(tmp_path):
 
     with pytest.raises(ClassificationRuleProposalError, match="Arquivo CSV nao encontrado"):
         gerar_proposta_classificacao(tmp_path / "inexistente.csv", plano_path, regras_path)
+
+
+def test_proposta_real_gera_yaml_com_secoes_principais(tmp_path):
+    csv_path = tmp_path / "revisao_classificacao_revisada.csv"
+    yaml_path = tmp_path / "reports" / "proposta_real.yaml"
+    report_path = tmp_path / "reports" / "proposta_real.txt"
+    plano_path = _save_plano_contas(tmp_path)
+    original_plan = plano_path.read_text(encoding="utf-8")
+    _save_csv(
+        csv_path,
+        [
+            _row(
+                descricao_normalizada="agua mineral",
+                descricao_exemplo="AGUA MINERAL 500ML",
+                acao_manual="CLASSIFICAR",
+                conta_id_sugerida="2.01.004",
+                conta_nome_sugerida="Refrigerantes",
+                palavras_chave_sugeridas="agua mineral, agua 500ml",
+                observacao_manual="ok",
+            ),
+            _row(
+                descricao_normalizada="coca lata",
+                acao_manual="CRIAR_ALIAS",
+                conta_id_sugerida="",
+                conta_atual_id="2.01.004",
+                conta_atual_nome="Refrigerantes",
+                palavras_chave_sugeridas="coca lata|coca cola lata",
+            ),
+            _row(
+                descricao_normalizada="farinha trigo",
+                acao_manual="CRIAR_REGRA",
+                conta_id_sugerida="2.02.010",
+                conta_nome_sugerida="Mercearia Seca",
+                palavras_chave_sugeridas="farinha; farinha trigo\n",
+            ),
+            _row(
+                descricao_normalizada="freezer comodato",
+                acao_manual="ANALISAR_COM_CONTADOR",
+                alertas="POSSIVEL_COMODATO",
+                observacao_manual="validar comodato",
+            ),
+            _row(
+                descricao_normalizada="item duvidoso",
+                acao_manual="MANTER_REVISAO",
+                observacao_manual="sem seguranca",
+            ),
+            _row(descricao_normalizada="ignorar item", acao_manual="IGNORAR"),
+        ],
+    )
+    original_csv = csv_path.read_text(encoding="utf-8-sig")
+
+    result = gerar_proposta_regras_classificacao_real(
+        [csv_path],
+        yaml_path,
+        plano_path,
+        report_path,
+    )
+
+    data = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+    assert result.total_linhas_lidas == 6
+    assert data["metadata"]["fase"] == "6C"
+    assert data["resumo"]["total_propostas_classificar"] == 1
+    assert data["resumo"]["total_propostas_alias"] == 1
+    assert data["resumo"]["total_propostas_regras"] == 1
+    assert data["resumo"]["total_pendencias_contador"] == 1
+    assert data["resumo"]["total_pendencias_revisao"] == 1
+    assert data["resumo"]["total_ignoradas"] == 1
+    assert data["propostas_classificacao"][0]["conta_id_sugerida"] == "2.01.004"
+    assert data["propostas_classificacao"][0]["palavras_chave_sugeridas"] == [
+        "agua mineral",
+        "agua 500ml",
+    ]
+    assert data["propostas_alias"][0]["conta_id_destino"] == "2.01.004"
+    assert data["propostas_alias"][0]["alias_sugeridos"] == [
+        "coca lata",
+        "coca cola lata",
+    ]
+    assert data["propostas_regras"][0]["criterios"]["palavras_chave"] == [
+        "farinha",
+        "farinha trigo",
+    ]
+    assert data["pendencias_contador"][0]["motivo"] == "ANALISAR_COM_CONTADOR"
+    assert data["pendencias_revisao"][0]["motivo"] == "MANTER_REVISAO"
+    assert "RESUMO DA PROPOSTA" in report_path.read_text(encoding="utf-8")
+    assert csv_path.read_text(encoding="utf-8-sig") == original_csv
+    assert plano_path.read_text(encoding="utf-8") == original_plan
+
+
+def test_proposta_real_bloqueia_conta_sugerida_inexistente(tmp_path):
+    csv_path = tmp_path / "revisao_classificacao_revisada.csv"
+    yaml_path = tmp_path / "reports" / "proposta_real.yaml"
+    report_path = tmp_path / "reports" / "proposta_real.txt"
+    plano_path = _save_plano_contas(tmp_path)
+    _save_csv(
+        csv_path,
+        [_row(acao_manual="CLASSIFICAR", conta_id_sugerida="9.99.999")],
+    )
+
+    with pytest.raises(
+        ClassificationRuleProposalError,
+        match="conta_id_sugerida nao existe no plano de contas",
+    ):
+        gerar_proposta_regras_classificacao_real(
+            [csv_path],
+            yaml_path,
+            plano_path,
+            report_path,
+        )
+
+    assert not yaml_path.exists()
+    assert "Resultado: ERRO" in report_path.read_text(encoding="utf-8")
+
+
+def test_proposta_real_bloqueia_classificar_sem_conta_sugerida(tmp_path):
+    csv_path = tmp_path / "revisao_classificacao_revisada.csv"
+    yaml_path = tmp_path / "reports" / "proposta_real.yaml"
+    plano_path = _save_plano_contas(tmp_path)
+    _save_csv(csv_path, [_row(acao_manual="CLASSIFICAR", conta_id_sugerida="")])
+
+    with pytest.raises(
+        ClassificationRuleProposalError,
+        match="conta_id_sugerida obrigatoria para CLASSIFICAR",
+    ):
+        gerar_proposta_regras_classificacao_real([csv_path], yaml_path, plano_path)
+
+    assert not yaml_path.exists()
+
+
+def test_proposta_real_bloqueia_criar_regra_sem_conta_sugerida(tmp_path):
+    csv_path = tmp_path / "revisao_classificacao_revisada.csv"
+    yaml_path = tmp_path / "reports" / "proposta_real.yaml"
+    plano_path = _save_plano_contas(tmp_path)
+    _save_csv(csv_path, [_row(acao_manual="CRIAR_REGRA", conta_id_sugerida="")])
+
+    with pytest.raises(
+        ClassificationRuleProposalError,
+        match="conta_id_sugerida obrigatoria para CRIAR_REGRA",
+    ):
+        gerar_proposta_regras_classificacao_real([csv_path], yaml_path, plano_path)
+
+    assert not yaml_path.exists()
+
+
+def test_proposta_real_criar_regra_sem_keywords_usa_descricao(tmp_path):
+    csv_path = tmp_path / "revisao_classificacao_revisada.csv"
+    yaml_path = tmp_path / "reports" / "proposta_real.yaml"
+    plano_path = _save_plano_contas(tmp_path)
+    _save_csv(
+        csv_path,
+        [
+            _row(
+                descricao_normalizada="farinha trigo",
+                acao_manual="CRIAR_REGRA",
+                conta_id_sugerida="2.02.010",
+                palavras_chave_sugeridas="",
+            )
+        ],
+    )
+
+    result = gerar_proposta_regras_classificacao_real([csv_path], yaml_path, plano_path)
+
+    data = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+    assert result.total_avisos == 1
+    assert data["propostas_regras"][0]["regra"] == "farinha trigo"
+    assert "usada descricao_normalizada" in data["avisos"][0]
+
+
+def test_proposta_real_csv_inexistente_gera_erro_claro(tmp_path):
+    yaml_path = tmp_path / "reports" / "proposta_real.yaml"
+    plano_path = _save_plano_contas(tmp_path)
+
+    with pytest.raises(
+        ClassificationRuleProposalError,
+        match="CSV de revisao nao encontrado",
+    ):
+        gerar_proposta_regras_classificacao_real(
+            [tmp_path / "inexistente.csv"],
+            yaml_path,
+            plano_path,
+        )
+
+    assert not yaml_path.exists()
 
 
 def _save_csv(csv_path: Path, rows: list[dict[str, str]]) -> None:

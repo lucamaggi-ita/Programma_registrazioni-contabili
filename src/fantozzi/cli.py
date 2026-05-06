@@ -34,8 +34,10 @@ from fantozzi.classification_review_validation import (
 from fantozzi.classification_rule_proposal import (
     ClassificationRuleProposalError,
     console_lines as proposal_console_lines,
+    console_lines_real as proposal_real_console_lines,
     escrever_proposta_yaml,
     gerar_proposta_classificacao,
+    gerar_proposta_regras_classificacao_real,
     gerar_relatorio_proposta_classificacao,
     salvar_relatorio_proposta,
 )
@@ -114,7 +116,12 @@ def build_parser() -> argparse.ArgumentParser:
             "  .\\.venv\\Scripts\\python.exe -m fantozzi.cli "
             "importar-planilha-revisao-classificacao "
             "--xlsx reports\\revisao_classificacao_assistida.xlsx "
-            "--saida reports\\revisao_classificacao_revisada.csv"
+            "--saida reports\\revisao_classificacao_revisada.csv\n"
+            "  .\\.venv\\Scripts\\python.exe -m fantozzi.cli "
+            "gerar-proposta-regras-classificacao-real "
+            "--csv reports\\revisao_classificacao_revisada.csv "
+            "--saida reports\\proposta_regras_classificacao_real.yaml "
+            "--relatorio reports\\resumo_proposta_regras_classificacao_real.txt"
         ),
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -276,6 +283,40 @@ def build_parser() -> argparse.ArgumentParser:
         help="Arquivo YAML de regras de produtos consultado em modo leitura.",
     )
     gerar_proposta.set_defaults(func=gerar_proposta_classificacao_command)
+
+    gerar_proposta_real = subparsers.add_parser(
+        "gerar-proposta-regras-classificacao-real",
+        help="Gera proposta YAML a partir da revisao real validada.",
+        description=(
+            "Le um ou mais CSV revisados de classificacao e gera uma proposta "
+            "YAML separada para revisao humana. Nao altera CSV, Excel ou "
+            "arquivos YAML de config."
+        ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    gerar_proposta_real.add_argument(
+        "--csv",
+        action="append",
+        required=True,
+        help="Caminho do CSV revisado gerado a partir da planilha assistida.",
+    )
+    gerar_proposta_real.add_argument(
+        "--saida",
+        required=True,
+        help="Arquivo YAML separado para salvar a proposta real.",
+    )
+    gerar_proposta_real.add_argument(
+        "--relatorio",
+        help="Arquivo TXT opcional para salvar o resumo da proposta real.",
+    )
+    gerar_proposta_real.add_argument(
+        "--plano-contas",
+        default=str(DEFAULT_PLANO_CONTAS),
+        help="Arquivo YAML do plano de contas gerencial para validacao.",
+    )
+    gerar_proposta_real.set_defaults(
+        func=gerar_proposta_regras_classificacao_real_command
+    )
 
     auditar_operacoes = subparsers.add_parser(
         "auditar-operacoes-especiais",
@@ -600,6 +641,30 @@ def gerar_proposta_classificacao_command(args: argparse.Namespace) -> int:
     ):
         print(line)
 
+    return 0
+
+
+def gerar_proposta_regras_classificacao_real_command(args: argparse.Namespace) -> int:
+    csv_paths = [Path(csv_path) for csv_path in args.csv]
+    yaml_path = Path(args.saida)
+    report_path = Path(args.relatorio) if args.relatorio else None
+
+    try:
+        result = gerar_proposta_regras_classificacao_real(
+            csv_paths,
+            yaml_path,
+            Path(args.plano_contas),
+            report_path,
+        )
+    except ClassificationRuleProposalError as exc:
+        print(f"[ERRO] {exc}")
+        return 1
+    except Exception:
+        print(f"[ERRO] Nao foi possivel gerar proposta YAML real: {yaml_path}")
+        return 1
+
+    for line in proposal_real_console_lines(result):
+        print(line)
     return 0
 
 

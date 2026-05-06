@@ -148,6 +148,32 @@ def test_parser_accepts_gerar_proposta_classificacao_command():
     assert args.relatorio == "reports/proposta_regras_classificacao.txt"
 
 
+def test_parser_accepts_gerar_proposta_regras_classificacao_real_command():
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "gerar-proposta-regras-classificacao-real",
+            "--csv",
+            "reports/importacao_real/55746722000181/revisao_classificacao_revisada.csv",
+            "--csv",
+            "reports/importacao_real/8884180000123/revisao_classificacao_revisada.csv",
+            "--saida",
+            "reports/importacao_real/proposta_real.yaml",
+            "--relatorio",
+            "reports/importacao_real/resumo_proposta_real.txt",
+        ]
+    )
+
+    assert args.command == "gerar-proposta-regras-classificacao-real"
+    assert args.csv == [
+        "reports/importacao_real/55746722000181/revisao_classificacao_revisada.csv",
+        "reports/importacao_real/8884180000123/revisao_classificacao_revisada.csv",
+    ]
+    assert args.saida == "reports/importacao_real/proposta_real.yaml"
+    assert args.relatorio == "reports/importacao_real/resumo_proposta_real.txt"
+
+
 def test_parser_accepts_auditar_operacoes_especiais_command():
     parser = build_parser()
 
@@ -220,6 +246,7 @@ def test_general_help_returns_zero_and_lists_commands(capsys):
     assert "exportar-revisao-classificacao" in captured.out
     assert "validar-revisao-classificacao" in captured.out
     assert "gerar-proposta-classificacao" in captured.out
+    assert "gerar-proposta-regras-classificacao-real" in captured.out
     assert "auditar-operacoes-especiais" in captured.out
     assert "gerar-planilha-revisao-classificacao" in captured.out
     assert "importar-planilha-revisao-classificacao" in captured.out
@@ -310,6 +337,20 @@ def test_gerar_proposta_classificacao_help_returns_zero_and_lists_options(capsys
     assert "--relatorio" in captured.out
     assert "--plano-contas" in captured.out
     assert "--regras-produtos" in captured.out
+
+
+def test_gerar_proposta_regras_classificacao_real_help_returns_zero_and_lists_options(
+    capsys,
+):
+    with pytest.raises(SystemExit) as exc_info:
+        main(["gerar-proposta-regras-classificacao-real", "--help"])
+
+    captured = capsys.readouterr()
+    assert exc_info.value.code == 0
+    assert "--csv" in captured.out
+    assert "--saida" in captured.out
+    assert "--relatorio" in captured.out
+    assert "--plano-contas" in captured.out
 
 
 def test_auditar_operacoes_especiais_help_returns_zero_and_lists_options(capsys):
@@ -730,6 +771,59 @@ def test_gerar_proposta_classificacao_command_returns_error_for_missing_csv(
             str(csv_path),
             "--saida-yaml",
             str(yaml_path),
+        ]
+    )
+
+    assert result == 1
+    assert not yaml_path.exists()
+
+
+def test_gerar_proposta_regras_classificacao_real_command_returns_success(tmp_path):
+    csv_path = tmp_path / "revisao_classificacao_revisada.csv"
+    yaml_path = tmp_path / "reports" / "proposta_real.yaml"
+    report_path = tmp_path / "reports" / "proposta_real.txt"
+    plano_path = _save_proposal_plano_contas(tmp_path)
+    original_plan = plano_path.read_text(encoding="utf-8")
+    _save_review_csv(csv_path)
+
+    result = main(
+        [
+            "gerar-proposta-regras-classificacao-real",
+            "--csv",
+            str(csv_path),
+            "--saida",
+            str(yaml_path),
+            "--relatorio",
+            str(report_path),
+            "--plano-contas",
+            str(plano_path),
+        ]
+    )
+
+    assert result == 0
+    assert yaml_path.exists()
+    assert report_path.exists()
+    assert "metadata:" in yaml_path.read_text(encoding="utf-8")
+    assert "propostas_alias:" in yaml_path.read_text(encoding="utf-8")
+    assert plano_path.read_text(encoding="utf-8") == original_plan
+
+
+def test_gerar_proposta_regras_classificacao_real_command_returns_error_for_missing_csv(
+    tmp_path,
+):
+    csv_path = tmp_path / "inexistente.csv"
+    yaml_path = tmp_path / "reports" / "proposta_real.yaml"
+    plano_path = _save_proposal_plano_contas(tmp_path)
+
+    result = main(
+        [
+            "gerar-proposta-regras-classificacao-real",
+            "--csv",
+            str(csv_path),
+            "--saida",
+            str(yaml_path),
+            "--plano-contas",
+            str(plano_path),
         ]
     )
 
