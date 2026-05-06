@@ -11,6 +11,11 @@ from fantozzi.classification_candidates import (
     generate_classification_candidates_report,
     save_report as save_candidates_report,
 )
+from fantozzi.classification_review_export import (
+    ClassificationReviewExportError,
+    console_lines as review_export_console_lines,
+    export_classification_review_csv,
+)
 from fantozzi.excel_diagnostics import (
     ExcelDiagnosticError,
     ExcelDiagnosticFailure,
@@ -58,7 +63,10 @@ def build_parser() -> argparse.ArgumentParser:
             "--excel output\\lancamentos.xlsx --saida reports\\revisao_lancamentos.txt\n"
             "  .\\.venv\\Scripts\\python.exe -m fantozzi.cli "
             "relatorio-candidatos-classificacao --excel output\\lancamentos.xlsx "
-            "--saida reports\\candidatos_classificacao.txt"
+            "--saida reports\\candidatos_classificacao.txt\n"
+            "  .\\.venv\\Scripts\\python.exe -m fantozzi.cli "
+            "exportar-revisao-classificacao --excel output\\lancamentos.xlsx "
+            "--saida reports\\revisao_classificacao.csv"
         ),
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -143,6 +151,28 @@ def build_parser() -> argparse.ArgumentParser:
         help="Arquivo TXT para salvar o relatorio de candidatos.",
     )
     relatorio_candidatos.set_defaults(func=relatorio_candidatos_command)
+
+    exportar_revisao = subparsers.add_parser(
+        "exportar-revisao-classificacao",
+        help="Exporta CSV para revisao manual de candidatos de classificacao.",
+        description=(
+            "Exporta um CSV de trabalho para revisao manual de candidatos de "
+            "classificacao. Le o Excel em modo somente leitura e nao altera "
+            "regras, YAML ou lancamentos."
+        ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    exportar_revisao.add_argument(
+        "--excel",
+        required=True,
+        help="Caminho do arquivo Excel de lancamentos do Fantozzi.",
+    )
+    exportar_revisao.add_argument(
+        "--saida",
+        required=True,
+        help="Caminho do CSV de saida para revisao manual.",
+    )
+    exportar_revisao.set_defaults(func=exportar_revisao_classificacao_command)
 
     return parser
 
@@ -311,6 +341,18 @@ def relatorio_candidatos_command(args: argparse.Namespace) -> int:
     else:
         print(text, end="")
 
+    return 0
+
+
+def exportar_revisao_classificacao_command(args: argparse.Namespace) -> int:
+    try:
+        result = export_classification_review_csv(Path(args.excel), Path(args.saida))
+    except ClassificationReviewExportError as exc:
+        print(f"[ERRO] {exc}")
+        return 1
+
+    for line in review_export_console_lines(result):
+        print(line)
     return 0
 
 

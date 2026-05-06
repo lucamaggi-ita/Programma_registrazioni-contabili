@@ -90,6 +90,24 @@ def test_parser_accepts_relatorio_candidatos_classificacao_command():
     assert args.saida == "reports/candidatos.txt"
 
 
+def test_parser_accepts_exportar_revisao_classificacao_command():
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "exportar-revisao-classificacao",
+            "--excel",
+            "output.xlsx",
+            "--saida",
+            "reports/revisao_classificacao.csv",
+        ]
+    )
+
+    assert args.command == "exportar-revisao-classificacao"
+    assert args.excel == "output.xlsx"
+    assert args.saida == "reports/revisao_classificacao.csv"
+
+
 def test_general_help_returns_zero_and_lists_commands(capsys):
     with pytest.raises(SystemExit) as exc_info:
         main(["--help"])
@@ -102,6 +120,7 @@ def test_general_help_returns_zero_and_lists_commands(capsys):
     assert "diagnosticar-excel" in captured.out
     assert "relatorio-revisao" in captured.out
     assert "relatorio-candidatos-classificacao" in captured.out
+    assert "exportar-revisao-classificacao" in captured.out
 
 
 def test_importar_nfe_help_returns_zero_and_lists_options(capsys):
@@ -151,6 +170,16 @@ def test_relatorio_revisao_help_returns_zero_and_lists_options(capsys):
 def test_relatorio_candidatos_classificacao_help_returns_zero_and_lists_options(capsys):
     with pytest.raises(SystemExit) as exc_info:
         main(["relatorio-candidatos-classificacao", "--help"])
+
+    captured = capsys.readouterr()
+    assert exc_info.value.code == 0
+    assert "--excel" in captured.out
+    assert "--saida" in captured.out
+
+
+def test_exportar_revisao_classificacao_help_returns_zero_and_lists_options(capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        main(["exportar-revisao-classificacao", "--help"])
 
     captured = capsys.readouterr()
     assert exc_info.value.code == 0
@@ -344,6 +373,45 @@ def test_relatorio_candidatos_command_returns_error_for_missing_excel(tmp_path):
     )
 
     assert result == 1
+
+
+def test_exportar_revisao_classificacao_command_returns_success(tmp_path):
+    excel_path = tmp_path / "lancamentos.xlsx"
+    csv_path = tmp_path / "reports" / "revisao_classificacao.csv"
+    _save_candidates_workbook(excel_path)
+
+    result = main(
+        [
+            "exportar-revisao-classificacao",
+            "--excel",
+            str(excel_path),
+            "--saida",
+            str(csv_path),
+        ]
+    )
+
+    assert result == 0
+    assert csv_path.exists()
+
+
+def test_exportar_revisao_classificacao_command_returns_error_for_missing_excel(
+    tmp_path,
+):
+    missing_excel = tmp_path / "inexistente.xlsx"
+    csv_path = tmp_path / "reports" / "revisao_classificacao.csv"
+
+    result = main(
+        [
+            "exportar-revisao-classificacao",
+            "--excel",
+            str(missing_excel),
+            "--saida",
+            str(csv_path),
+        ]
+    )
+
+    assert result == 1
+    assert not csv_path.exists()
 
 
 def _xml_dir_with_sample(tmp_path: Path, *, filename: str = "sample.xml") -> Path:
