@@ -1,0 +1,638 @@
+versao: "1.0"
+idioma: pt-BR
+descricao: Regras de classificacao de produtos de NF-e para Fantozzi
+
+normalizacao:
+  minusculas: true
+  remover_acentos: true
+  remover_pontuacao: true
+  compactar_espacos: true
+
+politica_de_match:
+  em_caso_de_multiplos_matches: "registrar_alerta_CLASSIFICACAO_AMBIGUA"
+  em_caso_de_zero_match: "registrar_alerta_NAO_CLASSIFICADO"
+  observacao: >
+    Aliases curtos (3 chars ou menos) so fazem match por palavra inteira.
+    Em caso de ambiguidade, usa a regra de maior prioridade mas registra alerta.
+
+# Regras por fornecedor (alta especificidade, executadas antes das regras gerais)
+regras_por_fornecedor:
+  - fornecedor_contem: "E SANTOS DE OLIVEIRA CARNES E DERIVADOS"
+    produto_normalizado_contem: "kilos"
+    conta_id: "2.02.001"
+    conta_nome: "Carnes Bovinas"
+    observacao: "Fornecedor usa descricao generica KILOS para carnes bovinas."
+
+# Regras gerais de classificacao
+regras:
+  # ---- BEBIDAS ----
+  - conta_id: "2.01.001"
+    conta_nome: "Cervejas"
+    prioridade: 100
+    aliases:
+      - cerv
+      - cerveja
+      - heineken
+      - amstel
+      - original 600
+      - corona
+      - brahma chopp
+      - brahma lager
+      - stella artois
+      - eisenbahn
+      - devassa
+      - itaipava
+      - petra
+      - spaten
+      - budweiser
+      - skol
+      - schin
+      - kaiser
+      - bohemia
+      - praya lager
+
+  - conta_id: "2.01.002"
+    conta_nome: "Vinhos e Espumantes"
+    prioridade: 100
+    aliases:
+      - vinho
+      - espumante
+      - rio sol
+      - zephyra
+      - zephira
+      - sauvignon
+      - chardonnay
+      - brut
+      - moscatel
+      - demi sec
+      - demisec
+      - cabernet
+      - merlot
+      - malbec
+      - carmenere
+      - rose
+      - solopaca
+      - falanghina
+      - lambrusco
+      - pinot grigio
+      - nero d avola
+      - primitivo
+      - dolcetto
+      - lianto
+      - parthenium
+      - las perdices
+
+  - conta_id: "2.01.003"
+    conta_nome: "Destilados, Licores e Aperitivos"
+    prioridade: 100
+    aliases:
+      - whisky
+      - johnnie walker
+      - red label
+      - black label
+      - chivas
+      - vodka
+      - absolut
+      - smirnoff
+      - orloff
+      - beefeater
+      - tequila
+      - jose cuervo
+      - bacardi
+      - cachaca
+      - sagatiba
+      - conhaque
+      - domecq
+      - licor
+      - cointreau
+      - campari
+      - aperol
+      - aperitivo
+      - martini
+      - aguardente
+
+  - conta_id: "2.01.004"
+    conta_nome: "Refrigerantes"
+    prioridade: 95
+    aliases:
+      - coca cola
+      - coca-cola
+      - cc sem acucar
+      - fanta laranja
+      - fanta uva
+      - sprite
+      - guarana antarctica
+      - guarana chp
+      - guarana
+      - tonica antarctica
+      - tonica
+      - schweppes
+      - h2oh
+      - fys
+      - fantea
+    evitar_aliases:
+      - sch
+      - sol
+
+  - conta_id: "2.01.005"
+    conta_nome: "Aguas Minerais"
+    prioridade: 90
+    aliases:
+      - agua mineral
+      - am crys
+      - crys 500
+      - crystal
+      - agua com gas
+      - agua sem gas
+
+  - conta_id: "2.01.006"
+    conta_nome: "Energeticos"
+    prioridade: 90
+    aliases:
+      - red bull
+      - monster
+      - energetico
+
+  - conta_id: "2.01.007"
+    conta_nome: "Sucos, Polpas e Bebidas nao Alcoolicas"
+    prioridade: 90
+    aliases:
+      - suco
+      - del valle
+      - del val
+      - nectar
+      - cha mate
+      - agua de coco
+      - polpa
+      - sempre viva
+      - monin
+      - xarope
+
+  - conta_id: "2.01.008"
+    conta_nome: "Gelo"
+    prioridade: 90
+    aliases:
+      - gelo
+
+  # ---- ALIMENTOS ----
+  - conta_id: "2.02.007"
+    conta_nome: "Ovos"
+    prioridade: 85
+    aliases:
+      - ovo branco
+      - ovos brancos
+      - ovo extra
+      - ovo grande
+
+  - conta_id: "2.02.008"
+    conta_nome: "Hortifruti"
+    prioridade: 80
+    aliases:
+      - alface
+      - tomate longa vida
+      - tomate italiano
+      - tomate s pele
+      - cebola
+      - batatinha
+      - batata asterix
+      - batata doce
+      - cenoura
+      - limao
+      - laranja
+      - maracuja
+      - banana
+      - abacaxi
+      - coentro
+      - cheiro verde
+      - pimentao
+      - berinjela
+      - abobrinha
+      - rucula
+      - couve
+      - repolho
+      - pepino
+      - alho descascado
+      - alho
+      - manga
+      - melao
+      - melancia
+      - hortela
+      - salsa
+      - cebolinha
+      - mandioca
+      - aipim
+      - inhame
+      - kiwi
+      - murcote
+      - ameixa
+      - abobora
+      - brocolis
+      - chuchu
+
+  - conta_id: "2.02.009"
+    conta_nome: "Paes e Padaria"
+    prioridade: 80
+    aliases:
+      - pao doce
+      - pao de hamburguer
+      - pao frances
+      - pao salgado
+      - baguete
+      - broa
+      - torrada
+      - pao variado
+
+  - conta_id: "2.02.001"
+    conta_nome: "Carnes Bovinas"
+    prioridade: 80
+    aliases:
+      - file mignon
+      - carne de sol
+      - carnes de sol
+      - acem
+      - alcatra
+      - picanha
+      - contrafile
+      - fraldinha
+      - costela bovina
+      - carne moida
+      - coxao
+      - patinho
+      - maminha
+      - lagarto
+      - figado bovino
+      - carne file
+
+  - conta_id: "2.02.002"
+    conta_nome: "Aves"
+    prioridade: 80
+    aliases:
+      - frango
+      - peito de frango
+      - file de peito
+      - coxa sobrecoxa
+      - galinha
+      - sassami
+      - naturaves
+
+  - conta_id: "2.02.004"
+    conta_nome: "Pescados e Frutos do Mar"
+    prioridade: 80
+    aliases:
+      - camarao
+      - lagosta
+      - lula
+      - polvo
+      - salmao
+      - pescada
+      - tilapia
+      - bacalhau
+      - atum
+      - sardinha
+      - dourado
+      - anchova
+      - mexilhao
+      - frutos do mar
+      - frescatto
+
+  - conta_id: "2.02.005"
+    conta_nome: "Frios e Embutidos"
+    prioridade: 80
+    aliases:
+      - bacon manta
+      - bacon
+      - linguica
+      - calabresa
+      - presunto
+      - salame
+      - mortadela
+      - peito de peru
+      - pepperoni
+      - lombo canadense
+      - lombo tipo canadense
+      - paleta cozida
+
+  - conta_id: "2.02.006"
+    conta_nome: "Laticinios e Queijos"
+    prioridade: 80
+    aliases:
+      - queijo mozzarella
+      - queijo mussarela
+      - queijo parmesao
+      - queijo parmesao tres estrela
+      - queijo gorgonzola
+      - queijo provolone
+      - queijo coalho
+      - queijo bufala
+      - requeijao
+      - creme de leite
+      - creme culinario
+      - manteiga
+      - iogurte
+      - nata
+      - cream cheese
+      - catupiry
+      - chantilly
+      - laticinio
+      - davaca
+
+  - conta_id: "2.02.010"
+    conta_nome: "Mercearia Seca"
+    prioridade: 75
+    aliases:
+      - arroz
+      - feijao
+      - far trigo
+      - farinha de trigo
+      - farinha mandioca
+      - acucar
+      - sal refinado
+      - sal grosso
+      - sal sache
+      - macarrao
+      - massa espaguete
+      - massa espaguetti
+      - massa penne
+      - massa fusilli
+      - granulado
+      - chocolate
+      - cacau
+      - amido
+      - polvilho
+      - tapioca
+      - aveia
+      - fermento
+      - cafe
+      - achocolatado
+      - farofa
+      - trident
+      - bis champ
+
+  - conta_id: "2.02.011"
+    conta_nome: "Oleos, Azeites e Gorduras"
+    prioridade: 75
+    aliases:
+      - gordura vegetal fritadella
+      - gordura vegetal
+      - azeite oliva
+      - azeite
+      - oleo comp
+      - oleo de soja
+      - margarina
+      - oliva ext vrg
+
+  - conta_id: "2.02.012"
+    conta_nome: "Molhos, Temperos e Condimentos"
+    prioridade: 75
+    aliases:
+      - catchup
+      - ketchup
+      - maionese
+      - mostarda
+      - molho tomate
+      - molho ingles
+      - barbecue
+      - tempero
+      - oregano
+      - acafrao
+      - cominho
+      - paprica
+      - colorau
+      - caldo
+      - vinagre
+      - balsamico
+      - shoyu
+      - corante
+      - pimenta
+
+  - conta_id: "2.02.013"
+    conta_nome: "Conservas e Enlatados"
+    prioridade: 75
+    aliases:
+      - azeitona
+      - milho verde
+      - tomate pelado
+      - tomate seco
+      - extrato de tomate
+      - palmito
+      - champignon
+      - cogumelo
+      - shimeji
+      - portobello
+      - funghi
+      - alcaparra
+      - ervilha
+      - atum lata
+      - la bella
+
+  - conta_id: "2.02.014"
+    conta_nome: "Batatas Congeladas e Pre-prontos"
+    prioridade: 70
+    aliases:
+      - batata 9mm
+      - batata congelada
+      - batata pre frita
+      - mais batata
+      - bem brasil
+      - nuggets
+      - empanado
+
+  - conta_id: "2.02.015"
+    conta_nome: "Sobremesas, Sorvetes e Picoles"
+    prioridade: 70
+    aliases:
+      - sorvete
+      - picole
+      - paleta mexicana
+      - paletas mexicanas
+      - acai
+      - dc mix
+      - pirulito
+      - geladinho
+      - pacoca
+      - cone cx
+      - leite trufado
+
+  # ---- MATERIAIS DE OPERACAO ----
+  - conta_id: "2.03.001"
+    conta_nome: "Descartaveis e Embalagens"
+    prioridade: 65
+    aliases:
+      - copo descartavel
+      - copo plastico
+      - guardanapo
+      - canudo
+      - marmitex
+      - marmita
+      - embalagem pizza
+      - embalagem para pizza
+      - caixa pizza
+      - caixa p pizza
+      - bobina
+      - saco kraft
+      - papel aluminio
+      - filme pvc
+      - prato descartavel
+      - talher descartavel
+      - garfo descartavel
+      - faca descartavel
+      - colher descartavel
+      - sacola
+      - papel manteiga
+      - saco geladinho
+      - bandeja aluminio
+      - palito dente
+      - embalagem
+
+  - conta_id: "2.04.001"
+    conta_nome: "Produtos de Limpeza e Higiene"
+    prioridade: 65
+    aliases:
+      - detergente
+      - agua sanitaria
+      - agua sanit
+      - alcool gel
+      - alcool etilico
+      - alcool liq
+      - alcool nobre
+      - desinfetante
+      - cloro
+      - esponja
+      - pano
+      - vassoura
+      - rodo
+      - sabao
+      - sabonete
+      - multiuso
+      - limpador
+      - papel toalha
+      - papel higienico
+      - papel hig
+      - toa rolo
+      - toalha rolo
+      - saco lixo
+      - saco lix
+      - luva latex
+      - luva vinil
+      - touca tnt
+      - espuma hig
+      - warewasher
+      - shine dry
+      - master dish
+      - master sec
+      - master grill
+      - master free
+      - soft handwash
+      - handwash
+      - la de aco
+      - bombril
+      - inseticida
+      - master bac
+
+  - conta_id: "2.04.002"
+    conta_nome: "Utensilios de Cozinha e Salao"
+    prioridade: 60
+    aliases:
+      - panela
+      - travessa
+      - assadeira
+      - espremedor
+      - tabua
+      - pegador
+      - concha
+      - taca agua
+      - nadir
+      - caixa plastica
+      - copo vidro
+
+  # ---- GAS (despesa operacional) ----
+  - conta_id: "4.01.013"
+    conta_nome: "Gas de Cozinha"
+    prioridade: 60
+    aliases:
+      - glp
+      - gas liquefeito
+      - gas de petroleo
+      - cilindro p45
+      - botijao
+      - gas granel
+      - onu 1075
+
+  # ---- EQUIPAMENTOS (possivel investimento - usar conta de revisao) ----
+  - conta_id: "13.01.009"
+    conta_nome: "Revisar - Possivel Investimento"
+    prioridade: 50
+    aliases:
+      - refrigerador
+      - cervejeira
+      - chopeira
+      - refresqueira
+      - metalfrio
+      - fricon
+      - geladeira nova
+      - freezer novo
+      - forno novo
+      - fogao novo
+      - fritadeira nova
+      - maquina cartao nova
+      - impressora nova
+      - monitor novo
+      - nobreak
+      - balanca nova
+      - gabinete slim
+      - proc intel
+      - memoria ddr
+      - adaptador usb wireless
+      - cooler intel
+      - computador
+
+  # ---- MANUTENCAO E OBRAS ----
+  - conta_id: "8.01.001"
+    conta_nome: "Manutencao Predial"
+    prioridade: 50
+    aliases:
+      - tijolo
+      - refratario
+      - massa refrataria
+      - cimento
+      - argamassa
+      - tinta
+      - parafuso
+      - broca
+      - rejunte
+      - tubo pvc
+      - tubo sold
+      - conexao
+      - tomada
+      - cabo eletrico
+      - motobomba
+      - mangueira
+      - torneira
+      - extintor
+      - arandela
+      - tekbond
+      - gekril esmalte
+      - rastelo
+      - cavadeira
+      - blukit
+      - esteira tela
+
+  # ---- MOVEIS E DECORACAO ----
+  - conta_id: "10.01.007"
+    conta_nome: "Moveis e Decoracao"
+    prioridade: 50
+    aliases:
+      - cadeira plastica
+      - ombrelone
+      - mesa madeira
+      - conj mesa
+      - tampo
+      - wind banner
+      - banner
+      - avental
+      - caixa termica
+      - arco de baloes
+      - confete
+
+conta_fallback_id: "13.01.001"
+conta_fallback_nome: "Revisar - Produto Nao Classificado"

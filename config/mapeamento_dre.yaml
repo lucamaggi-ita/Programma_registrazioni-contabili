@@ -1,0 +1,299 @@
+versao: "1.0"
+idioma: pt-BR
+descricao: >
+  Mapeamento de cada conta gerencial para a linha DRE correspondente.
+  Usado para gerar DRE gerencial por competencia (regime de competencia).
+  Cada lancamento de Fantozzi deve ter dre_linha_id e dre_linha_nome.
+
+# Estrutura DRE gerencial para restaurante no Brasil
+linhas_dre:
+  - id: "01.01"
+    nome: "Receita Bruta de Vendas no Salao"
+    grupo: "Receita Bruta"
+    sinal: "+"
+    ordem: 101
+    calculada: false
+  - id: "01.02"
+    nome: "Receita Bruta de Delivery"
+    grupo: "Receita Bruta"
+    sinal: "+"
+    ordem: 102
+    calculada: false
+  - id: "01.99"
+    nome: "Outras Receitas Operacionais"
+    grupo: "Receita Bruta"
+    sinal: "+"
+    ordem: 199
+    calculada: false
+  - id: "02.01"
+    nome: "Impostos sobre Vendas"
+    grupo: "Deducoes da Receita Bruta"
+    sinal: "-"
+    ordem: 201
+    calculada: false
+  - id: "02.99"
+    nome: "Outras Deducoes da Receita"
+    grupo: "Deducoes da Receita Bruta"
+    sinal: "-"
+    ordem: 299
+    calculada: false
+  - id: "03.01"
+    nome: "CMV - Alimentos"
+    grupo: "Custos"
+    sinal: "-"
+    ordem: 301
+    calculada: false
+  - id: "03.02"
+    nome: "CMV - Bebidas"
+    grupo: "Custos"
+    sinal: "-"
+    ordem: 302
+    calculada: false
+  - id: "03.03"
+    nome: "CMV - Sobremesas e Complementos"
+    grupo: "Custos"
+    sinal: "-"
+    ordem: 303
+    calculada: false
+  - id: "03.04"
+    nome: "CMV - Embalagens e Descartaveis"
+    grupo: "Custos"
+    sinal: "-"
+    ordem: 304
+    calculada: false
+  - id: "03.05"
+    nome: "CMV - Gas de Cozinha"
+    grupo: "Custos"
+    sinal: "-"
+    ordem: 305
+    calculada: false
+  - id: "03.06"
+    nome: "CMV - Limpeza e Higiene"
+    grupo: "Custos"
+    sinal: "-"
+    ordem: 306
+    calculada: false
+  - id: "03.07"
+    nome: "CMV - Utensilios e Outros Insumos"
+    grupo: "Custos"
+    sinal: "-"
+    ordem: 307
+    calculada: false
+  - id: "04.01"
+    nome: "Lucro Bruto"
+    grupo: "Lucro Bruto"
+    sinal: "="
+    ordem: 400
+    calculada: true
+  - id: "05.01"
+    nome: "Pessoal CLT - Salarios e Encargos"
+    grupo: "Despesas Operacionais"
+    sinal: "-"
+    ordem: 501
+    calculada: false
+  - id: "05.02"
+    nome: "Pessoal CLT - Beneficios"
+    grupo: "Despesas Operacionais"
+    sinal: "-"
+    ordem: 502
+    calculada: false
+  - id: "05.03"
+    nome: "Prestadores e Diaristas"
+    grupo: "Despesas Operacionais"
+    sinal: "-"
+    ordem: 503
+    calculada: false
+  - id: "06.01"
+    nome: "Ocupacao - Aluguel e IPTU"
+    grupo: "Despesas Operacionais"
+    sinal: "-"
+    ordem: 601
+    calculada: false
+  - id: "06.02"
+    nome: "Ocupacao - Utilidades (Energia, Agua, Gas)"
+    grupo: "Despesas Operacionais"
+    sinal: "-"
+    ordem: 602
+    calculada: false
+  - id: "07.01"
+    nome: "Impostos e Taxas"
+    grupo: "Despesas Operacionais"
+    sinal: "-"
+    ordem: 701
+    calculada: false
+  - id: "08.01"
+    nome: "Administrativo - Honorarios e Papelaria"
+    grupo: "Despesas Operacionais"
+    sinal: "-"
+    ordem: 801
+    calculada: false
+  - id: "09.01"
+    nome: "Financeiro - Bancos e Cartoes"
+    grupo: "Resultado Financeiro"
+    sinal: "-"
+    ordem: 901
+    calculada: false
+  - id: "10.01"
+    nome: "Manutencao e Reparos"
+    grupo: "Despesas Operacionais"
+    sinal: "-"
+    ordem: 1001
+    calculada: false
+  - id: "11.01"
+    nome: "Marketing e Delivery"
+    grupo: "Despesas Operacionais"
+    sinal: "-"
+    ordem: 1101
+    calculada: false
+  - id: "12.01"
+    nome: "Investimentos (nao entra DRE operacional)"
+    grupo: "Investimentos"
+    sinal: "-"
+    ordem: 1201
+    calculada: false
+    entra_dre: false
+  - id: "13.01"
+    nome: "Pro-labore e Retiradas de Socios"
+    grupo: "Resultado apos Socios"
+    sinal: "-"
+    ordem: 1301
+    calculada: false
+  - id: "99.01"
+    nome: "A REVISAR"
+    grupo: "Revisao"
+    sinal: "+/-"
+    ordem: 9901
+    calculada: false
+
+# Mapeamento conta_id -> dre_linha_id
+mapeamento:
+  # RECEITAS
+  "1.01.001": { dre_linha_id: "01.01", entra_dre: true }
+  "1.01.002": { dre_linha_id: "01.02", entra_dre: true }
+  "1.01.003": { dre_linha_id: "01.01", entra_dre: true }
+  "1.01.004": { dre_linha_id: "01.99", entra_dre: true }
+  "1.01.005": { dre_linha_id: "01.99", entra_dre: true }
+  "1.02.001": { dre_linha_id: "02.99", entra_dre: true }
+  "1.02.002": { dre_linha_id: "02.99", entra_dre: true }
+
+  # BEBIDAS
+  "2.01.001": { dre_linha_id: "03.02", entra_dre: true }
+  "2.01.002": { dre_linha_id: "03.02", entra_dre: true }
+  "2.01.003": { dre_linha_id: "03.02", entra_dre: true }
+  "2.01.004": { dre_linha_id: "03.02", entra_dre: true }
+  "2.01.005": { dre_linha_id: "03.02", entra_dre: true }
+  "2.01.006": { dre_linha_id: "03.02", entra_dre: true }
+  "2.01.007": { dre_linha_id: "03.02", entra_dre: true }
+  "2.01.008": { dre_linha_id: "03.02", entra_dre: true }
+
+  # ALIMENTOS
+  "2.02.001": { dre_linha_id: "03.01", entra_dre: true }
+  "2.02.002": { dre_linha_id: "03.01", entra_dre: true }
+  "2.02.003": { dre_linha_id: "03.01", entra_dre: true }
+  "2.02.004": { dre_linha_id: "03.01", entra_dre: true }
+  "2.02.005": { dre_linha_id: "03.01", entra_dre: true }
+  "2.02.006": { dre_linha_id: "03.01", entra_dre: true }
+  "2.02.007": { dre_linha_id: "03.01", entra_dre: true }
+  "2.02.008": { dre_linha_id: "03.01", entra_dre: true }
+  "2.02.009": { dre_linha_id: "03.01", entra_dre: true }
+  "2.02.010": { dre_linha_id: "03.01", entra_dre: true }
+  "2.02.011": { dre_linha_id: "03.01", entra_dre: true }
+  "2.02.012": { dre_linha_id: "03.01", entra_dre: true }
+  "2.02.013": { dre_linha_id: "03.01", entra_dre: true }
+  "2.02.014": { dre_linha_id: "03.01", entra_dre: true }
+  "2.02.015": { dre_linha_id: "03.03", entra_dre: true }
+
+  # EMBALAGENS E MATERIAIS
+  "2.03.001": { dre_linha_id: "03.04", entra_dre: true }
+  "2.03.002": { dre_linha_id: "03.04", entra_dre: true }
+  "2.03.003": { dre_linha_id: "03.04", entra_dre: true }
+  "2.04.001": { dre_linha_id: "03.06", entra_dre: true }
+  "2.04.002": { dre_linha_id: "03.07", entra_dre: true }
+
+  # PESSOAL
+  "3.01.001": { dre_linha_id: "05.01", entra_dre: true }
+  "3.01.002": { dre_linha_id: "05.01", entra_dre: true }
+  "3.01.003": { dre_linha_id: "05.01", entra_dre: true }
+  "3.01.004": { dre_linha_id: "05.01", entra_dre: true }
+  "3.01.005": { dre_linha_id: "05.01", entra_dre: true }
+  "3.01.011": { dre_linha_id: "05.01", entra_dre: true }
+  "3.01.012": { dre_linha_id: "05.01", entra_dre: true }
+  "3.01.015": { dre_linha_id: "05.01", entra_dre: true }
+  "3.02.001": { dre_linha_id: "05.02", entra_dre: true }
+  "3.02.002": { dre_linha_id: "05.02", entra_dre: true }
+  "3.02.003": { dre_linha_id: "05.02", entra_dre: true }
+  "3.02.004": { dre_linha_id: "05.02", entra_dre: true }
+  "3.02.008": { dre_linha_id: "05.02", entra_dre: true }
+  "3.03.001": { dre_linha_id: "05.01", entra_dre: true }
+  "3.03.002": { dre_linha_id: "05.01", entra_dre: true }
+  "3.04.001": { dre_linha_id: "05.03", entra_dre: true }
+  "3.04.002": { dre_linha_id: "05.03", entra_dre: true }
+  "3.04.003": { dre_linha_id: "05.03", entra_dre: true }
+  "3.04.005": { dre_linha_id: "05.03", entra_dre: true }
+  "3.04.006": { dre_linha_id: "05.03", entra_dre: true }
+  "3.04.007": { dre_linha_id: "05.03", entra_dre: true }
+
+  # OCUPACAO
+  "4.01.001": { dre_linha_id: "06.01", entra_dre: true }
+  "4.01.003": { dre_linha_id: "06.01", entra_dre: true }
+  "4.01.011": { dre_linha_id: "06.02", entra_dre: true }
+  "4.01.012": { dre_linha_id: "06.02", entra_dre: true }
+  "4.01.013": { dre_linha_id: "03.05", entra_dre: true }
+  "4.01.014": { dre_linha_id: "06.02", entra_dre: true }
+
+  # IMPOSTOS
+  "5.01.001": { dre_linha_id: "07.01", entra_dre: true }
+  "5.01.002": { dre_linha_id: "07.01", entra_dre: true }
+  "5.01.003": { dre_linha_id: "02.01", entra_dre: true }
+  "5.01.004": { dre_linha_id: "02.01", entra_dre: true }
+  "5.01.005": { dre_linha_id: "07.01", entra_dre: true }
+  "5.01.006": { dre_linha_id: "07.01", entra_dre: true }
+
+  # ADMINISTRATIVO
+  "6.01.001": { dre_linha_id: "08.01", entra_dre: true }
+  "6.01.002": { dre_linha_id: "08.01", entra_dre: true }
+  "6.01.005": { dre_linha_id: "08.01", entra_dre: true }
+  "6.01.006": { dre_linha_id: "08.01", entra_dre: true }
+
+  # BANCOS E CARTOES
+  "7.01.001": { dre_linha_id: "09.01", entra_dre: true }
+  "7.01.003": { dre_linha_id: "09.01", entra_dre: true }
+  "7.01.006": { dre_linha_id: "09.01", entra_dre: true }
+  "7.01.008": { dre_linha_id: "09.01", entra_dre: true }
+  "7.02.001": { dre_linha_id: "09.01", entra_dre: true }
+  "7.02.002": { dre_linha_id: "09.01", entra_dre: true }
+  "7.02.004": { dre_linha_id: "09.01", entra_dre: true }
+
+  # MANUTENCAO
+  "8.01.001": { dre_linha_id: "10.01", entra_dre: true }
+  "8.01.002": { dre_linha_id: "10.01", entra_dre: true }
+  "8.01.003": { dre_linha_id: "10.01", entra_dre: true }
+  "8.01.004": { dre_linha_id: "10.01", entra_dre: true }
+  "8.02.001": { dre_linha_id: "10.01", entra_dre: true }
+  "8.02.003": { dre_linha_id: "10.01", entra_dre: true }
+  "8.02.005": { dre_linha_id: "10.01", entra_dre: true }
+
+  # MARKETING E DELIVERY
+  "9.01.001": { dre_linha_id: "11.01", entra_dre: true }
+  "9.01.008": { dre_linha_id: "11.01", entra_dre: true }
+  "9.01.010": { dre_linha_id: "11.01", entra_dre: true }
+
+  # INVESTIMENTOS (nao entram DRE operacional)
+  "10.01.001": { dre_linha_id: "12.01", entra_dre: false }
+  "10.01.003": { dre_linha_id: "12.01", entra_dre: false }
+  "10.01.005": { dre_linha_id: "12.01", entra_dre: false }
+  "10.01.007": { dre_linha_id: "12.01", entra_dre: false }
+
+  # SOCIOS
+  "11.01.001": { dre_linha_id: "13.01", entra_dre: true }
+  "11.01.002": { dre_linha_id: "13.01", entra_dre: true }
+  "11.01.005": { dre_linha_id: "13.01", entra_dre: false }
+  "11.01.006": { dre_linha_id: "13.01", entra_dre: false }
+
+  # REVISAO (sempre vai para revisao na DRE)
+  "13.01.001": { dre_linha_id: "99.01", entra_dre: true }
+  "13.01.002": { dre_linha_id: "99.01", entra_dre: true }
+  "13.01.006": { dre_linha_id: "99.01", entra_dre: true }
+  "13.01.009": { dre_linha_id: "99.01", entra_dre: true }
+  "13.01.010": { dre_linha_id: "99.01", entra_dre: true }
+  "13.01.999": { dre_linha_id: "99.01", entra_dre: true }

@@ -1,0 +1,593 @@
+versao: '0.1'
+idioma: pt-BR
+descricao: Plano de contas gerencial inicial para Fantozzi - restaurante no Brasil
+observacao: Plano gerencial. Validar com contador antes de uso fiscal/contábil oficial.
+centros_custo:
+- id: CC-001
+  nome: Cozinha
+- id: CC-002
+  nome: Bar
+- id: CC-003
+  nome: Salão / Atendimento
+- id: CC-004
+  nome: Delivery / Retirada
+- id: CC-005
+  nome: Administração
+- id: CC-006
+  nome: Limpeza e Higiene
+- id: CC-007
+  nome: Manutenção
+- id: CC-008
+  nome: Marketing e Vendas
+- id: CC-009
+  nome: Veículos
+- id: CC-010
+  nome: Obras e Investimentos
+- id: CC-999
+  nome: Geral / A definir
+contas:
+- id: 1.01.001
+  nome: Receita de Vendas no Salão
+  grupo: Receitas
+  tipo: receita
+- id: 1.01.002
+  nome: Receita de Delivery
+  grupo: Receitas
+  tipo: receita
+- id: 1.01.003
+  nome: Receita de Balcão / Retirada
+  grupo: Receitas
+  tipo: receita
+- id: 1.01.004
+  nome: Receita de Eventos
+  grupo: Receitas
+  tipo: receita
+- id: 1.01.005
+  nome: Taxa de Serviço / Gorjeta
+  grupo: Receitas
+  tipo: receita
+- id: 1.02.001
+  nome: Descontos Concedidos
+  grupo: Deduções da Receita
+  tipo: deducao_receita
+- id: 1.02.002
+  nome: Cancelamentos e Estornos
+  grupo: Deduções da Receita
+  tipo: deducao_receita
+- id: 2.01.001
+  nome: Cervejas
+  grupo: Custos de Mercadorias e Insumos
+  tipo: custo
+- id: 2.01.002
+  nome: Vinhos e Espumantes
+  grupo: Custos de Mercadorias e Insumos
+  tipo: custo
+- id: 2.01.003
+  nome: Destilados, Licores e Aperitivos
+  grupo: Custos de Mercadorias e Insumos
+  tipo: custo
+- id: 2.01.004
+  nome: Refrigerantes
+  grupo: Custos de Mercadorias e Insumos
+  tipo: custo
+- id: 2.01.005
+  nome: Águas Minerais
+  grupo: Custos de Mercadorias e Insumos
+  tipo: custo
+- id: 2.01.006
+  nome: Energéticos
+  grupo: Custos de Mercadorias e Insumos
+  tipo: custo
+- id: 2.01.007
+  nome: Sucos, Polpas e Bebidas não Alcoólicas
+  grupo: Custos de Mercadorias e Insumos
+  tipo: custo
+- id: 2.01.008
+  nome: Gelo
+  grupo: Custos de Mercadorias e Insumos
+  tipo: custo
+- id: 2.02.001
+  nome: Carnes Bovinas
+  grupo: Custos de Mercadorias e Insumos
+  tipo: custo
+- id: 2.02.002
+  nome: Aves
+  grupo: Custos de Mercadorias e Insumos
+  tipo: custo
+- id: 2.02.003
+  nome: Suínos
+  grupo: Custos de Mercadorias e Insumos
+  tipo: custo
+- id: 2.02.004
+  nome: Pescados e Frutos do Mar
+  grupo: Custos de Mercadorias e Insumos
+  tipo: custo
+- id: 2.02.005
+  nome: Frios e Embutidos
+  grupo: Custos de Mercadorias e Insumos
+  tipo: custo
+- id: 2.02.006
+  nome: Laticínios e Queijos
+  grupo: Custos de Mercadorias e Insumos
+  tipo: custo
+- id: 2.02.007
+  nome: Ovos
+  grupo: Custos de Mercadorias e Insumos
+  tipo: custo
+- id: 2.02.008
+  nome: Hortifruti
+  grupo: Custos de Mercadorias e Insumos
+  tipo: custo
+- id: 2.02.009
+  nome: Pães e Padaria
+  grupo: Custos de Mercadorias e Insumos
+  tipo: custo
+- id: 2.02.010
+  nome: Mercearia Seca
+  grupo: Custos de Mercadorias e Insumos
+  tipo: custo
+- id: 2.02.011
+  nome: Óleos, Azeites e Gorduras
+  grupo: Custos de Mercadorias e Insumos
+  tipo: custo
+- id: 2.02.012
+  nome: Molhos, Temperos e Condimentos
+  grupo: Custos de Mercadorias e Insumos
+  tipo: custo
+- id: 2.02.013
+  nome: Conservas e Enlatados
+  grupo: Custos de Mercadorias e Insumos
+  tipo: custo
+- id: 2.02.014
+  nome: Batatas Congeladas e Pré-prontos
+  grupo: Custos de Mercadorias e Insumos
+  tipo: custo
+- id: 2.02.015
+  nome: Sobremesas, Sorvetes e Picolés
+  grupo: Custos de Mercadorias e Insumos
+  tipo: custo
+- id: 2.03.001
+  nome: Descartáveis e Embalagens
+  grupo: Materiais diretamente ligados à venda
+  tipo: custo
+- id: 2.03.002
+  nome: Guardanapos, Canudos e Sachês
+  grupo: Materiais diretamente ligados à venda
+  tipo: custo
+- id: 2.03.003
+  nome: Embalagens para Delivery
+  grupo: Materiais diretamente ligados à venda
+  tipo: custo
+- id: 3.01.001
+  nome: Salários e Ordenados CLT
+  grupo: Pessoal CLT
+  tipo: despesa
+- id: 3.01.002
+  nome: Horas Extras CLT
+  grupo: Pessoal CLT
+  tipo: despesa
+- id: 3.01.003
+  nome: Adicional Noturno
+  grupo: Pessoal CLT
+  tipo: despesa
+- id: 3.01.004
+  nome: Adicional de Insalubridade
+  grupo: Pessoal CLT
+  tipo: despesa
+- id: 3.01.005
+  nome: Adicional de Periculosidade
+  grupo: Pessoal CLT
+  tipo: despesa
+- id: 3.01.006
+  nome: DSR sobre Horas Extras e Adicionais
+  grupo: Pessoal CLT
+  tipo: despesa
+- id: 3.01.011
+  nome: 13º Salário
+  grupo: Pessoal CLT
+  tipo: despesa
+- id: 3.01.012
+  nome: Férias
+  grupo: Pessoal CLT
+  tipo: despesa
+- id: 3.01.013
+  nome: 1/3 Constitucional de Férias
+  grupo: Pessoal CLT
+  tipo: despesa
+- id: 3.01.014
+  nome: Aviso Prévio
+  grupo: Pessoal CLT
+  tipo: despesa
+- id: 3.01.015
+  nome: Rescisões Trabalhistas
+  grupo: Pessoal CLT
+  tipo: despesa
+- id: 3.01.016
+  nome: Multa Rescisória do FGTS
+  grupo: Pessoal CLT
+  tipo: despesa
+- id: 3.02.001
+  nome: Vale-Transporte
+  grupo: Benefícios CLT
+  tipo: despesa
+- id: 3.02.002
+  nome: Vale-Alimentação
+  grupo: Benefícios CLT
+  tipo: despesa
+- id: 3.02.003
+  nome: Vale-Refeição
+  grupo: Benefícios CLT
+  tipo: despesa
+- id: 3.02.004
+  nome: Alimentação Interna de Funcionários
+  grupo: Benefícios CLT
+  tipo: despesa
+- id: 3.02.008
+  nome: Uniformes
+  grupo: Benefícios CLT
+  tipo: despesa
+- id: 3.02.009
+  nome: Equipamentos de Proteção Individual - EPI
+  grupo: Benefícios CLT
+  tipo: despesa
+- id: 3.02.011
+  nome: Exames Admissionais, Periódicos e Demissionais
+  grupo: Benefícios CLT
+  tipo: despesa
+- id: 3.03.001
+  nome: FGTS
+  grupo: Encargos sobre folha CLT
+  tipo: despesa
+- id: 3.03.002
+  nome: INSS Patronal
+  grupo: Encargos sobre folha CLT
+  tipo: despesa
+- id: 3.03.003
+  nome: RAT / SAT
+  grupo: Encargos sobre folha CLT
+  tipo: despesa
+- id: 3.03.004
+  nome: Terceiros / Sistema S
+  grupo: Encargos sobre folha CLT
+  tipo: despesa
+- id: 3.03.009
+  nome: Provisão de 13º Salário
+  grupo: Encargos sobre folha CLT
+  tipo: provisao
+- id: 3.03.010
+  nome: Provisão de Férias
+  grupo: Encargos sobre folha CLT
+  tipo: provisao
+- id: 3.03.011
+  nome: Provisão de FGTS
+  grupo: Encargos sobre folha CLT
+  tipo: provisao
+- id: 3.03.012
+  nome: Provisão de Encargos Sociais
+  grupo: Encargos sobre folha CLT
+  tipo: provisao
+- id: 3.04.001
+  nome: Diaristas e Extras de Cozinha
+  grupo: Prestadores, diaristas e serviços de terceiros
+  tipo: despesa
+- id: 3.04.002
+  nome: Diaristas e Extras de Salão
+  grupo: Prestadores, diaristas e serviços de terceiros
+  tipo: despesa
+- id: 3.04.003
+  nome: Diaristas e Extras de Bar
+  grupo: Prestadores, diaristas e serviços de terceiros
+  tipo: despesa
+- id: 3.04.004
+  nome: Freelancers de Eventos
+  grupo: Prestadores, diaristas e serviços de terceiros
+  tipo: despesa
+- id: 3.04.005
+  nome: Prestadores Autônomos - RPA
+  grupo: Prestadores, diaristas e serviços de terceiros
+  tipo: despesa
+- id: 3.04.006
+  nome: Prestadores Pessoa Jurídica - PJ
+  grupo: Prestadores, diaristas e serviços de terceiros
+  tipo: despesa
+- id: 3.04.007
+  nome: Prestadores MEI
+  grupo: Prestadores, diaristas e serviços de terceiros
+  tipo: despesa
+- id: 3.04.011
+  nome: Pagamentos Extraordinários a Regularizar
+  grupo: Prestadores, diaristas e serviços de terceiros
+  tipo: revisao
+- id: 4.01.001
+  nome: Aluguel do Imóvel
+  grupo: Ocupação, Utilidades e Funcionamento
+  tipo: despesa
+- id: 4.01.003
+  nome: IPTU
+  grupo: Ocupação, Utilidades e Funcionamento
+  tipo: despesa
+- id: 4.01.006
+  nome: Licenças, Alvarás e Vistorias
+  grupo: Ocupação, Utilidades e Funcionamento
+  tipo: despesa
+- id: 4.01.011
+  nome: Energia Elétrica
+  grupo: Ocupação, Utilidades e Funcionamento
+  tipo: despesa
+- id: 4.01.012
+  nome: Água e Esgoto
+  grupo: Ocupação, Utilidades e Funcionamento
+  tipo: despesa
+- id: 4.01.013
+  nome: Gás de Cozinha
+  grupo: Ocupação, Utilidades e Funcionamento
+  tipo: despesa
+- id: 4.01.014
+  nome: Internet
+  grupo: Ocupação, Utilidades e Funcionamento
+  tipo: despesa
+- id: 5.01.001
+  nome: IRPJ
+  grupo: Impostos, Taxas e Obrigações Fiscais
+  tipo: imposto
+- id: 5.01.002
+  nome: CSLL
+  grupo: Impostos, Taxas e Obrigações Fiscais
+  tipo: imposto
+- id: 5.01.003
+  nome: PIS
+  grupo: Impostos, Taxas e Obrigações Fiscais
+  tipo: imposto
+- id: 5.01.004
+  nome: COFINS
+  grupo: Impostos, Taxas e Obrigações Fiscais
+  tipo: imposto
+- id: 5.01.005
+  nome: ICMS
+  grupo: Impostos, Taxas e Obrigações Fiscais
+  tipo: imposto
+- id: 5.01.006
+  nome: ISS
+  grupo: Impostos, Taxas e Obrigações Fiscais
+  tipo: imposto
+- id: 5.01.007
+  nome: IBS - Período de Transição
+  grupo: Impostos, Taxas e Obrigações Fiscais
+  tipo: imposto
+- id: 5.01.008
+  nome: CBS - Período de Transição
+  grupo: Impostos, Taxas e Obrigações Fiscais
+  tipo: imposto
+- id: 5.01.010
+  nome: Difal / Antecipação de ICMS
+  grupo: Impostos, Taxas e Obrigações Fiscais
+  tipo: imposto
+- id: 5.01.011
+  nome: ICMS Substituição Tributária
+  grupo: Impostos, Taxas e Obrigações Fiscais
+  tipo: imposto
+- id: 5.02.001
+  nome: INSS a Recolher - Empregados
+  grupo: Obrigações sobre folha
+  tipo: passivo
+- id: 5.02.002
+  nome: INSS a Recolher - Empresa
+  grupo: Obrigações sobre folha
+  tipo: passivo
+- id: 5.02.003
+  nome: FGTS a Recolher
+  grupo: Obrigações sobre folha
+  tipo: passivo
+- id: 5.02.004
+  nome: IRRF sobre Folha
+  grupo: Obrigações sobre folha
+  tipo: passivo
+- id: 5.03.001
+  nome: IRRF sobre Serviços Tomados
+  grupo: Retenções sobre serviços tomados
+  tipo: passivo
+- id: 5.03.005
+  nome: INSS Retido
+  grupo: Retenções sobre serviços tomados
+  tipo: passivo
+- id: 5.03.006
+  nome: ISS Retido
+  grupo: Retenções sobre serviços tomados
+  tipo: passivo
+- id: 5.04.004
+  nome: Multas Fiscais
+  grupo: Taxas, multas e juros fiscais
+  tipo: despesa
+- id: 5.04.005
+  nome: Juros Fiscais
+  grupo: Taxas, multas e juros fiscais
+  tipo: despesa
+- id: 6.01.001
+  nome: Honorários Contábeis
+  grupo: Despesas Administrativas e Escritório
+  tipo: despesa
+- id: 6.01.002
+  nome: Honorários Jurídicos
+  grupo: Despesas Administrativas e Escritório
+  tipo: despesa
+- id: 6.01.004
+  nome: Certificado Digital
+  grupo: Despesas Administrativas e Escritório
+  tipo: despesa
+- id: 6.01.005
+  nome: Material de Escritório
+  grupo: Despesas Administrativas e Escritório
+  tipo: despesa
+- id: 6.01.006
+  nome: Papelaria e Impressos
+  grupo: Despesas Administrativas e Escritório
+  tipo: despesa
+- id: 7.01.001
+  nome: Tarifas Bancárias
+  grupo: Bancos, Cartões, Juros e Serviços Financeiros
+  tipo: despesa
+- id: 7.01.003
+  nome: Tarifas PIX
+  grupo: Bancos, Cartões, Juros e Serviços Financeiros
+  tipo: despesa
+- id: 7.01.006
+  nome: Juros Bancários
+  grupo: Bancos, Cartões, Juros e Serviços Financeiros
+  tipo: despesa
+- id: 7.01.007
+  nome: IOF
+  grupo: Bancos, Cartões, Juros e Serviços Financeiros
+  tipo: despesa
+- id: 7.01.008
+  nome: Juros de Empréstimos
+  grupo: Bancos, Cartões, Juros e Serviços Financeiros
+  tipo: despesa
+- id: 7.02.001
+  nome: Comissão Cartão de Crédito
+  grupo: Cartões e meios de pagamento
+  tipo: despesa
+- id: 7.02.002
+  nome: Comissão Cartão de Débito
+  grupo: Cartões e meios de pagamento
+  tipo: despesa
+- id: 7.02.004
+  nome: Aluguel de Máquina de Cartão
+  grupo: Cartões e meios de pagamento
+  tipo: despesa
+- id: 7.02.005
+  nome: Taxa de Antecipação de Recebíveis
+  grupo: Cartões e meios de pagamento
+  tipo: despesa
+- id: 8.01.001
+  nome: Manutenção Predial
+  grupo: Manutenção, Reparos e Conservação
+  tipo: despesa
+- id: 8.01.003
+  nome: Elétrica Predial
+  grupo: Manutenção, Reparos e Conservação
+  tipo: despesa
+- id: 8.01.004
+  nome: Hidráulica
+  grupo: Manutenção, Reparos e Conservação
+  tipo: despesa
+- id: 8.02.001
+  nome: Manutenção de Equipamentos de Cozinha
+  grupo: Manutenção, Reparos e Conservação
+  tipo: despesa
+- id: 8.02.005
+  nome: Manutenção de Equipamentos Eletrônicos
+  grupo: Manutenção, Reparos e Conservação
+  tipo: despesa
+- id: 8.03.001
+  nome: Combustível de Veículos
+  grupo: Veículos
+  tipo: despesa
+- id: 8.03.002
+  nome: Manutenção de Veículos
+  grupo: Veículos
+  tipo: despesa
+- id: 9.01.001
+  nome: Publicidade e Propaganda
+  grupo: Marketing, Comercial e Delivery
+  tipo: despesa
+- id: 9.01.008
+  nome: Comissões de Aplicativos de Delivery
+  grupo: Marketing, Comercial e Delivery
+  tipo: despesa
+- id: 9.01.010
+  nome: Frete e Motoboy
+  grupo: Marketing, Comercial e Delivery
+  tipo: despesa
+- id: 10.01.001
+  nome: Investimento em Obras e Reformas
+  grupo: Investimentos e Imobilizado
+  tipo: investimento
+- id: 10.01.003
+  nome: Equipamentos de Cozinha
+  grupo: Investimentos e Imobilizado
+  tipo: investimento
+- id: 10.01.005
+  nome: Equipamentos Eletrônicos
+  grupo: Investimentos e Imobilizado
+  tipo: investimento
+- id: 10.01.007
+  nome: Móveis e Decoração
+  grupo: Investimentos e Imobilizado
+  tipo: investimento
+- id: 10.01.009
+  nome: Veículos
+  grupo: Investimentos e Imobilizado
+  tipo: investimento
+- id: 10.01.012
+  nome: Depreciação Gerencial - Imóvel / Benfeitorias
+  grupo: Investimentos e Imobilizado
+  tipo: despesa_gerencial
+- id: 10.01.013
+  nome: Depreciação Gerencial - Equipamentos
+  grupo: Investimentos e Imobilizado
+  tipo: despesa_gerencial
+- id: 11.01.001
+  nome: Pró-labore de Sócios Trabalhadores
+  grupo: Sócios, Pró-labore e Distribuição de Lucros
+  tipo: despesa
+- id: 11.01.002
+  nome: INSS sobre Pró-labore
+  grupo: Sócios, Pró-labore e Distribuição de Lucros
+  tipo: despesa
+- id: 11.01.003
+  nome: IRRF sobre Pró-labore
+  grupo: Sócios, Pró-labore e Distribuição de Lucros
+  tipo: passivo
+- id: 11.01.005
+  nome: Distribuição de Lucros
+  grupo: Sócios, Pró-labore e Distribuição de Lucros
+  tipo: patrimonial
+- id: 11.01.006
+  nome: Antecipação de Lucros
+  grupo: Sócios, Pró-labore e Distribuição de Lucros
+  tipo: patrimonial
+- id: 11.01.010
+  nome: Retiradas Não Classificadas de Sócios
+  grupo: Sócios, Pró-labore e Distribuição de Lucros
+  tipo: revisao
+- id: 12.01.001
+  nome: Pequenas Despesas Operacionais
+  grupo: Despesas Diversas e Ajustes
+  tipo: despesa
+- id: 12.01.002
+  nome: Diferenças de Caixa
+  grupo: Despesas Diversas e Ajustes
+  tipo: ajuste
+- id: 12.01.007
+  nome: Perdas de Estoque
+  grupo: Despesas Diversas e Ajustes
+  tipo: despesa
+- id: 12.01.009
+  nome: Despesas Não Recorrentes
+  grupo: Despesas Diversas e Ajustes
+  tipo: despesa
+- id: 13.01.001
+  nome: Revisar - Produto Não Classificado
+  grupo: Contas de Revisão e Classificação Pendente
+  tipo: revisao
+  exige_revisao: true
+- id: 13.01.002
+  nome: Revisar - Classificação Ambígua
+  grupo: Contas de Revisão e Classificação Pendente
+  tipo: revisao
+  exige_revisao: true
+- id: 13.01.006
+  nome: Revisar - Valor Inconsistente
+  grupo: Contas de Revisão e Classificação Pendente
+  tipo: revisao
+  exige_revisao: true
+- id: 13.01.009
+  nome: Revisar - Possível Investimento
+  grupo: Contas de Revisão e Classificação Pendente
+  tipo: revisao
+  exige_revisao: true
+- id: 13.01.010
+  nome: Revisar - Pagamento de Pessoal a Regularizar
+  grupo: Contas de Revisão e Classificação Pendente
+  tipo: revisao
+  exige_revisao: true

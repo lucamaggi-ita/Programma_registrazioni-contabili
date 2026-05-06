@@ -1,0 +1,12 @@
+Obietivo: 	Creazione di un agente chiamato Fantozzi che sará responsabile Registrazione sul foglio 		Excel di fattura di acquisto
+
+Ambiente: 	Win10 / Win11
+
+Strumenti a disposizione: 	file .xml com le fatture di acquisto (siamo in Brasile), file di excel sul 					quale il mio agente “Fantozzi” dovrá resgistrare le fatture seguende le mie 				specifiche
+
+Specifiche: 	importare Nome fornitore, CNPJ, numero fattura, data fattura, data scadenza pagamento.
+Non importiamo tutti gli articoli ma Fantozzi li deve leggere e poi associare al corrispondente conto economico presente nel piano dei conti seguendo uno schema prestabilito in apposito file . Esempi:  A) tutti i prodotti contenenti le parole intere, o parti delle parole, coca cola, fantea, sprite, tonica, swhepps, fys devono essere registrati da Fantozzi sotto la voce del piano dei conti Refrigerante. B) tutti i prodotti contenenti vinho, espumante, Rio Sol, Zephira, Hote, sauvignon, chardonnay, brut, moscatel, demisec devono essere registrati da Fantozzi nella voce Vino. C) detergente, sanitaria, alcool, esponja, pano, vassoura devono essere registrate da Fantozzi sottola voce Pulizia. Il file dovrá essere il piú dettagliato possibile per evitare errori.
+
+Risultato atteso:	un file di excel in cui per ogni mese Fantozzi crea una scheda di lavoro. In questa schede vengono registrate e poi ordinate in ordine di tata tutte le fatture di acquisto del mese imputando i conti corretti. Se in una fattura ci sono piú voci da imputare la stessa sará divisa in píu registrazioni. Esempio di acquisto dalla stesso fornitore che emette una sola fattura OESA fatt. 12566 data: 05/05/2026 di Coca Cola R$ 10, Rio Sol R$ 20 e Esponja R$ 5 scad. R$ 17,5 20/05/2026 e R$ 17,5 27/05/2026. FANTOZZI registrerá su 3 righe  1.a riga data: 05/05/2026  fornit. OESA fatt. 12566 Refrigerante R$ 10 cad. R$ 5 20/05/2026 e R$ 5 27/05/2026. 2.a a riga data: 05/05/2026 fornit. OESA  Rio Sol R$ 20 scad. R$ 10 20/05/2026 e R$ 10 27/05/2026 fatt. 12566 3.a rige data: 05/05/2026 fornit. OESA fatt. 12566 Esponja R$ 5 scad. R$ 2,5 20/05/2026 e R$ 2,5 27/05/2026
+
+Attenone: il file sará poi complementato da registrazioni manuali di quei movimenti che non sono originati da fatture. Successivamente potremo voler inserire nei compiti di Fantozzi altre rigistrzioni automatiche basta ad esempio sulle buste paghe dei lavoratori e sui comprovanti di pagamento importati dalla banca. La soluzione finale ideale sarebbe dovere registrarre manualmente solo i movimenti in denaro com i soldi della cassa

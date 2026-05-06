@@ -1,0 +1,35 @@
+versao: "1.0"
+descricao: Mapeamento de colunas do CSV de faturas para os campos internos de Fantozzi
+
+# Colunas obrigatorias do CSV
+colunas_obrigatorias:
+  fornecedor: fornecedor
+  cnpj: cnpj
+  numero_fatura: numero_fatura
+  data_fatura: data_fatura
+  item_descricao: item_descricao
+  item_valor: item_valor
+
+# Colunas opcionais
+colunas_opcionais:
+  vencimento_data: vencimento_data
+  vencimento_valor: vencimento_valor
+  cnpj_destinatario: cnpj_destinatario
+  nome_destinatario: nome_destinatario
+  observacoes: observacoes
+
+# Formatos de data aceitos (em ordem de tentativa)
+formatos_data:
+  - "%d/%m/%Y"
+  - "%Y-%m-%d"
+  - "%d-%m-%Y"
+  - "%Y/%m/%d"
+
+# Separador decimal
+separador_decimal: "."
+
+# Separador de campos CSV
+separador_csv: ","
+
+# Encoding esperado
+encoding: "utf-8"

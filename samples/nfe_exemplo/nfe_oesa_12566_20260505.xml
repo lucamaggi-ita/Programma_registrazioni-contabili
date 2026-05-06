@@ -1,0 +1,168 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<nfeProc versao="4.00" xmlns="http://www.portalfiscal.inf.br/nfe">
+  <NFe xmlns="http://www.portalfiscal.inf.br/nfe">
+    <infNFe versao="4.00" Id="NFe29260512345678000195550010001256612345678901">
+      <ide>
+        <cUF>29</cUF>
+        <cNF>12345678</cNF>
+        <natOp>VENDA DE MERCADORIAS</natOp>
+        <mod>55</mod>
+        <serie>001</serie>
+        <nNF>12566</nNF>
+        <dhEmi>2026-05-05T10:00:00-03:00</dhEmi>
+        <tpNF>1</tpNF>
+        <idDest>1</idDest>
+        <cMunFG>2927408</cMunFG>
+        <tpImp>1</tpImp>
+        <tpEmis>1</tpEmis>
+        <tpAmb>2</tpAmb>
+        <finNFe>1</finNFe>
+        <indFinal>1</indFinal>
+        <indPres>1</indPres>
+        <procEmi>0</procEmi>
+        <verProc>4.00</verProc>
+      </ide>
+      <emit>
+        <CNPJ>12345678000195</CNPJ>
+        <xNome>OESA COMERCIO E REPRESENTACOES S/A</xNome>
+        <xFant>OESA</xFant>
+        <enderEmit>
+          <xLgr>RUA EXEMPLO</xLgr>
+          <nro>100</nro>
+          <xBairro>CENTRO</xBairro>
+          <cMun>2927408</cMun>
+          <xMun>SALVADOR</xMun>
+          <UF>BA</UF>
+          <CEP>40000000</CEP>
+          <cPais>1058</cPais>
+          <xPais>BRASIL</xPais>
+        </enderEmit>
+        <IE>123456789</IE>
+        <CRT>3</CRT>
+      </emit>
+      <dest>
+        <CNPJ>55746722000181</CNPJ>
+        <xNome>TRATTORIA DO SOSSEGO RESTAURANTE LTDA</xNome>
+        <enderDest>
+          <xLgr>RUA DO RESTAURANTE</xLgr>
+          <nro>200</nro>
+          <xBairro>BAIRRO</xBairro>
+          <cMun>2927408</cMun>
+          <xMun>SALVADOR</xMun>
+          <UF>BA</UF>
+          <CEP>41000000</CEP>
+          <cPais>1058</cPais>
+          <xPais>BRASIL</xPais>
+        </enderDest>
+        <indIEDest>9</indIEDest>
+      </dest>
+      <det nItem="1">
+        <prod>
+          <cProd>001</cProd>
+          <cEAN>7891234560011</cEAN>
+          <xProd>COCA-COLA KS 290ML</xProd>
+          <NCM>22021000</NCM>
+          <CFOP>5102</CFOP>
+          <uCom>CX</uCom>
+          <qCom>1.0000</qCom>
+          <vUnCom>10.0000</vUnCom>
+          <vProd>10.00</vProd>
+          <cEANTrib>7891234560011</cEANTrib>
+          <uTrib>CX</uTrib>
+          <qTrib>1.0000</qTrib>
+          <vUnTrib>10.0000</vUnTrib>
+          <indTot>1</indTot>
+        </prod>
+        <imposto>
+          <ICMS><ICMS00><orig>0</orig><CST>00</CST><modBC>3</modBC><vBC>10.00</vBC><pICMS>12.00</pICMS><vICMS>1.20</vICMS></ICMS00></ICMS>
+        </imposto>
+      </det>
+      <det nItem="2">
+        <prod>
+          <cProd>002</cProd>
+          <cEAN>7891234560022</cEAN>
+          <xProd>VINHO RIO SOL TINTO SECO 750ML</xProd>
+          <NCM>22042100</NCM>
+          <CFOP>5102</CFOP>
+          <uCom>UN</uCom>
+          <qCom>1.0000</qCom>
+          <vUnCom>20.0000</vUnCom>
+          <vProd>20.00</vProd>
+          <cEANTrib>7891234560022</cEANTrib>
+          <uTrib>UN</uTrib>
+          <qTrib>1.0000</qTrib>
+          <vUnTrib>20.0000</vUnTrib>
+          <indTot>1</indTot>
+        </prod>
+        <imposto>
+          <ICMS><ICMS00><orig>0</orig><CST>00</CST><modBC>3</modBC><vBC>20.00</vBC><pICMS>12.00</pICMS><vICMS>2.40</vICMS></ICMS00></ICMS>
+        </imposto>
+      </det>
+      <det nItem="3">
+        <prod>
+          <cProd>003</cProd>
+          <cEAN>7891234560033</cEAN>
+          <xProd>ESPONJA DUPLA FACE LIMPEZA 3UN</xProd>
+          <NCM>34022000</NCM>
+          <CFOP>5102</CFOP>
+          <uCom>PCT</uCom>
+          <qCom>1.0000</qCom>
+          <vUnCom>5.0000</vUnCom>
+          <vProd>5.00</vProd>
+          <cEANTrib>7891234560033</cEANTrib>
+          <uTrib>PCT</uTrib>
+          <qTrib>1.0000</qTrib>
+          <vUnTrib>5.0000</vUnTrib>
+          <indTot>1</indTot>
+        </prod>
+        <imposto>
+          <ICMS><ICMS00><orig>0</orig><CST>00</CST><modBC>3</modBC><vBC>5.00</vBC><pICMS>12.00</pICMS><vICMS>0.60</vICMS></ICMS00></ICMS>
+        </imposto>
+      </det>
+      <total>
+        <ICMSTot>
+          <vBC>35.00</vBC>
+          <vICMS>4.20</vICMS>
+          <vICMSDeson>0.00</vICMSDeson>
+          <vFCP>0.00</vFCP>
+          <vBCST>0.00</vBCST>
+          <vST>0.00</vST>
+          <vFCPST>0.00</vFCPST>
+          <vFCPSTRet>0.00</vFCPSTRet>
+          <vProd>35.00</vProd>
+          <vFrete>0.00</vFrete>
+          <vSeg>0.00</vSeg>
+          <vDesc>0.00</vDesc>
+          <vII>0.00</vII>
+          <vIPI>0.00</vIPI>
+          <vIPIDevol>0.00</vIPIDevol>
+          <vPIS>0.00</vPIS>
+          <vCOFINS>0.00</vCOFINS>
+          <vOutro>0.00</vOutro>
+          <vNF>35.00</vNF>
+        </ICMSTot>
+      </total>
+      <transp>
+        <modFrete>9</modFrete>
+      </transp>
+      <cobr>
+        <fat>
+          <nFat>12566</nFat>
+          <vOrig>35.00</vOrig>
+          <vDesc>0.00</vDesc>
+          <vLiq>35.00</vLiq>
+        </fat>
+        <dup>
+          <nDup>001</nDup>
+          <dVenc>2026-05-20</dVenc>
+          <vDup>17.50</vDup>
+        </dup>
+        <dup>
+          <nDup>002</nDup>
+          <dVenc>2026-05-27</dVenc>
+          <vDup>17.50</vDup>
+        </dup>
+      </cobr>
+    </infNFe>
+  </NFe>
+</nfeProc>
