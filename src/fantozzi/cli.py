@@ -16,6 +16,11 @@ from fantozzi.classification_review_export import (
     console_lines as review_export_console_lines,
     export_classification_review_csv,
 )
+from fantozzi.classification_review_package import (
+    ClassificationReviewPackageError,
+    console_lines as review_package_console_lines,
+    gerar_pacote_revisao_contabil,
+)
 from fantozzi.classification_review_workbook import (
     ClassificationReviewWorkbookError,
     gerar_planilha_revisao_classificacao,
@@ -131,7 +136,12 @@ def build_parser() -> argparse.ArgumentParser:
             "gerar-pre-livro-diario-teste "
             "--excel output\\lancamentos.xlsx "
             "--pasta-operacoes-especiais XML_fatture_acquisto\\xml "
-            "--saida reports\\pre_livro_diario_teste.xlsx"
+            "--saida reports\\pre_livro_diario_teste.xlsx\n"
+            "  .\\.venv\\Scripts\\python.exe -m fantozzi.cli "
+            "gerar-pacote-revisao-contabil "
+            "--csv reports\\revisao_classificacao_revisada.csv "
+            "--saida-xlsx reports\\pacote_revisao_contabil.xlsx "
+            "--relatorio reports\\pacote_revisao_contabil.txt"
         ),
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -444,6 +454,45 @@ def build_parser() -> argparse.ArgumentParser:
         help="Arquivo TXT opcional para salvar os indicadores da aba Auditoria.",
     )
     gerar_pre_livro.set_defaults(func=gerar_pre_livro_diario_teste_command)
+
+    gerar_pacote_revisao = subparsers.add_parser(
+        "gerar-pacote-revisao-contabil",
+        help="Gera XLSX e TXT de apoio para revisao contabil humana.",
+        description=(
+            "Le um ou mais CSV de revisao de classificacao e gera um pacote "
+            "assistido com prioridades, top valores, top ocorrencias, visao por "
+            "fornecedor e abas para contador. Nao altera CSV, XLSX existentes, "
+            "XML, Excel de lancamentos ou arquivos YAML de config."
+        ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    gerar_pacote_revisao.add_argument(
+        "--csv",
+        action="append",
+        required=True,
+        help="Caminho do CSV de revisao/revisado. Pode ser informado varias vezes.",
+    )
+    gerar_pacote_revisao.add_argument(
+        "--saida-xlsx",
+        required=True,
+        help="Arquivo XLSX de saida do pacote assistido.",
+    )
+    gerar_pacote_revisao.add_argument(
+        "--relatorio",
+        help="Arquivo TXT opcional para salvar o resumo do pacote.",
+    )
+    gerar_pacote_revisao.add_argument(
+        "--limite-top",
+        type=int,
+        default=50,
+        help="Quantidade maxima de linhas nas abas Top_Valor e Top_Ocorrencias.",
+    )
+    gerar_pacote_revisao.add_argument(
+        "--separador",
+        default=";",
+        help="Separador dos CSV de entrada.",
+    )
+    gerar_pacote_revisao.set_defaults(func=gerar_pacote_revisao_contabil_command)
 
     return parser
 
@@ -803,6 +852,27 @@ def gerar_pre_livro_diario_teste_command(args: argparse.Namespace) -> int:
         print(line)
     if args.relatorio_auditoria:
         print(f"[OK] Relatorio de auditoria salvo em: {args.relatorio_auditoria}")
+    return 0
+
+
+def gerar_pacote_revisao_contabil_command(args: argparse.Namespace) -> int:
+    try:
+        result = gerar_pacote_revisao_contabil(
+            [Path(csv_path) for csv_path in args.csv],
+            Path(args.saida_xlsx),
+            Path(args.relatorio) if args.relatorio else None,
+            limite_top=args.limite_top,
+            separador=args.separador,
+        )
+    except ClassificationReviewPackageError as exc:
+        print(f"[ERRO] {exc}")
+        return 1
+    except Exception:
+        print(f"[ERRO] Nao foi possivel gerar pacote de revisao: {args.saida_xlsx}")
+        return 1
+
+    for line in review_package_console_lines(result):
+        print(line)
     return 0
 
 

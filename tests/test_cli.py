@@ -259,6 +259,35 @@ def test_parser_accepts_gerar_pre_livro_diario_teste_command():
     assert args.saida == "reports/pre_livro_diario_teste.xlsx"
 
 
+def test_parser_accepts_gerar_pacote_revisao_contabil_command():
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "gerar-pacote-revisao-contabil",
+            "--csv",
+            "reports/importacao_real/55746722000181/revisao_classificacao_revisada.csv",
+            "--csv",
+            "reports/importacao_real/8884180000123/revisao_classificacao_revisada.csv",
+            "--saida-xlsx",
+            "reports/importacao_real/pacote_revisao_contabil.xlsx",
+            "--relatorio",
+            "reports/importacao_real/pacote_revisao_contabil.txt",
+            "--limite-top",
+            "25",
+        ]
+    )
+
+    assert args.command == "gerar-pacote-revisao-contabil"
+    assert args.csv == [
+        "reports/importacao_real/55746722000181/revisao_classificacao_revisada.csv",
+        "reports/importacao_real/8884180000123/revisao_classificacao_revisada.csv",
+    ]
+    assert args.saida_xlsx == "reports/importacao_real/pacote_revisao_contabil.xlsx"
+    assert args.relatorio == "reports/importacao_real/pacote_revisao_contabil.txt"
+    assert args.limite_top == 25
+
+
 def test_general_help_returns_zero_and_lists_commands(capsys):
     with pytest.raises(SystemExit) as exc_info:
         main(["--help"])
@@ -279,6 +308,7 @@ def test_general_help_returns_zero_and_lists_commands(capsys):
     assert "gerar-planilha-revisao-classificacao" in captured.out
     assert "importar-planilha-revisao-classificacao" in captured.out
     assert "gerar-pre-livro-diario-teste" in captured.out
+    assert "gerar-pacote-revisao-contabil" in captured.out
 
 
 def test_importar_nfe_help_returns_zero_and_lists_options(capsys):
@@ -429,6 +459,19 @@ def test_gerar_pre_livro_diario_teste_help_returns_zero_and_lists_options(capsys
     assert "--saida" in captured.out
     assert "--pasta-operacoes-especiais" in captured.out
     assert "--relatorio-auditoria" in captured.out
+
+
+def test_gerar_pacote_revisao_contabil_help_returns_zero_and_lists_options(capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        main(["gerar-pacote-revisao-contabil", "--help"])
+
+    captured = capsys.readouterr()
+    assert exc_info.value.code == 0
+    assert "--csv" in captured.out
+    assert "--saida-xlsx" in captured.out
+    assert "--relatorio" in captured.out
+    assert "--limite-top" in captured.out
+    assert "--separador" in captured.out
 
 
 def test_importar_nfe_command_writes_excel_with_sample_xml(tmp_path):
@@ -1133,6 +1176,54 @@ def test_gerar_pre_livro_diario_teste_command_retorna_erro_excel_inexistente(
             "--excel",
             str(missing_excel),
             "--saida",
+            str(output_path),
+        ]
+    )
+
+    assert result == 1
+    assert not output_path.exists()
+
+
+def test_gerar_pacote_revisao_contabil_command_gera_xlsx_e_txt(tmp_path, capsys):
+    csv_path = tmp_path / "55746722000181" / "revisao_classificacao_revisada.csv"
+    csv_path.parent.mkdir(parents=True)
+    _save_review_csv(csv_path)
+    output_path = tmp_path / "reports" / "pacote_revisao_contabil.xlsx"
+    report_path = tmp_path / "reports" / "pacote_revisao_contabil.txt"
+
+    result = main(
+        [
+            "gerar-pacote-revisao-contabil",
+            "--csv",
+            str(csv_path),
+            "--saida-xlsx",
+            str(output_path),
+            "--relatorio",
+            str(report_path),
+            "--limite-top",
+            "10",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert result == 0
+    assert output_path.exists()
+    assert report_path.exists()
+    assert "[OK] Pacote assistido para revisao contabil gerado." in captured.out
+
+
+def test_gerar_pacote_revisao_contabil_command_retorna_erro_csv_inexistente(
+    tmp_path,
+):
+    missing_csv = tmp_path / "inexistente.csv"
+    output_path = tmp_path / "reports" / "pacote.xlsx"
+
+    result = main(
+        [
+            "gerar-pacote-revisao-contabil",
+            "--csv",
+            str(missing_csv),
+            "--saida-xlsx",
             str(output_path),
         ]
     )
