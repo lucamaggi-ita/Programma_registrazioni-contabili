@@ -37,10 +37,19 @@ def test_parser_accepts_importar_pasta_nfe_command():
 def test_parser_accepts_diagnosticar_excel_command():
     parser = build_parser()
 
-    args = parser.parse_args(["diagnosticar-excel", "--excel", "output.xlsx"])
+    args = parser.parse_args(
+        [
+            "diagnosticar-excel",
+            "--excel",
+            "output.xlsx",
+            "--relatorio",
+            "reports/diagnostico.txt",
+        ]
+    )
 
     assert args.command == "diagnosticar-excel"
     assert args.excel == "output.xlsx"
+    assert args.relatorio == "reports/diagnostico.txt"
 
 
 def test_importar_nfe_command_writes_excel_with_sample_xml(tmp_path):

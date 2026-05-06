@@ -22,6 +22,136 @@ def test_diagnosticar_excel_returns_success_for_generated_excel(tmp_path):
     assert diagnostic_result == 0
 
 
+def test_diagnosticar_excel_with_report_returns_success_for_generated_excel(tmp_path):
+    excel_path = tmp_path / "lancamentos.xlsx"
+    report_path = tmp_path / "diagnostico.txt"
+    import_result = main(
+        ["importar-nfe", "--xml", str(SAMPLE_XML), "--excel", str(excel_path)]
+    )
+
+    diagnostic_result = main(
+        [
+            "diagnosticar-excel",
+            "--excel",
+            str(excel_path),
+            "--relatorio",
+            str(report_path),
+        ]
+    )
+
+    assert import_result == 0
+    assert diagnostic_result == 0
+
+
+def test_diagnosticar_excel_with_report_creates_txt_file(tmp_path):
+    excel_path = tmp_path / "lancamentos.xlsx"
+    report_path = tmp_path / "diagnostico.txt"
+    _save_workbook(excel_path, lancamentos=[_row()])
+
+    result = main(
+        [
+            "diagnosticar-excel",
+            "--excel",
+            str(excel_path),
+            "--relatorio",
+            str(report_path),
+        ]
+    )
+
+    assert result == 0
+    assert report_path.exists()
+
+
+def test_diagnosticar_excel_report_contains_summary(tmp_path):
+    excel_path = tmp_path / "lancamentos.xlsx"
+    report_path = tmp_path / "diagnostico.txt"
+    _save_workbook(excel_path, lancamentos=[_row()])
+
+    result = main(
+        [
+            "diagnosticar-excel",
+            "--excel",
+            str(excel_path),
+            "--relatorio",
+            str(report_path),
+        ]
+    )
+
+    text = report_path.read_text(encoding="utf-8")
+    assert result == 0
+    assert "FANTOZZI" in text
+    assert "DIAGNOSTICO EXCEL" in text
+    assert "Arquivo analisado" in text
+    assert "Lancamentos totais" in text
+    assert "Valor total Lancamentos" in text
+    assert "Status: OK" in text
+
+
+def test_diagnosticar_excel_report_creates_missing_directory(tmp_path):
+    excel_path = tmp_path / "lancamentos.xlsx"
+    report_path = tmp_path / "reports" / "diagnostico.txt"
+    _save_workbook(excel_path, lancamentos=[_row()])
+
+    result = main(
+        [
+            "diagnosticar-excel",
+            "--excel",
+            str(excel_path),
+            "--relatorio",
+            str(report_path),
+        ]
+    )
+
+    assert result == 0
+    assert report_path.exists()
+
+
+def test_diagnosticar_excel_report_for_revisar_keeps_success_exit_code(tmp_path):
+    excel_path = tmp_path / "revisao_ok.xlsx"
+    report_path = tmp_path / "reports" / "diagnostico_revisao.txt"
+    lancamento = _row(status_revisao="REVISAR", hash_registro="hash-revisao")
+    _save_workbook(excel_path, lancamentos=[lancamento], revisao=[lancamento])
+
+    result = main(
+        [
+            "diagnosticar-excel",
+            "--excel",
+            str(excel_path),
+            "--relatorio",
+            str(report_path),
+        ]
+    )
+
+    assert result == 0
+    assert "Status: REVISAR" in report_path.read_text(encoding="utf-8")
+    assert "Resultado estrutural: OK" in report_path.read_text(encoding="utf-8")
+
+
+def test_diagnosticar_excel_report_is_created_when_structure_fails(tmp_path):
+    excel_path = tmp_path / "sem_lancamentos.xlsx"
+    report_path = tmp_path / "reports" / "diagnostico_erro.txt"
+    workbook = Workbook()
+    workbook.active.title = REVISAO_SHEET
+    workbook.save(excel_path)
+
+    result = main(
+        [
+            "diagnosticar-excel",
+            "--excel",
+            str(excel_path),
+            "--relatorio",
+            str(report_path),
+        ]
+    )
+
+    text = report_path.read_text(encoding="utf-8")
+    assert result == 1
+    assert report_path.exists()
+    assert "Status: ERRO" in text
+    assert "Resultado estrutural: FALHOU" in text
+    assert "Aba obrigatoria ausente: Lancamentos" in text
+
+
 def test_diagnosticar_excel_returns_error_for_missing_file(tmp_path):
     missing_excel = tmp_path / "inexistente.xlsx"
 

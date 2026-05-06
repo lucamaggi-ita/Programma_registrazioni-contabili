@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 import json
 from pathlib import Path
@@ -50,6 +51,12 @@ class ExcelDiagnosticResult:
     @property
     def is_ok(self) -> bool:
         return not self.errors
+
+
+@dataclass(frozen=True)
+class ExcelDiagnosticFailure:
+    excel_path: Path
+    error: str
 
 
 def diagnose_excel(excel_path: Path | str) -> ExcelDiagnosticResult:
@@ -150,6 +157,93 @@ def diagnose_excel(excel_path: Path | str) -> ExcelDiagnosticResult:
 def format_currency_br(value: Decimal) -> str:
     text = f"{value.quantize(Decimal('0.01')):.2f}"
     return "R$ " + text.replace(".", ",")
+
+
+def console_lines(result: ExcelDiagnosticResult) -> list[str]:
+    lines = []
+    if result.is_ok:
+        lines.append("[OK] Diagnostico Excel concluido")
+    else:
+        lines.append("[ERRO] Diagnostico Excel falhou")
+
+    lines.extend(
+        [
+            f"Arquivo analisado: {result.excel_path}",
+            f"Lancamentos totais: {result.lancamentos_totais}",
+            f"Lancamentos OK: {result.lancamentos_ok}",
+            f"Lancamentos em revisao: {result.lancamentos_em_revisao}",
+            f"Linhas manuais: {result.linhas_manuais}",
+            f"Valor total Lancamentos: {format_currency_br(result.valor_total)}",
+            f"Duplicatas JSON invalidas: {result.duplicatas_json_invalidas}",
+            f"Hashes duplicados: {result.hashes_duplicados}",
+            f"Status: {result.status}",
+        ]
+    )
+
+    lines.extend(f"[ERRO] {diagnostic_error}" for diagnostic_error in result.errors)
+    return lines
+
+
+def report_text(
+    result: ExcelDiagnosticResult | ExcelDiagnosticFailure,
+    *,
+    generated_at: datetime | None = None,
+) -> str:
+    generated_at = generated_at or datetime.now()
+    lines = [
+        "FANTOZZI - DIAGNOSTICO EXCEL",
+        "========================================",
+        f"Arquivo analisado: {result.excel_path}",
+        f"Data/hora diagnostico: {generated_at:%Y-%m-%d %H:%M:%S}",
+        "",
+    ]
+
+    if isinstance(result, ExcelDiagnosticFailure):
+        lines.extend(
+            [
+                "Status: ERRO",
+                "Resultado estrutural: FALHOU",
+                "",
+                "Erros:",
+                f"- {result.error}",
+            ]
+        )
+        return "\n".join(lines) + "\n"
+
+    lines.extend(
+        [
+            f"Lancamentos totais: {result.lancamentos_totais}",
+            f"Lancamentos OK: {result.lancamentos_ok}",
+            f"Lancamentos em revisao: {result.lancamentos_em_revisao}",
+            f"Linhas manuais: {result.linhas_manuais}",
+            f"Valor total Lancamentos: {format_currency_br(result.valor_total)}",
+            f"Duplicatas JSON invalidas: {result.duplicatas_json_invalidas}",
+            f"Hashes duplicados: {result.hashes_duplicados}",
+            "",
+            f"Status: {result.status}",
+            f"Resultado estrutural: {'OK' if result.is_ok else 'FALHOU'}",
+        ]
+    )
+
+    if result.errors:
+        lines.extend(["", "Erros:"])
+        lines.extend(f"- {diagnostic_error}" for diagnostic_error in result.errors)
+
+    lines.extend(
+        [
+            "",
+            "Observacoes:",
+            "- Diagnostico read-only.",
+            "- Nenhuma correcao automatica foi aplicada.",
+        ]
+    )
+    return "\n".join(lines) + "\n"
+
+
+def save_report(report_path: Path | str, text: str) -> None:
+    report_path = Path(report_path)
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(text, encoding="utf-8", newline="\n")
 
 
 def _validate_file(path: Path) -> None:

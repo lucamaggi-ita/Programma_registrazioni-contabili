@@ -7,8 +7,11 @@ from fantozzi.allocation import allocate_nfe_to_lancamentos
 from fantozzi.chart_of_accounts import ChartOfAccounts
 from fantozzi.excel_diagnostics import (
     ExcelDiagnosticError,
+    ExcelDiagnosticFailure,
+    console_lines,
     diagnose_excel,
-    format_currency_br,
+    report_text,
+    save_report,
 )
 from fantozzi.excel_writer import write_lancamentos_to_excel
 from fantozzi.logging_utils import error, info, warning
@@ -60,6 +63,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     diagnosticar_excel.add_argument(
         "--excel", required=True, help="Arquivo Excel .xlsx para diagnosticar."
+    )
+    diagnosticar_excel.add_argument(
+        "--relatorio",
+        help="Arquivo TXT para salvar o relatorio da diagnostica.",
     )
     diagnosticar_excel.set_defaults(func=diagnosticar_excel_command)
 
@@ -165,29 +172,28 @@ def importar_pasta_nfe_command(args: argparse.Namespace) -> int:
 
 
 def diagnosticar_excel_command(args: argparse.Namespace) -> int:
+    report_path = Path(args.relatorio) if args.relatorio else None
+
     try:
         result = diagnose_excel(Path(args.excel))
     except ExcelDiagnosticError as exc:
         print(f"[ERRO] {exc}")
+        if report_path and not _try_save_report(
+            report_path,
+            report_text(ExcelDiagnosticFailure(Path(args.excel), str(exc))),
+        ):
+            return 1
+        if report_path:
+            print(f"[OK] Relatorio salvo em: {report_path}")
         return 1
 
-    if result.is_ok:
-        print("[OK] Diagnostico Excel concluido")
-    else:
-        print("[ERRO] Diagnostico Excel falhou")
+    for line in console_lines(result):
+        print(line)
 
-    print(f"Arquivo analisado: {result.excel_path}")
-    print(f"Lancamentos totais: {result.lancamentos_totais}")
-    print(f"Lancamentos OK: {result.lancamentos_ok}")
-    print(f"Lancamentos em revisao: {result.lancamentos_em_revisao}")
-    print(f"Linhas manuais: {result.linhas_manuais}")
-    print(f"Valor total Lancamentos: {format_currency_br(result.valor_total)}")
-    print(f"Duplicatas JSON invalidas: {result.duplicatas_json_invalidas}")
-    print(f"Hashes duplicados: {result.hashes_duplicados}")
-    print(f"Status: {result.status}")
-
-    for diagnostic_error in result.errors:
-        print(f"[ERRO] {diagnostic_error}")
+    if report_path:
+        if not _try_save_report(report_path, report_text(result)):
+            return 1
+        print(f"[OK] Relatorio salvo em: {report_path}")
 
     return 0 if result.is_ok else 1
 
@@ -238,6 +244,15 @@ def _validate_directory_exists(path: Path, label: str) -> None:
         raise FileNotFoundError(f"{label} nao encontrada: {path}")
     if not path.is_dir():
         raise ValueError(f"{label} nao e uma pasta: {path}")
+
+
+def _try_save_report(report_path: Path, text: str) -> bool:
+    try:
+        save_report(report_path, text)
+    except Exception:
+        print(f"[ERRO] Nao foi possivel salvar relatorio: {report_path}")
+        return False
+    return True
 
 
 if __name__ == "__main__":
