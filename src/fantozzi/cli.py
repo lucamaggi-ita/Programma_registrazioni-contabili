@@ -22,6 +22,14 @@ from fantozzi.classification_review_validation import (
     save_report as save_validation_report,
     validate_classification_review_csv,
 )
+from fantozzi.classification_rule_proposal import (
+    ClassificationRuleProposalError,
+    console_lines as proposal_console_lines,
+    escrever_proposta_yaml,
+    gerar_proposta_classificacao,
+    gerar_relatorio_proposta_classificacao,
+    salvar_relatorio_proposta,
+)
 from fantozzi.excel_diagnostics import (
     ExcelDiagnosticError,
     ExcelDiagnosticFailure,
@@ -75,7 +83,11 @@ def build_parser() -> argparse.ArgumentParser:
             "--saida reports\\revisao_classificacao.csv\n"
             "  .\\.venv\\Scripts\\python.exe -m fantozzi.cli "
             "validar-revisao-classificacao --csv reports\\revisao_classificacao.csv "
-            "--relatorio reports\\validacao_revisao_classificacao.txt"
+            "--relatorio reports\\validacao_revisao_classificacao.txt\n"
+            "  .\\.venv\\Scripts\\python.exe -m fantozzi.cli "
+            "gerar-proposta-classificacao --csv reports\\revisao_classificacao.csv "
+            "--saida-yaml reports\\proposta_regras_classificacao.yaml "
+            "--relatorio reports\\proposta_regras_classificacao.txt"
         ),
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -202,6 +214,41 @@ def build_parser() -> argparse.ArgumentParser:
         help="Arquivo TXT opcional para salvar o relatorio de validacao.",
     )
     validar_revisao.set_defaults(func=validar_revisao_classificacao_command)
+
+    gerar_proposta = subparsers.add_parser(
+        "gerar-proposta-classificacao",
+        help="Gera proposta YAML de regras a partir do CSV validado.",
+        description=(
+            "Le o CSV de revisao manual de classificacao e gera uma proposta "
+            "separada de regras/aliases para revisao. Nao altera CSV, Excel ou "
+            "arquivos YAML de config."
+        ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    gerar_proposta.add_argument(
+        "--csv",
+        required=True,
+        help="Caminho do CSV de revisao manual gerado pela Fase 5C.",
+    )
+    gerar_proposta.add_argument(
+        "--saida-yaml",
+        help="Arquivo YAML separado para salvar a proposta.",
+    )
+    gerar_proposta.add_argument(
+        "--relatorio",
+        help="Arquivo TXT opcional para salvar o relatorio da proposta.",
+    )
+    gerar_proposta.add_argument(
+        "--plano-contas",
+        default=str(DEFAULT_PLANO_CONTAS),
+        help="Arquivo YAML do plano de contas gerencial para validacao.",
+    )
+    gerar_proposta.add_argument(
+        "--regras-produtos",
+        default=str(DEFAULT_REGRAS_PRODUTOS),
+        help="Arquivo YAML de regras de produtos consultado em modo leitura.",
+    )
+    gerar_proposta.set_defaults(func=gerar_proposta_classificacao_command)
 
     return parser
 
@@ -405,6 +452,50 @@ def validar_revisao_classificacao_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def gerar_proposta_classificacao_command(args: argparse.Namespace) -> int:
+    yaml_path = Path(args.saida_yaml) if args.saida_yaml else None
+    report_path = Path(args.relatorio) if args.relatorio else None
+
+    if not yaml_path and not report_path:
+        print("[ERRO] Informe --saida-yaml e/ou --relatorio para gerar a proposta.")
+        return 1
+
+    try:
+        result = gerar_proposta_classificacao(
+            Path(args.csv),
+            Path(args.plano_contas),
+            Path(args.regras_produtos),
+        )
+    except ClassificationRuleProposalError as exc:
+        print(f"[ERRO] {exc}")
+        return 1
+
+    if yaml_path:
+        try:
+            escrever_proposta_yaml(result, yaml_path)
+        except Exception:
+            print(f"[ERRO] Nao foi possivel salvar proposta YAML: {yaml_path}")
+            return 1
+
+    text = gerar_relatorio_proposta_classificacao(
+        result,
+        Path(args.csv),
+        yaml_path,
+    )
+    if report_path:
+        if not _try_save_proposal_report(report_path, text):
+            return 1
+    elif not yaml_path:
+        print(text, end="")
+
+    for line in proposal_console_lines(
+        result, saida_yaml=yaml_path, relatorio=report_path
+    ):
+        print(line)
+
+    return 0
+
+
 def _add_config_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--plano-contas",
@@ -483,6 +574,15 @@ def _try_save_candidates_report(report_path: Path, text: str) -> bool:
 def _try_save_validation_report(report_path: Path, text: str) -> bool:
     try:
         save_validation_report(report_path, text)
+    except Exception:
+        print(f"[ERRO] Nao foi possivel salvar relatorio: {report_path}")
+        return False
+    return True
+
+
+def _try_save_proposal_report(report_path: Path, text: str) -> bool:
+    try:
+        salvar_relatorio_proposta(report_path, text)
     except Exception:
         print(f"[ERRO] Nao foi possivel salvar relatorio: {report_path}")
         return False

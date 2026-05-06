@@ -127,6 +127,27 @@ def test_parser_accepts_validar_revisao_classificacao_command():
     assert args.relatorio == "reports/validacao_revisao_classificacao.txt"
 
 
+def test_parser_accepts_gerar_proposta_classificacao_command():
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "gerar-proposta-classificacao",
+            "--csv",
+            "reports/revisao_classificacao.csv",
+            "--saida-yaml",
+            "reports/proposta_regras_classificacao.yaml",
+            "--relatorio",
+            "reports/proposta_regras_classificacao.txt",
+        ]
+    )
+
+    assert args.command == "gerar-proposta-classificacao"
+    assert args.csv == "reports/revisao_classificacao.csv"
+    assert args.saida_yaml == "reports/proposta_regras_classificacao.yaml"
+    assert args.relatorio == "reports/proposta_regras_classificacao.txt"
+
+
 def test_general_help_returns_zero_and_lists_commands(capsys):
     with pytest.raises(SystemExit) as exc_info:
         main(["--help"])
@@ -141,6 +162,7 @@ def test_general_help_returns_zero_and_lists_commands(capsys):
     assert "relatorio-candidatos-classificacao" in captured.out
     assert "exportar-revisao-classificacao" in captured.out
     assert "validar-revisao-classificacao" in captured.out
+    assert "gerar-proposta-classificacao" in captured.out
 
 
 def test_importar_nfe_help_returns_zero_and_lists_options(capsys):
@@ -215,6 +237,19 @@ def test_validar_revisao_classificacao_help_returns_zero_and_lists_options(capsy
     assert exc_info.value.code == 0
     assert "--csv" in captured.out
     assert "--relatorio" in captured.out
+
+
+def test_gerar_proposta_classificacao_help_returns_zero_and_lists_options(capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        main(["gerar-proposta-classificacao", "--help"])
+
+    captured = capsys.readouterr()
+    assert exc_info.value.code == 0
+    assert "--csv" in captured.out
+    assert "--saida-yaml" in captured.out
+    assert "--relatorio" in captured.out
+    assert "--plano-contas" in captured.out
+    assert "--regras-produtos" in captured.out
 
 
 def test_importar_nfe_command_writes_excel_with_sample_xml(tmp_path):
@@ -485,6 +520,126 @@ def test_validar_revisao_classificacao_command_returns_error_for_missing_csv(
     assert result == 1
 
 
+def test_gerar_proposta_classificacao_command_with_yaml_returns_success(tmp_path):
+    csv_path = tmp_path / "revisao_classificacao.csv"
+    yaml_path = tmp_path / "reports" / "proposta.yaml"
+    plano_path = _save_proposal_plano_contas(tmp_path)
+    regras_path = _save_proposal_regras_produtos(tmp_path)
+    _save_review_csv(csv_path)
+
+    result = main(
+        [
+            "gerar-proposta-classificacao",
+            "--csv",
+            str(csv_path),
+            "--saida-yaml",
+            str(yaml_path),
+            "--plano-contas",
+            str(plano_path),
+            "--regras-produtos",
+            str(regras_path),
+        ]
+    )
+
+    assert result == 0
+    assert yaml_path.exists()
+    assert "propostas:" in yaml_path.read_text(encoding="utf-8")
+
+
+def test_gerar_proposta_classificacao_command_with_report_returns_success(tmp_path):
+    csv_path = tmp_path / "revisao_classificacao.csv"
+    report_path = tmp_path / "reports" / "proposta.txt"
+    plano_path = _save_proposal_plano_contas(tmp_path)
+    regras_path = _save_proposal_regras_produtos(tmp_path)
+    _save_review_csv(csv_path)
+
+    result = main(
+        [
+            "gerar-proposta-classificacao",
+            "--csv",
+            str(csv_path),
+            "--relatorio",
+            str(report_path),
+            "--plano-contas",
+            str(plano_path),
+            "--regras-produtos",
+            str(regras_path),
+        ]
+    )
+
+    assert result == 0
+    assert report_path.exists()
+    assert "PROPOSTA DE REGRAS DE CLASSIFICACAO" in report_path.read_text(
+        encoding="utf-8"
+    )
+
+
+def test_gerar_proposta_classificacao_command_with_yaml_and_report_returns_success(
+    tmp_path,
+):
+    csv_path = tmp_path / "revisao_classificacao.csv"
+    yaml_path = tmp_path / "reports" / "proposta.yaml"
+    report_path = tmp_path / "reports" / "proposta.txt"
+    plano_path = _save_proposal_plano_contas(tmp_path)
+    regras_path = _save_proposal_regras_produtos(tmp_path)
+    original_plan = plano_path.read_text(encoding="utf-8")
+    original_rules = regras_path.read_text(encoding="utf-8")
+    _save_review_csv(csv_path)
+
+    result = main(
+        [
+            "gerar-proposta-classificacao",
+            "--csv",
+            str(csv_path),
+            "--saida-yaml",
+            str(yaml_path),
+            "--relatorio",
+            str(report_path),
+            "--plano-contas",
+            str(plano_path),
+            "--regras-produtos",
+            str(regras_path),
+        ]
+    )
+
+    assert result == 0
+    assert yaml_path.exists()
+    assert report_path.exists()
+    assert plano_path.read_text(encoding="utf-8") == original_plan
+    assert regras_path.read_text(encoding="utf-8") == original_rules
+
+
+def test_gerar_proposta_classificacao_command_requires_output(tmp_path, capsys):
+    csv_path = tmp_path / "revisao_classificacao.csv"
+    _save_review_csv(csv_path)
+
+    result = main(["gerar-proposta-classificacao", "--csv", str(csv_path)])
+
+    captured = capsys.readouterr()
+    assert result == 1
+    assert "Informe --saida-yaml e/ou --relatorio" in captured.out
+
+
+def test_gerar_proposta_classificacao_command_returns_error_for_missing_csv(
+    tmp_path,
+):
+    csv_path = tmp_path / "inexistente.csv"
+    yaml_path = tmp_path / "reports" / "proposta.yaml"
+
+    result = main(
+        [
+            "gerar-proposta-classificacao",
+            "--csv",
+            str(csv_path),
+            "--saida-yaml",
+            str(yaml_path),
+        ]
+    )
+
+    assert result == 1
+    assert not yaml_path.exists()
+
+
 def _xml_dir_with_sample(tmp_path: Path, *, filename: str = "sample.xml") -> Path:
     xml_dir = tmp_path / "nfe_xml"
     xml_dir.mkdir()
@@ -578,3 +733,59 @@ def _save_review_csv(csv_path: Path) -> None:
         + "\n",
         encoding="utf-8-sig",
     )
+
+
+def _save_proposal_plano_contas(tmp_path: Path) -> Path:
+    plano_path = tmp_path / "plano_contas_gerencial.yaml"
+    plano_path.write_text(
+        """\
+contas:
+  - id: "2.01.004"
+    nome: "Refrigerantes"
+    grupo: "Custos de Mercadorias e Insumos"
+    tipo: "custo"
+  - id: "13.01.001"
+    nome: "Revisar - Produto Nao Classificado"
+    grupo: "Contas de Revisao e Classificacao Pendente"
+    tipo: "revisao"
+  - id: "13.01.002"
+    nome: "Revisar - Classificacao Ambigua"
+    grupo: "Contas de Revisao e Classificacao Pendente"
+    tipo: "revisao"
+  - id: "13.01.006"
+    nome: "Revisar - Valor Inconsistente"
+    grupo: "Contas de Revisao e Classificacao Pendente"
+    tipo: "revisao"
+  - id: "13.01.009"
+    nome: "Revisar - Possivel Investimento"
+    grupo: "Contas de Revisao e Classificacao Pendente"
+    tipo: "revisao"
+  - id: "13.01.010"
+    nome: "Revisar - Pagamento de Pessoal a Regularizar"
+    grupo: "Contas de Revisao e Classificacao Pendente"
+    tipo: "revisao"
+  - id: "13.01.999"
+    nome: "Revisar - Outros Casos"
+    grupo: "Contas de Revisao e Classificacao Pendente"
+    tipo: "revisao"
+""",
+        encoding="utf-8",
+    )
+    return plano_path
+
+
+def _save_proposal_regras_produtos(tmp_path: Path) -> Path:
+    regras_path = tmp_path / "regras_classificacao_produtos.yaml"
+    regras_path.write_text(
+        """\
+versao: "1.0"
+regras:
+  - conta_id: "2.01.004"
+    conta_nome: "Refrigerantes"
+    aliases:
+      - coca cola
+regras_por_fornecedor: []
+""",
+        encoding="utf-8",
+    )
+    return regras_path
