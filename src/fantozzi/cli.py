@@ -5,6 +5,11 @@ from pathlib import Path
 
 from fantozzi.allocation import allocate_nfe_to_lancamentos
 from fantozzi.chart_of_accounts import ChartOfAccounts
+from fantozzi.excel_diagnostics import (
+    ExcelDiagnosticError,
+    diagnose_excel,
+    format_currency_br,
+)
 from fantozzi.excel_writer import write_lancamentos_to_excel
 from fantozzi.logging_utils import error, info, warning
 from fantozzi.nfe_importer import parse_nfe
@@ -48,6 +53,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_config_arguments(importar_pasta_nfe)
     importar_pasta_nfe.set_defaults(func=importar_pasta_nfe_command)
+
+    diagnosticar_excel = subparsers.add_parser(
+        "diagnosticar-excel",
+        help="Analisa um Excel gerado e imprime um diagnostico estrutural.",
+    )
+    diagnosticar_excel.add_argument(
+        "--excel", required=True, help="Arquivo Excel .xlsx para diagnosticar."
+    )
+    diagnosticar_excel.set_defaults(func=diagnosticar_excel_command)
 
     return parser
 
@@ -148,6 +162,34 @@ def importar_pasta_nfe_command(args: argparse.Namespace) -> int:
     except Exception as exc:
         error(str(exc))
         return 1
+
+
+def diagnosticar_excel_command(args: argparse.Namespace) -> int:
+    try:
+        result = diagnose_excel(Path(args.excel))
+    except ExcelDiagnosticError as exc:
+        print(f"[ERRO] {exc}")
+        return 1
+
+    if result.is_ok:
+        print("[OK] Diagnostico Excel concluido")
+    else:
+        print("[ERRO] Diagnostico Excel falhou")
+
+    print(f"Arquivo analisado: {result.excel_path}")
+    print(f"Lancamentos totais: {result.lancamentos_totais}")
+    print(f"Lancamentos OK: {result.lancamentos_ok}")
+    print(f"Lancamentos em revisao: {result.lancamentos_em_revisao}")
+    print(f"Linhas manuais: {result.linhas_manuais}")
+    print(f"Valor total Lancamentos: {format_currency_br(result.valor_total)}")
+    print(f"Duplicatas JSON invalidas: {result.duplicatas_json_invalidas}")
+    print(f"Hashes duplicados: {result.hashes_duplicados}")
+    print(f"Status: {result.status}")
+
+    for diagnostic_error in result.errors:
+        print(f"[ERRO] {diagnostic_error}")
+
+    return 0 if result.is_ok else 1
 
 
 def _add_config_arguments(parser: argparse.ArgumentParser) -> None:
