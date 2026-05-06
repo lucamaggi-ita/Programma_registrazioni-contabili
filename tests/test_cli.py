@@ -184,6 +184,27 @@ def test_parser_accepts_gerar_planilha_revisao_classificacao_command():
     assert args.saida == "reports/revisao_classificacao_assistida.xlsx"
 
 
+def test_parser_accepts_importar_planilha_revisao_classificacao_command():
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "importar-planilha-revisao-classificacao",
+            "--xlsx",
+            "reports/revisao_classificacao_assistida.xlsx",
+            "--saida",
+            "reports/revisao_classificacao_revisada.csv",
+            "--relatorio",
+            "reports/validacao_planilha.txt",
+        ]
+    )
+
+    assert args.command == "importar-planilha-revisao-classificacao"
+    assert args.xlsx == "reports/revisao_classificacao_assistida.xlsx"
+    assert args.saida == "reports/revisao_classificacao_revisada.csv"
+    assert args.relatorio == "reports/validacao_planilha.txt"
+
+
 def test_general_help_returns_zero_and_lists_commands(capsys):
     with pytest.raises(SystemExit) as exc_info:
         main(["--help"])
@@ -201,6 +222,7 @@ def test_general_help_returns_zero_and_lists_commands(capsys):
     assert "gerar-proposta-classificacao" in captured.out
     assert "auditar-operacoes-especiais" in captured.out
     assert "gerar-planilha-revisao-classificacao" in captured.out
+    assert "importar-planilha-revisao-classificacao" in captured.out
 
 
 def test_importar_nfe_help_returns_zero_and_lists_options(capsys):
@@ -310,6 +332,20 @@ def test_gerar_planilha_revisao_classificacao_help_returns_zero_and_lists_option
     assert exc_info.value.code == 0
     assert "--csv" in captured.out
     assert "--saida" in captured.out
+    assert "--plano-contas" in captured.out
+
+
+def test_importar_planilha_revisao_classificacao_help_returns_zero_and_lists_options(
+    capsys,
+):
+    with pytest.raises(SystemExit) as exc_info:
+        main(["importar-planilha-revisao-classificacao", "--help"])
+
+    captured = capsys.readouterr()
+    assert exc_info.value.code == 0
+    assert "--xlsx" in captured.out
+    assert "--saida" in captured.out
+    assert "--relatorio" in captured.out
     assert "--plano-contas" in captured.out
 
 
@@ -796,6 +832,113 @@ def test_gerar_planilha_revisao_classificacao_command_retorna_erro_csv_inexisten
     assert not output_path.exists()
 
 
+def test_importar_planilha_revisao_classificacao_command_gera_csv(tmp_path, capsys):
+    xlsx_path = _save_assisted_review_workbook(tmp_path)
+    csv_path = tmp_path / "reports" / "revisao_classificacao_revisada.csv"
+    plano_path = _save_proposal_plano_contas(tmp_path)
+    original_xlsx = xlsx_path.read_bytes()
+
+    result = main(
+        [
+            "importar-planilha-revisao-classificacao",
+            "--xlsx",
+            str(xlsx_path),
+            "--saida",
+            str(csv_path),
+            "--plano-contas",
+            str(plano_path),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert result == 0
+    assert csv_path.exists()
+    assert "[OK] Planilha importada com sucesso." in captured.out
+    assert "[OK] CSV revisado gerado:" in captured.out
+    assert xlsx_path.read_bytes() == original_xlsx
+
+
+def test_importar_planilha_revisao_classificacao_command_aceita_relatorio(
+    tmp_path,
+    capsys,
+):
+    xlsx_path = _save_assisted_review_workbook(tmp_path)
+    csv_path = tmp_path / "reports" / "revisao_classificacao_revisada.csv"
+    report_path = tmp_path / "reports" / "validacao_planilha.txt"
+    plano_path = _save_proposal_plano_contas(tmp_path)
+
+    result = main(
+        [
+            "importar-planilha-revisao-classificacao",
+            "--xlsx",
+            str(xlsx_path),
+            "--saida",
+            str(csv_path),
+            "--relatorio",
+            str(report_path),
+            "--plano-contas",
+            str(plano_path),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert result == 0
+    assert report_path.exists()
+    assert "[OK] Relatorio salvo em:" in captured.out
+
+
+def test_importar_planilha_revisao_classificacao_command_retorna_erro_xlsx_inexistente(
+    tmp_path,
+    capsys,
+):
+    missing_xlsx = tmp_path / "inexistente.xlsx"
+    csv_path = tmp_path / "reports" / "revisao_classificacao_revisada.csv"
+    plano_path = _save_proposal_plano_contas(tmp_path)
+
+    result = main(
+        [
+            "importar-planilha-revisao-classificacao",
+            "--xlsx",
+            str(missing_xlsx),
+            "--saida",
+            str(csv_path),
+            "--plano-contas",
+            str(plano_path),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert result == 1
+    assert "[ERRO] Planilha assistida nao encontrada:" in captured.out
+    assert not csv_path.exists()
+
+
+def test_importar_planilha_revisao_classificacao_command_retorna_erro_acao_invalida(
+    tmp_path,
+    capsys,
+):
+    xlsx_path = _save_assisted_review_workbook(tmp_path, acao_manual="APROVAR")
+    csv_path = tmp_path / "reports" / "revisao_classificacao_revisada.csv"
+    plano_path = _save_proposal_plano_contas(tmp_path)
+
+    result = main(
+        [
+            "importar-planilha-revisao-classificacao",
+            "--xlsx",
+            str(xlsx_path),
+            "--saida",
+            str(csv_path),
+            "--plano-contas",
+            str(plano_path),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert result == 1
+    assert "[ERRO] Linha 2: acao_manual invalida: APROVAR" in captured.out
+    assert not csv_path.exists()
+
+
 def _xml_dir_with_sample(tmp_path: Path, *, filename: str = "sample.xml") -> Path:
     xml_dir = tmp_path / "nfe_xml"
     xml_dir.mkdir()
@@ -899,6 +1042,39 @@ def _save_review_csv(csv_path: Path) -> None:
         + "\n",
         encoding="utf-8-sig",
     )
+
+
+def _save_assisted_review_workbook(
+    tmp_path: Path,
+    *,
+    acao_manual: str = "CLASSIFICAR",
+) -> Path:
+    xlsx_path = tmp_path / "revisao_classificacao_assistida.xlsx"
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Revisao"
+    sheet.append(CSV_HEADERS)
+    row = {
+        "tipo_candidato": "CLASSIFICACAO_PRODUTO",
+        "descricao_normalizada": "produto desconhecido",
+        "descricao_exemplo": "PRODUTO DESCONHECIDO",
+        "ocorrencias": "1",
+        "fornecedores": "Fornecedor teste",
+        "documentos": "NF-1",
+        "valor_total": "R$ 10,00",
+        "conta_atual_id": "13.01.001",
+        "conta_atual_nome": "Revisar - Produto Nao Classificado",
+        "status_revisao": "REVISAR",
+        "alertas": "CLASSIFICACAO_NAO_ENCONTRADA",
+        "acao_manual": acao_manual,
+        "conta_id_sugerida": "2.01.004",
+        "conta_nome_sugerida": "Refrigerantes",
+        "palavras_chave_sugeridas": "produto desconhecido",
+        "observacao_manual": "",
+    }
+    sheet.append([row.get(header, "") for header in CSV_HEADERS])
+    workbook.save(xlsx_path)
+    return xlsx_path
 
 
 def _save_proposal_plano_contas(tmp_path: Path) -> Path:

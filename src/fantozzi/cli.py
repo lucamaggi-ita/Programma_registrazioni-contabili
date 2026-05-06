@@ -20,6 +20,11 @@ from fantozzi.classification_review_workbook import (
     ClassificationReviewWorkbookError,
     gerar_planilha_revisao_classificacao,
 )
+from fantozzi.classification_review_workbook_importer import (
+    ClassificationReviewWorkbookImportError,
+    console_lines as workbook_import_console_lines,
+    importar_planilha_revisao_classificacao,
+)
 from fantozzi.classification_review_validation import (
     ClassificationReviewValidationError,
     report_text as validation_report_text,
@@ -105,7 +110,11 @@ def build_parser() -> argparse.ArgumentParser:
             "  .\\.venv\\Scripts\\python.exe -m fantozzi.cli "
             "gerar-planilha-revisao-classificacao "
             "--csv reports\\revisao_classificacao.csv "
-            "--saida reports\\revisao_classificacao_assistida.xlsx"
+            "--saida reports\\revisao_classificacao_assistida.xlsx\n"
+            "  .\\.venv\\Scripts\\python.exe -m fantozzi.cli "
+            "importar-planilha-revisao-classificacao "
+            "--xlsx reports\\revisao_classificacao_assistida.xlsx "
+            "--saida reports\\revisao_classificacao_revisada.csv"
         ),
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -313,6 +322,39 @@ def build_parser() -> argparse.ArgumentParser:
     )
     gerar_planilha_revisao.set_defaults(
         func=gerar_planilha_revisao_classificacao_command
+    )
+
+    importar_planilha_revisao = subparsers.add_parser(
+        "importar-planilha-revisao-classificacao",
+        help="Importa XLSX assistido e gera CSV revisado de classificacao.",
+        description=(
+            "Le a planilha assistida de revisao de classificacao, valida os "
+            "campos preenchidos manualmente e gera um CSV revisado. Nao altera "
+            "XLSX, CSV original, Excel de lancamentos, YAML ou regras."
+        ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    importar_planilha_revisao.add_argument(
+        "--xlsx",
+        required=True,
+        help="Caminho da planilha XLSX assistida de revisao.",
+    )
+    importar_planilha_revisao.add_argument(
+        "--saida",
+        required=True,
+        help="Caminho do CSV revisado de saida.",
+    )
+    importar_planilha_revisao.add_argument(
+        "--relatorio",
+        help="Arquivo TXT opcional para salvar o relatorio de validacao.",
+    )
+    importar_planilha_revisao.add_argument(
+        "--plano-contas",
+        default=str(DEFAULT_PLANO_CONTAS),
+        help="Arquivo YAML do plano de contas gerencial consultado em modo leitura.",
+    )
+    importar_planilha_revisao.set_defaults(
+        func=importar_planilha_revisao_classificacao_command
     )
 
     return parser
@@ -596,6 +638,34 @@ def gerar_planilha_revisao_classificacao_command(args: argparse.Namespace) -> in
         return 1
 
     print(f"[OK] Planilha assistida gerada: {output_path}")
+    return 0
+
+
+def importar_planilha_revisao_classificacao_command(args: argparse.Namespace) -> int:
+    relatorio_path = Path(args.relatorio) if args.relatorio else None
+
+    try:
+        result = importar_planilha_revisao_classificacao(
+            Path(args.xlsx),
+            Path(args.saida),
+            Path(args.plano_contas),
+            relatorio_path,
+        )
+    except ClassificationReviewWorkbookImportError as exc:
+        if exc.result:
+            for line in workbook_import_console_lines(exc.result):
+                print(line)
+        else:
+            print(f"[ERRO] {exc}")
+        return 1
+    except Exception:
+        print(f"[ERRO] Nao foi possivel importar planilha assistida: {args.xlsx}")
+        return 1
+
+    for line in workbook_import_console_lines(result):
+        print(line)
+    if relatorio_path:
+        print(f"[OK] Relatorio salvo em: {relatorio_path}")
     return 0
 
 
