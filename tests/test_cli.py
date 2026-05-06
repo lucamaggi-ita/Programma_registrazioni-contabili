@@ -2,6 +2,7 @@ from pathlib import Path
 from shutil import copyfile
 
 from openpyxl import load_workbook
+import pytest
 
 from fantozzi.cli import build_parser, main
 
@@ -50,6 +51,52 @@ def test_parser_accepts_diagnosticar_excel_command():
     assert args.command == "diagnosticar-excel"
     assert args.excel == "output.xlsx"
     assert args.relatorio == "reports/diagnostico.txt"
+
+
+def test_general_help_returns_zero_and_lists_commands(capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        main(["--help"])
+
+    captured = capsys.readouterr()
+    assert exc_info.value.code == 0
+    assert "Fantozzi" in captured.out
+    assert "importar-nfe" in captured.out
+    assert "importar-pasta-nfe" in captured.out
+    assert "diagnosticar-excel" in captured.out
+
+
+def test_importar_nfe_help_returns_zero_and_lists_options(capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        main(["importar-nfe", "--help"])
+
+    captured = capsys.readouterr()
+    assert exc_info.value.code == 0
+    assert "--xml" in captured.out
+    assert "--excel" in captured.out
+    assert "--plano-contas" in captured.out
+    assert "--regras-produtos" in captured.out
+
+
+def test_importar_pasta_nfe_help_returns_zero_and_lists_options(capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        main(["importar-pasta-nfe", "--help"])
+
+    captured = capsys.readouterr()
+    assert exc_info.value.code == 0
+    assert "--pasta" in captured.out
+    assert "--excel" in captured.out
+    assert "--plano-contas" in captured.out
+    assert "--regras-produtos" in captured.out
+
+
+def test_diagnosticar_excel_help_returns_zero_and_lists_options(capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        main(["diagnosticar-excel", "--help"])
+
+    captured = capsys.readouterr()
+    assert exc_info.value.code == 0
+    assert "--excel" in captured.out
+    assert "--relatorio" in captured.out
 
 
 def test_importar_nfe_command_writes_excel_with_sample_xml(tmp_path):

@@ -29,17 +29,32 @@ DEFAULT_REGRAS_PRODUTOS = (
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="fantozzi",
-        description="CLI minima do Fantozzi para importar NF-e XML.",
+        description=(
+            "Fantozzi importa XML NF-e, atualiza planilhas Excel de lancamentos "
+            "e executa diagnosticos operacionais."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Exemplos PowerShell:\n"
+            "  .\\.venv\\Scripts\\python.exe -m fantozzi.cli importar-nfe "
+            "--xml samples\\nfe_exemplo\\nota.xml --excel output\\lancamentos.xlsx\n"
+            "  .\\.venv\\Scripts\\python.exe -m fantozzi.cli importar-pasta-nfe "
+            "--pasta samples\\nfe_exemplo --excel output\\lancamentos.xlsx\n"
+            "  .\\.venv\\Scripts\\python.exe -m fantozzi.cli diagnosticar-excel "
+            "--excel output\\lancamentos.xlsx --relatorio reports\\diagnostico.txt"
+        ),
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     importar_nfe = subparsers.add_parser(
         "importar-nfe",
         help="Importa um arquivo XML NF-e e atualiza um Excel de lancamentos.",
+        description="Importa um arquivo XML NF-e e atualiza um Excel de lancamentos.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    importar_nfe.add_argument("--xml", required=True, help="Arquivo XML NF-e.")
+    importar_nfe.add_argument("--xml", required=True, help="Arquivo XML NF-e de entrada.")
     importar_nfe.add_argument(
-        "--excel", required=True, help="Arquivo Excel .xlsx de saida."
+        "--excel", required=True, help="Arquivo Excel .xlsx de saida/atualizacao."
     )
     _add_config_arguments(importar_nfe)
     importar_nfe.set_defaults(func=importar_nfe_command)
@@ -47,12 +62,14 @@ def build_parser() -> argparse.ArgumentParser:
     importar_pasta_nfe = subparsers.add_parser(
         "importar-pasta-nfe",
         help="Importa uma pasta de arquivos XML NF-e e atualiza um Excel.",
+        description="Importa todos os XML NF-e de uma pasta e atualiza um Excel.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     importar_pasta_nfe.add_argument(
-        "--pasta", required=True, help="Pasta com arquivos XML NF-e."
+        "--pasta", required=True, help="Pasta com arquivos XML NF-e de entrada."
     )
     importar_pasta_nfe.add_argument(
-        "--excel", required=True, help="Arquivo Excel .xlsx de saida."
+        "--excel", required=True, help="Arquivo Excel .xlsx de saida/atualizacao."
     )
     _add_config_arguments(importar_pasta_nfe)
     importar_pasta_nfe.set_defaults(func=importar_pasta_nfe_command)
@@ -60,6 +77,10 @@ def build_parser() -> argparse.ArgumentParser:
     diagnosticar_excel = subparsers.add_parser(
         "diagnosticar-excel",
         help="Analisa um Excel gerado e imprime um diagnostico estrutural.",
+        description=(
+            "Analisa um Excel gerado pelo Fantozzi sem alterar o arquivo original."
+        ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     diagnosticar_excel.add_argument(
         "--excel", required=True, help="Arquivo Excel .xlsx para diagnosticar."
