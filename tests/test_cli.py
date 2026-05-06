@@ -5,6 +5,7 @@ from openpyxl import Workbook, load_workbook
 import pytest
 
 from fantozzi.cli import build_parser, main
+from fantozzi.classification_review_export import CSV_HEADERS
 from fantozzi.excel_writer import HEADERS, LANCAMENTOS_SHEET, REVISAO_SHEET
 
 
@@ -108,6 +109,24 @@ def test_parser_accepts_exportar_revisao_classificacao_command():
     assert args.saida == "reports/revisao_classificacao.csv"
 
 
+def test_parser_accepts_validar_revisao_classificacao_command():
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "validar-revisao-classificacao",
+            "--csv",
+            "reports/revisao_classificacao.csv",
+            "--relatorio",
+            "reports/validacao_revisao_classificacao.txt",
+        ]
+    )
+
+    assert args.command == "validar-revisao-classificacao"
+    assert args.csv == "reports/revisao_classificacao.csv"
+    assert args.relatorio == "reports/validacao_revisao_classificacao.txt"
+
+
 def test_general_help_returns_zero_and_lists_commands(capsys):
     with pytest.raises(SystemExit) as exc_info:
         main(["--help"])
@@ -121,6 +140,7 @@ def test_general_help_returns_zero_and_lists_commands(capsys):
     assert "relatorio-revisao" in captured.out
     assert "relatorio-candidatos-classificacao" in captured.out
     assert "exportar-revisao-classificacao" in captured.out
+    assert "validar-revisao-classificacao" in captured.out
 
 
 def test_importar_nfe_help_returns_zero_and_lists_options(capsys):
@@ -185,6 +205,16 @@ def test_exportar_revisao_classificacao_help_returns_zero_and_lists_options(caps
     assert exc_info.value.code == 0
     assert "--excel" in captured.out
     assert "--saida" in captured.out
+
+
+def test_validar_revisao_classificacao_help_returns_zero_and_lists_options(capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        main(["validar-revisao-classificacao", "--help"])
+
+    captured = capsys.readouterr()
+    assert exc_info.value.code == 0
+    assert "--csv" in captured.out
+    assert "--relatorio" in captured.out
 
 
 def test_importar_nfe_command_writes_excel_with_sample_xml(tmp_path):
@@ -414,6 +444,47 @@ def test_exportar_revisao_classificacao_command_returns_error_for_missing_excel(
     assert not csv_path.exists()
 
 
+def test_validar_revisao_classificacao_command_returns_success(tmp_path, capsys):
+    csv_path = tmp_path / "revisao_classificacao.csv"
+    _save_review_csv(csv_path)
+
+    result = main(["validar-revisao-classificacao", "--csv", str(csv_path)])
+
+    captured = capsys.readouterr()
+    assert result == 0
+    assert "VALIDACAO DA REVISAO MANUAL DE CLASSIFICACAO" in captured.out
+    assert "Total de linhas: 1" in captured.out
+
+
+def test_validar_revisao_classificacao_command_saves_report(tmp_path):
+    csv_path = tmp_path / "revisao_classificacao.csv"
+    report_path = tmp_path / "reports" / "validacao.txt"
+    _save_review_csv(csv_path)
+
+    result = main(
+        [
+            "validar-revisao-classificacao",
+            "--csv",
+            str(csv_path),
+            "--relatorio",
+            str(report_path),
+        ]
+    )
+
+    assert result == 0
+    assert report_path.exists()
+
+
+def test_validar_revisao_classificacao_command_returns_error_for_missing_csv(
+    tmp_path,
+):
+    csv_path = tmp_path / "inexistente.csv"
+
+    result = main(["validar-revisao-classificacao", "--csv", str(csv_path)])
+
+    assert result == 1
+
+
 def _xml_dir_with_sample(tmp_path: Path, *, filename: str = "sample.xml") -> Path:
     xml_dir = tmp_path / "nfe_xml"
     xml_dir.mkdir()
@@ -478,3 +549,32 @@ def _save_candidates_workbook(excel_path: Path) -> None:
         ]
     )
     workbook.save(excel_path)
+
+
+def _save_review_csv(csv_path: Path) -> None:
+    csv_path.write_text(
+        ";".join(CSV_HEADERS)
+        + "\n"
+        + ";".join(
+            [
+                "CLASSIFICACAO_PRODUTO",
+                "produto desconhecido",
+                "PRODUTO DESCONHECIDO",
+                "1",
+                "Fornecedor teste",
+                "NF-1",
+                "R$ 10,00",
+                "13.01.001",
+                "Revisar - Produto Nao Classificado",
+                "REVISAR",
+                "CLASSIFICACAO_NAO_ENCONTRADA",
+                "CRIAR_ALIAS",
+                "2.01.004",
+                "Refrigerantes",
+                "produto desconhecido",
+                "",
+            ]
+        )
+        + "\n",
+        encoding="utf-8-sig",
+    )

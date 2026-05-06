@@ -16,6 +16,12 @@ from fantozzi.classification_review_export import (
     console_lines as review_export_console_lines,
     export_classification_review_csv,
 )
+from fantozzi.classification_review_validation import (
+    ClassificationReviewValidationError,
+    report_text as validation_report_text,
+    save_report as save_validation_report,
+    validate_classification_review_csv,
+)
 from fantozzi.excel_diagnostics import (
     ExcelDiagnosticError,
     ExcelDiagnosticFailure,
@@ -66,7 +72,10 @@ def build_parser() -> argparse.ArgumentParser:
             "--saida reports\\candidatos_classificacao.txt\n"
             "  .\\.venv\\Scripts\\python.exe -m fantozzi.cli "
             "exportar-revisao-classificacao --excel output\\lancamentos.xlsx "
-            "--saida reports\\revisao_classificacao.csv"
+            "--saida reports\\revisao_classificacao.csv\n"
+            "  .\\.venv\\Scripts\\python.exe -m fantozzi.cli "
+            "validar-revisao-classificacao --csv reports\\revisao_classificacao.csv "
+            "--relatorio reports\\validacao_revisao_classificacao.txt"
         ),
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -173,6 +182,26 @@ def build_parser() -> argparse.ArgumentParser:
         help="Caminho do CSV de saida para revisao manual.",
     )
     exportar_revisao.set_defaults(func=exportar_revisao_classificacao_command)
+
+    validar_revisao = subparsers.add_parser(
+        "validar-revisao-classificacao",
+        help="Valida CSV de revisao manual de classificacao.",
+        description=(
+            "Valida o CSV de revisao manual de classificacao sem alterar CSV, "
+            "Excel, YAML, regras ou aliases."
+        ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    validar_revisao.add_argument(
+        "--csv",
+        required=True,
+        help="Caminho do CSV de revisao manual gerado pela Fase 5C.",
+    )
+    validar_revisao.add_argument(
+        "--relatorio",
+        help="Arquivo TXT opcional para salvar o relatorio de validacao.",
+    )
+    validar_revisao.set_defaults(func=validar_revisao_classificacao_command)
 
     return parser
 
@@ -356,6 +385,26 @@ def exportar_revisao_classificacao_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def validar_revisao_classificacao_command(args: argparse.Namespace) -> int:
+    report_path = Path(args.relatorio) if args.relatorio else None
+
+    try:
+        result = validate_classification_review_csv(Path(args.csv))
+    except ClassificationReviewValidationError as exc:
+        print(f"[ERRO] {exc}")
+        return 1
+
+    text = validation_report_text(result)
+    print(text, end="")
+
+    if report_path:
+        if not _try_save_validation_report(report_path, text):
+            return 1
+        print(f"[OK] Relatorio de validacao salvo em: {report_path}")
+
+    return 0
+
+
 def _add_config_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--plano-contas",
@@ -425,6 +474,15 @@ def _try_save_revision_report(report_path: Path, text: str) -> bool:
 def _try_save_candidates_report(report_path: Path, text: str) -> bool:
     try:
         save_candidates_report(report_path, text)
+    except Exception:
+        print(f"[ERRO] Nao foi possivel salvar relatorio: {report_path}")
+        return False
+    return True
+
+
+def _try_save_validation_report(report_path: Path, text: str) -> bool:
+    try:
+        save_validation_report(report_path, text)
     except Exception:
         print(f"[ERRO] Nao foi possivel salvar relatorio: {report_path}")
         return False
