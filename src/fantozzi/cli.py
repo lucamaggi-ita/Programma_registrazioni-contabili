@@ -41,6 +41,13 @@ from fantozzi.excel_diagnostics import (
 from fantozzi.excel_writer import write_lancamentos_to_excel
 from fantozzi.logging_utils import error, info, warning
 from fantozzi.nfe_importer import parse_nfe
+from fantozzi.operation_classifier import (
+    OperationAuditError,
+    auditar_operacoes_especiais,
+    console_lines as operation_audit_console_lines,
+    relatorio_operacoes_especiais,
+    salvar_relatorio as salvar_relatorio_operacoes,
+)
 from fantozzi.product_classifier import ProductClassifier
 from fantozzi.revision_report import (
     RevisionReportError,
@@ -87,7 +94,10 @@ def build_parser() -> argparse.ArgumentParser:
             "  .\\.venv\\Scripts\\python.exe -m fantozzi.cli "
             "gerar-proposta-classificacao --csv reports\\revisao_classificacao.csv "
             "--saida-yaml reports\\proposta_regras_classificacao.yaml "
-            "--relatorio reports\\proposta_regras_classificacao.txt"
+            "--relatorio reports\\proposta_regras_classificacao.txt\n"
+            "  .\\.venv\\Scripts\\python.exe -m fantozzi.cli "
+            "auditar-operacoes-especiais --pasta XML_fatture_acquisto\\xml "
+            "--saida reports\\operacoes_especiais.txt"
         ),
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -249,6 +259,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="Arquivo YAML de regras de produtos consultado em modo leitura.",
     )
     gerar_proposta.set_defaults(func=gerar_proposta_classificacao_command)
+
+    auditar_operacoes = subparsers.add_parser(
+        "auditar-operacoes-especiais",
+        help="Audita NF-e de comodato, bonificacao e outras operacoes especiais.",
+        description=(
+            "Le XML NF-e em modo somente leitura e gera relatorio TXT de "
+            "operacoes especiais antes da classificacao de produtos. Nao altera "
+            "XML, Excel, CSV, YAML ou DRE."
+        ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    auditar_operacoes.add_argument(
+        "--pasta", required=True, help="Pasta com arquivos XML NF-e de entrada."
+    )
+    auditar_operacoes.add_argument(
+        "--saida", required=True, help="Arquivo TXT de saida da auditoria."
+    )
+    auditar_operacoes.set_defaults(func=auditar_operacoes_especiais_command)
 
     return parser
 
@@ -493,6 +521,26 @@ def gerar_proposta_classificacao_command(args: argparse.Namespace) -> int:
     ):
         print(line)
 
+    return 0
+
+
+def auditar_operacoes_especiais_command(args: argparse.Namespace) -> int:
+    try:
+        result = auditar_operacoes_especiais(Path(args.pasta))
+    except OperationAuditError as exc:
+        print(f"[ERRO] {exc}")
+        return 1
+
+    text = relatorio_operacoes_especiais(result)
+    try:
+        salvar_relatorio_operacoes(Path(args.saida), text)
+    except Exception:
+        print(f"[ERRO] Nao foi possivel salvar relatorio: {args.saida}")
+        return 1
+
+    for line in operation_audit_console_lines(result):
+        print(line)
+    print(f"[OK] Relatorio salvo em: {args.saida}")
     return 0
 
 

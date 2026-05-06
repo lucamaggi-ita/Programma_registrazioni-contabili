@@ -53,6 +53,7 @@ def parse_nfe(xml_path: Path | str) -> NFE:
 
     numero = _text(ide, "nNF")
     serie = _text(ide, "serie")
+    natureza_operacao = _text(ide, "natOp")
     data_emissao = _parse_date(_text(ide, "dhEmi"))
 
     cnpj_emitente = _text(emit, "CNPJ")
@@ -102,7 +103,11 @@ def parse_nfe(xml_path: Path | str) -> NFE:
         )
 
     duplicatas = []
+    valor_cobranca = Decimal("0")
     if cobr is not None:
+        fat = cobr.find(_t("fat"))
+        if fat is not None:
+            valor_cobranca = _decimal(fat, "vLiq")
         for dup in cobr.findall(_t("dup")):
             d_venc_text = _text(dup, "dVenc")
             duplicatas.append(
@@ -123,6 +128,7 @@ def parse_nfe(xml_path: Path | str) -> NFE:
         cnpj_destinatario=cnpj_destinatario,
         nome_destinatario=nome_destinatario,
         valor_total=valor_total,
+        natureza_operacao=natureza_operacao,
         valor_produtos=valor_produtos,
         valor_frete=valor_frete,
         valor_seguro=valor_seguro,
@@ -132,5 +138,7 @@ def parse_nfe(xml_path: Path | str) -> NFE:
         produtos=produtos,
         duplicatas=duplicatas,
         tem_duplicatas=len(duplicatas) > 0,
+        tem_cobranca=cobr is not None,
+        valor_cobranca=valor_cobranca,
         arquivo_origem=str(xml_path),
     )

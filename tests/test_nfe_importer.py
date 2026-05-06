@@ -31,6 +31,10 @@ def test_valor_total(nfe):
     assert nfe.valor_total == Decimal("35.00")
 
 
+def test_natureza_operacao(nfe):
+    assert nfe.natureza_operacao == "VENDA DE MERCADORIAS"
+
+
 def test_total_breakdown_fields(nfe):
     assert nfe.valor_produtos == Decimal("35.00")
     assert nfe.valor_frete == Decimal("0.00")
@@ -42,6 +46,10 @@ def test_total_breakdown_fields(nfe):
 
 def test_at_least_three_produtos(nfe):
     assert len(nfe.produtos) >= 3
+
+
+def test_produtos_cfop_populated(nfe):
+    assert {produto.cfop for produto in nfe.produtos} == {"5102"}
 
 
 def test_cnpj_destinatario_populated(nfe):
@@ -63,6 +71,11 @@ def test_duplicatas_valor(nfe):
 
 def test_tem_duplicatas_true(nfe):
     assert nfe.tem_duplicatas is True
+
+
+def test_cobranca_fields(nfe):
+    assert nfe.tem_cobranca is True
+    assert nfe.valor_cobranca == Decimal("35.00")
 
 
 def test_arquivo_origem_populated(nfe):

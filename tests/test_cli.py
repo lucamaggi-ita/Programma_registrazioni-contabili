@@ -148,6 +148,24 @@ def test_parser_accepts_gerar_proposta_classificacao_command():
     assert args.relatorio == "reports/proposta_regras_classificacao.txt"
 
 
+def test_parser_accepts_auditar_operacoes_especiais_command():
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "auditar-operacoes-especiais",
+            "--pasta",
+            "xmls",
+            "--saida",
+            "reports/operacoes_especiais.txt",
+        ]
+    )
+
+    assert args.command == "auditar-operacoes-especiais"
+    assert args.pasta == "xmls"
+    assert args.saida == "reports/operacoes_especiais.txt"
+
+
 def test_general_help_returns_zero_and_lists_commands(capsys):
     with pytest.raises(SystemExit) as exc_info:
         main(["--help"])
@@ -163,6 +181,7 @@ def test_general_help_returns_zero_and_lists_commands(capsys):
     assert "exportar-revisao-classificacao" in captured.out
     assert "validar-revisao-classificacao" in captured.out
     assert "gerar-proposta-classificacao" in captured.out
+    assert "auditar-operacoes-especiais" in captured.out
 
 
 def test_importar_nfe_help_returns_zero_and_lists_options(capsys):
@@ -250,6 +269,16 @@ def test_gerar_proposta_classificacao_help_returns_zero_and_lists_options(capsys
     assert "--relatorio" in captured.out
     assert "--plano-contas" in captured.out
     assert "--regras-produtos" in captured.out
+
+
+def test_auditar_operacoes_especiais_help_returns_zero_and_lists_options(capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        main(["auditar-operacoes-especiais", "--help"])
+
+    captured = capsys.readouterr()
+    assert exc_info.value.code == 0
+    assert "--pasta" in captured.out
+    assert "--saida" in captured.out
 
 
 def test_importar_nfe_command_writes_excel_with_sample_xml(tmp_path):
@@ -640,10 +669,62 @@ def test_gerar_proposta_classificacao_command_returns_error_for_missing_csv(
     assert not yaml_path.exists()
 
 
+def test_auditar_operacoes_especiais_command_generates_report(tmp_path):
+    xml_dir = _xml_dir_with_special_operation(tmp_path)
+    report_path = tmp_path / "reports" / "operacoes_especiais.txt"
+
+    result = main(
+        [
+            "auditar-operacoes-especiais",
+            "--pasta",
+            str(xml_dir),
+            "--saida",
+            str(report_path),
+        ]
+    )
+
+    assert result == 0
+    assert report_path.exists()
+    text = report_path.read_text(encoding="utf-8")
+    assert "FANTOZZI - OPERACOES ESPECIAIS" in text
+    assert "COMODATO" in text
+    assert "ANALISAR_COM_CONTADOR" in text
+
+
+def test_auditar_operacoes_especiais_command_returns_error_for_missing_folder(
+    tmp_path,
+):
+    missing_folder = tmp_path / "xmls_inexistentes"
+    report_path = tmp_path / "reports" / "operacoes_especiais.txt"
+
+    result = main(
+        [
+            "auditar-operacoes-especiais",
+            "--pasta",
+            str(missing_folder),
+            "--saida",
+            str(report_path),
+        ]
+    )
+
+    assert result == 1
+    assert not report_path.exists()
+
+
 def _xml_dir_with_sample(tmp_path: Path, *, filename: str = "sample.xml") -> Path:
     xml_dir = tmp_path / "nfe_xml"
     xml_dir.mkdir()
     copyfile(SAMPLE_XML, xml_dir / filename)
+    return xml_dir
+
+
+def _xml_dir_with_special_operation(tmp_path: Path) -> Path:
+    xml_dir = tmp_path / "nfe_xml_especial"
+    xml_dir.mkdir()
+    text = SAMPLE_XML.read_text(encoding="utf-8")
+    text = text.replace("<natOp>VENDA DE MERCADORIAS</natOp>", "<natOp>Comodato</natOp>")
+    text = text.replace("<CFOP>5102</CFOP>", "<CFOP>5908</CFOP>", 1)
+    (xml_dir / "comodato.xml").write_text(text, encoding="utf-8")
     return xml_dir
 
 
