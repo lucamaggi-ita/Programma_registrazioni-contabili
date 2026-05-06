@@ -209,6 +209,8 @@ mapeamento:
   "2.03.003": { dre_linha_id: "03.04", entra_dre: true }
   "2.04.001": { dre_linha_id: "03.06", entra_dre: true }
   "2.04.002": { dre_linha_id: "03.07", entra_dre: true }
+  "2.05.001": { dre_linha_id: "03.01", entra_dre: true }
+  "2.05.002": { dre_linha_id: "03.01", entra_dre: true }
 
   # PESSOAL
   "3.01.001": { dre_linha_id: "05.01", entra_dre: true }

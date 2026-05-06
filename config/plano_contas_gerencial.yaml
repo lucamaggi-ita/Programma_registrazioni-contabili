@@ -175,6 +175,17 @@ contas:
     nome: "Utensilios de Cozinha e Salao"
     grupo: "Materiais de Limpeza e Higiene"
     tipo: custo
+  # Custos acessorios e reducoes sobre compras
+  - id: "2.05.001"
+    nome: "Fretes, Seguros e Outras Despesas sobre Compras"
+    grupo: "Custos de Mercadorias e Insumos"
+    tipo: custo
+    exige_revisao: false
+  - id: "2.05.002"
+    nome: "Descontos Obtidos sobre Compras"
+    grupo: "Custos de Mercadorias e Insumos"
+    tipo: custo
+    exige_revisao: false
 
   # --- 3. PESSOAL, ENCARGOS E SERVICOS DE MAO DE OBRA ---
   - id: "3.01.001"

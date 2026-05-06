@@ -12,6 +12,9 @@ from fantozzi.product_classifier import ProductClassifier
 
 CENT = Decimal("0.01")
 ORIGEM_XML_NFE = "XML_NFE"
+ACCESSORY_ACCOUNT_ID = "2.05.001"
+DISCOUNT_ACCOUNT_ID = "2.05.002"
+ALERTA_VALOR_INCONSISTENTE = "VALOR_INCONSISTENTE"
 
 
 @dataclass
@@ -40,7 +43,7 @@ def allocate_nfe_to_lancamentos(
         return []
 
     lancamentos = [_build_lancamento(nfe, group) for group in groups]
-    valor_alertas = _adjust_lancamento_totals(lancamentos, nfe.valor_total)
+    _append_total_difference_lancamento(nfe, product_classifier, lancamentos)
     if nfe.duplicatas:
         dup_alertas = _allocate_duplicatas(lancamentos, nfe.duplicatas, nfe.valor_total)
     else:
@@ -48,7 +51,6 @@ def allocate_nfe_to_lancamentos(
 
     for lancamento in lancamentos:
         alertas = _split_alertas(lancamento.alertas)
-        alertas.extend(valor_alertas)
         alertas.extend(dup_alertas)
         lancamento.alertas = _join_alertas(alertas)
         if lancamento.alertas or lancamento.status_revisao != "OK":
@@ -126,27 +128,101 @@ def _build_lancamento(nfe: NFE, group: _AllocationGroup) -> Lancamento:
     return lancamento
 
 
+def _append_total_difference_lancamento(
+    nfe: NFE, product_classifier: ProductClassifier, lancamentos: list[Lancamento]
+) -> None:
+    soma_produtos = sum((produto.valor_total for produto in nfe.produtos), Decimal("0"))
+    diferenca = _money(nfe.valor_total - soma_produtos)
+    if diferenca == 0:
+        return
+
+    if diferenca > 0:
+        explained = diferenca == _money(_identified_positive_adjustments(nfe))
+        conta = _get_classifier_account(product_classifier, ACCESSORY_ACCOUNT_ID)
+        lancamentos.append(
+            _build_adjustment_lancamento(
+                nfe=nfe,
+                conta_id=conta.id,
+                conta_nome=conta.nome,
+                grupo_conta=conta.grupo,
+                tipo_lancamento=conta.tipo,
+                descricao_itens="Custos acessorios identificados no total da NF-e",
+                valor=diferenca,
+                explained=explained,
+            )
+        )
+        return
+
+    explained = abs(diferenca) == _money(nfe.valor_desconto)
+    conta = _get_classifier_account(product_classifier, DISCOUNT_ACCOUNT_ID)
+    lancamentos.append(
+        _build_adjustment_lancamento(
+            nfe=nfe,
+            conta_id=conta.id,
+            conta_nome=conta.nome,
+            grupo_conta=conta.grupo,
+            tipo_lancamento=conta.tipo,
+            descricao_itens="Descontos obtidos identificados no total da NF-e",
+            valor=diferenca,
+            explained=explained,
+        )
+    )
+
+
+def _identified_positive_adjustments(nfe: NFE) -> Decimal:
+    return (
+        nfe.valor_frete
+        + nfe.valor_seguro
+        + nfe.valor_outras_despesas
+        + nfe.valor_tributos_inclusos
+    )
+
+
+def _get_classifier_account(product_classifier: ProductClassifier, account_id: str):
+    return product_classifier._chart.get_by_id(account_id)
+
+
+def _build_adjustment_lancamento(
+    *,
+    nfe: NFE,
+    conta_id: str,
+    conta_nome: str,
+    grupo_conta: str,
+    tipo_lancamento: str,
+    descricao_itens: str,
+    valor: Decimal,
+    explained: bool,
+) -> Lancamento:
+    lancamento = Lancamento(
+        data_documento=nfe.data_emissao,
+        competencia=nfe.data_emissao.strftime("%Y-%m"),
+        cnpj_empresa=nfe.cnpj_destinatario,
+        nome_empresa=nfe.nome_destinatario,
+        fornecedor_ou_favorecido=nfe.nome_emitente,
+        cnpj_cpf_favorecido=nfe.cnpj_emitente,
+        documento=nfe.numero,
+        tipo_documento=ORIGEM_XML_NFE,
+        conta_id=conta_id,
+        conta_nome=conta_nome,
+        grupo_conta=grupo_conta,
+        descricao_itens=descricao_itens,
+        valor=_money(valor),
+        duplicatas=[],
+        origem=ORIGEM_XML_NFE,
+        arquivo_origem=nfe.arquivo_origem,
+        chave_origem=nfe.chave,
+        status_revisao="OK" if explained else "REVISAR",
+        alertas="" if explained else ALERTA_VALOR_INCONSISTENTE,
+        tipo_lancamento=tipo_lancamento,
+    )
+    lancamento.hash_registro = _hash_lancamento(lancamento)
+    return lancamento
+
+
 def _describe_items(produtos: list[ProdutoNFE]) -> str:
     return "; ".join(
         f"{produto.descricao} ({_money(produto.valor_total)})" for produto in produtos
     )
-
-
-def _adjust_lancamento_totals(
-    lancamentos: list[Lancamento], nfe_total: Decimal
-) -> list[str]:
-    expected_total = _money(nfe_total)
-    current_total = sum((l.valor for l in lancamentos), Decimal("0"))
-    difference = expected_total - current_total
-    if difference == 0:
-        return []
-
-    last = lancamentos[-1]
-    if last.valor + difference < 0:
-        return ["VALOR_INCONSISTENTE"]
-
-    last.valor = _money(last.valor + difference)
-    return [] if abs(difference) <= CENT else ["VALOR_INCONSISTENTE"]
 
 
 def _allocate_duplicatas(

@@ -31,6 +31,15 @@ def test_valor_total(nfe):
     assert nfe.valor_total == Decimal("35.00")
 
 
+def test_total_breakdown_fields(nfe):
+    assert nfe.valor_produtos == Decimal("35.00")
+    assert nfe.valor_frete == Decimal("0.00")
+    assert nfe.valor_seguro == Decimal("0.00")
+    assert nfe.valor_desconto == Decimal("0.00")
+    assert nfe.valor_outras_despesas == Decimal("0.00")
+    assert nfe.valor_tributos_inclusos == Decimal("0.00")
+
+
 def test_at_least_three_produtos(nfe):
     assert len(nfe.produtos) >= 3
 

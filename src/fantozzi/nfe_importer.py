@@ -64,6 +64,22 @@ def parse_nfe(xml_path: Path | str) -> NFE:
 
     icms_tot = total_elem.find(_t("ICMSTot")) if total_elem is not None else None
     valor_total = _decimal(icms_tot, "vNF") if icms_tot is not None else Decimal("0")
+    valor_produtos = _decimal(icms_tot, "vProd") if icms_tot is not None else Decimal("0")
+    valor_frete = _decimal(icms_tot, "vFrete") if icms_tot is not None else Decimal("0")
+    valor_seguro = _decimal(icms_tot, "vSeg") if icms_tot is not None else Decimal("0")
+    valor_desconto = _decimal(icms_tot, "vDesc") if icms_tot is not None else Decimal("0")
+    valor_outras_despesas = (
+        _decimal(icms_tot, "vOutro") if icms_tot is not None else Decimal("0")
+    )
+    valor_tributos_inclusos = (
+        _decimal(icms_tot, "vST")
+        + _decimal(icms_tot, "vFCPST")
+        + _decimal(icms_tot, "vII")
+        + _decimal(icms_tot, "vIPI")
+        + _decimal(icms_tot, "vIPIDevol")
+        if icms_tot is not None
+        else Decimal("0")
+    )
 
     produtos = []
     for det in inf_nfe.findall(_t("det")):
@@ -107,6 +123,12 @@ def parse_nfe(xml_path: Path | str) -> NFE:
         cnpj_destinatario=cnpj_destinatario,
         nome_destinatario=nome_destinatario,
         valor_total=valor_total,
+        valor_produtos=valor_produtos,
+        valor_frete=valor_frete,
+        valor_seguro=valor_seguro,
+        valor_desconto=valor_desconto,
+        valor_outras_despesas=valor_outras_despesas,
+        valor_tributos_inclusos=valor_tributos_inclusos,
         produtos=produtos,
         duplicatas=duplicatas,
         tem_duplicatas=len(duplicatas) > 0,

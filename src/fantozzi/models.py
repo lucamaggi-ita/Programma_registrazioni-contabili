@@ -46,6 +46,12 @@ class NFE:
     cnpj_destinatario: str
     nome_destinatario: str
     valor_total: Decimal
+    valor_produtos: Decimal = Decimal("0")
+    valor_frete: Decimal = Decimal("0")
+    valor_seguro: Decimal = Decimal("0")
+    valor_desconto: Decimal = Decimal("0")
+    valor_outras_despesas: Decimal = Decimal("0")
+    valor_tributos_inclusos: Decimal = Decimal("0")
     produtos: List[ProdutoNFE] = field(default_factory=list)
     duplicatas: List[Duplicata] = field(default_factory=list)
     tem_duplicatas: bool = False

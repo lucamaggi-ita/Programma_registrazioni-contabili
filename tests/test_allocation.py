@@ -146,3 +146,92 @@ def test_unclassified_product_generates_revisar_status(product_classifier):
     assert lancamentos[0].conta_id == "13.01.001"
     assert lancamentos[0].status_revisao == "REVISAR"
     assert "NAO_CLASSIFICADO" in lancamentos[0].alertas
+
+
+def test_positive_accessory_cost_creates_separate_lancamento(product_classifier):
+    nfe = _synthetic_nfe(
+        chave="NFE-ACCESSORY-001",
+        valor_total=Decimal("110.00"),
+        valor_frete=Decimal("10.00"),
+        duplicata_valor=Decimal("110.00"),
+    )
+
+    lancamentos = allocate_nfe_to_lancamentos(nfe, product_classifier)
+    by_conta = {lancamento.conta_id: lancamento for lancamento in lancamentos}
+
+    assert by_conta["2.05.001"].conta_nome == (
+        "Fretes, Seguros e Outras Despesas sobre Compras"
+    )
+    assert by_conta["2.05.001"].valor == Decimal("10.00")
+    assert by_conta["2.05.001"].status_revisao == "OK"
+    assert sum((lancamento.valor for lancamento in lancamentos), Decimal("0")) == (
+        Decimal("110.00")
+    )
+
+
+def test_discount_creates_negative_lancamento_without_positive_accessory_cost(
+    product_classifier,
+):
+    nfe = _synthetic_nfe(
+        chave="NFE-DISCOUNT-001",
+        valor_total=Decimal("90.00"),
+        valor_desconto=Decimal("10.00"),
+        duplicata_valor=Decimal("90.00"),
+    )
+
+    lancamentos = allocate_nfe_to_lancamentos(nfe, product_classifier)
+    by_conta = {lancamento.conta_id: lancamento for lancamento in lancamentos}
+
+    assert "2.05.001" not in by_conta
+    assert by_conta["2.05.002"].conta_nome == "Descontos Obtidos sobre Compras"
+    assert by_conta["2.05.002"].valor == Decimal("-10.00")
+    assert by_conta["2.05.002"].status_revisao == "OK"
+    assert sum((lancamento.valor for lancamento in lancamentos), Decimal("0")) == (
+        Decimal("90.00")
+    )
+
+
+def _synthetic_nfe(
+    *,
+    chave: str,
+    valor_total: Decimal,
+    duplicata_valor: Decimal,
+    valor_frete: Decimal = Decimal("0.00"),
+    valor_desconto: Decimal = Decimal("0.00"),
+) -> NFE:
+    return NFE(
+        chave=chave,
+        numero="777",
+        serie="1",
+        data_emissao=date(2026, 5, 6),
+        cnpj_emitente="12345678000195",
+        nome_emitente="FORNECEDOR TESTE",
+        cnpj_destinatario="55746722000181",
+        nome_destinatario="TRATTORIA DO SOSSEGO RESTAURANTE LTDA",
+        valor_total=valor_total,
+        valor_produtos=Decimal("100.00"),
+        valor_frete=valor_frete,
+        valor_desconto=valor_desconto,
+        produtos=[
+            ProdutoNFE(
+                n_item=1,
+                codigo="REFR",
+                descricao="COCA-COLA KS 290ML",
+                ncm="22021000",
+                cfop="5102",
+                unidade="CX",
+                quantidade=Decimal("1"),
+                valor_unitario=Decimal("100.00"),
+                valor_total=Decimal("100.00"),
+            )
+        ],
+        duplicatas=[
+            Duplicata(
+                numero="001",
+                vencimento=date(2026, 5, 20),
+                valor=duplicata_valor,
+            )
+        ],
+        tem_duplicatas=True,
+        arquivo_origem=f"{chave}.xml",
+    )
