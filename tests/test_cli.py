@@ -231,6 +231,31 @@ def test_parser_accepts_importar_planilha_revisao_classificacao_command():
     assert args.relatorio == "reports/validacao_planilha.txt"
 
 
+def test_parser_accepts_gerar_pre_livro_diario_teste_command():
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "gerar-pre-livro-diario-teste",
+            "--excel",
+            "output/empresa_1.xlsx",
+            "--excel",
+            "output/empresa_2.xlsx",
+            "--pasta-operacoes-especiais",
+            "XML_fatture_acquisto/55746722000181/xml",
+            "--saida",
+            "reports/pre_livro_diario_teste.xlsx",
+        ]
+    )
+
+    assert args.command == "gerar-pre-livro-diario-teste"
+    assert args.excel == ["output/empresa_1.xlsx", "output/empresa_2.xlsx"]
+    assert args.pasta_operacoes_especiais == [
+        "XML_fatture_acquisto/55746722000181/xml"
+    ]
+    assert args.saida == "reports/pre_livro_diario_teste.xlsx"
+
+
 def test_general_help_returns_zero_and_lists_commands(capsys):
     with pytest.raises(SystemExit) as exc_info:
         main(["--help"])
@@ -250,6 +275,7 @@ def test_general_help_returns_zero_and_lists_commands(capsys):
     assert "auditar-operacoes-especiais" in captured.out
     assert "gerar-planilha-revisao-classificacao" in captured.out
     assert "importar-planilha-revisao-classificacao" in captured.out
+    assert "gerar-pre-livro-diario-teste" in captured.out
 
 
 def test_importar_nfe_help_returns_zero_and_lists_options(capsys):
@@ -388,6 +414,17 @@ def test_importar_planilha_revisao_classificacao_help_returns_zero_and_lists_opt
     assert "--saida" in captured.out
     assert "--relatorio" in captured.out
     assert "--plano-contas" in captured.out
+
+
+def test_gerar_pre_livro_diario_teste_help_returns_zero_and_lists_options(capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        main(["gerar-pre-livro-diario-teste", "--help"])
+
+    captured = capsys.readouterr()
+    assert exc_info.value.code == 0
+    assert "--excel" in captured.out
+    assert "--saida" in captured.out
+    assert "--pasta-operacoes-especiais" in captured.out
 
 
 def test_importar_nfe_command_writes_excel_with_sample_xml(tmp_path):
@@ -1031,6 +1068,47 @@ def test_importar_planilha_revisao_classificacao_command_retorna_erro_acao_inval
     assert result == 1
     assert "[ERRO] Linha 2: acao_manual invalida: APROVAR" in captured.out
     assert not csv_path.exists()
+
+
+def test_gerar_pre_livro_diario_teste_command_gera_xlsx(tmp_path, capsys):
+    excel_path = tmp_path / "lancamentos.xlsx"
+    output_path = tmp_path / "reports" / "pre_livro.xlsx"
+    _save_revision_workbook(excel_path)
+
+    result = main(
+        [
+            "gerar-pre-livro-diario-teste",
+            "--excel",
+            str(excel_path),
+            "--saida",
+            str(output_path),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert result == 0
+    assert output_path.exists()
+    assert "[OK] Pre-livro diario gerencial de teste gerado." in captured.out
+
+
+def test_gerar_pre_livro_diario_teste_command_retorna_erro_excel_inexistente(
+    tmp_path,
+):
+    missing_excel = tmp_path / "inexistente.xlsx"
+    output_path = tmp_path / "reports" / "pre_livro.xlsx"
+
+    result = main(
+        [
+            "gerar-pre-livro-diario-teste",
+            "--excel",
+            str(missing_excel),
+            "--saida",
+            str(output_path),
+        ]
+    )
+
+    assert result == 1
+    assert not output_path.exists()
 
 
 def _xml_dir_with_sample(tmp_path: Path, *, filename: str = "sample.xml") -> Path:

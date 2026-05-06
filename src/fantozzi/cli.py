@@ -60,6 +60,11 @@ from fantozzi.operation_classifier import (
     salvar_relatorio as salvar_relatorio_operacoes,
 )
 from fantozzi.product_classifier import ProductClassifier
+from fantozzi.pre_livro_diario import (
+    PreLivroDiarioError,
+    console_lines as pre_livro_console_lines,
+    gerar_pre_livro_diario_teste,
+)
 from fantozzi.revision_report import (
     RevisionReportError,
     console_lines as revision_console_lines,
@@ -121,7 +126,12 @@ def build_parser() -> argparse.ArgumentParser:
             "gerar-proposta-regras-classificacao-real "
             "--csv reports\\revisao_classificacao_revisada.csv "
             "--saida reports\\proposta_regras_classificacao_real.yaml "
-            "--relatorio reports\\resumo_proposta_regras_classificacao_real.txt"
+            "--relatorio reports\\resumo_proposta_regras_classificacao_real.txt\n"
+            "  .\\.venv\\Scripts\\python.exe -m fantozzi.cli "
+            "gerar-pre-livro-diario-teste "
+            "--excel output\\lancamentos.xlsx "
+            "--pasta-operacoes-especiais XML_fatture_acquisto\\xml "
+            "--saida reports\\pre_livro_diario_teste.xlsx"
         ),
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -397,6 +407,39 @@ def build_parser() -> argparse.ArgumentParser:
     importar_planilha_revisao.set_defaults(
         func=importar_planilha_revisao_classificacao_command
     )
+
+    gerar_pre_livro = subparsers.add_parser(
+        "gerar-pre-livro-diario-teste",
+        help="Gera XLSX de controle para pre-livro diario gerencial de teste.",
+        description=(
+            "Le um ou mais Excel de lancamentos em modo somente leitura e gera "
+            "um XLSX de controle com lancamentos OK, lancamentos em revisao, "
+            "operacoes especiais, resumo por conta, resumo mensal e instrucoes. "
+            "Nao aplica regras novas e nao altera config, CSV ou Excel original."
+        ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    gerar_pre_livro.add_argument(
+        "--excel",
+        action="append",
+        required=True,
+        help="Arquivo Excel de lancamentos gerado pelo Fantozzi.",
+    )
+    gerar_pre_livro.add_argument(
+        "--saida",
+        required=True,
+        help="Arquivo XLSX de saida do pre-livro diario gerencial de teste.",
+    )
+    gerar_pre_livro.add_argument(
+        "--pasta-operacoes-especiais",
+        action="append",
+        default=[],
+        help=(
+            "Pasta XML opcional para auditar comodato, bonificacao e outras "
+            "operacoes especiais dentro do pre-livro de teste."
+        ),
+    )
+    gerar_pre_livro.set_defaults(func=gerar_pre_livro_diario_teste_command)
 
     return parser
 
@@ -731,6 +774,28 @@ def importar_planilha_revisao_classificacao_command(args: argparse.Namespace) ->
         print(line)
     if relatorio_path:
         print(f"[OK] Relatorio salvo em: {relatorio_path}")
+    return 0
+
+
+def gerar_pre_livro_diario_teste_command(args: argparse.Namespace) -> int:
+    try:
+        result = gerar_pre_livro_diario_teste(
+            [Path(excel_path) for excel_path in args.excel],
+            Path(args.saida),
+            [
+                Path(pasta_path)
+                for pasta_path in (args.pasta_operacoes_especiais or [])
+            ],
+        )
+    except PreLivroDiarioError as exc:
+        print(f"[ERRO] {exc}")
+        return 1
+    except Exception:
+        print(f"[ERRO] Nao foi possivel gerar pre-livro diario: {args.saida}")
+        return 1
+
+    for line in pre_livro_console_lines(result):
+        print(line)
     return 0
 
 
