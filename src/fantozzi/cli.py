@@ -16,6 +16,10 @@ from fantozzi.classification_review_export import (
     console_lines as review_export_console_lines,
     export_classification_review_csv,
 )
+from fantozzi.classification_review_workbook import (
+    ClassificationReviewWorkbookError,
+    gerar_planilha_revisao_classificacao,
+)
 from fantozzi.classification_review_validation import (
     ClassificationReviewValidationError,
     report_text as validation_report_text,
@@ -97,7 +101,11 @@ def build_parser() -> argparse.ArgumentParser:
             "--relatorio reports\\proposta_regras_classificacao.txt\n"
             "  .\\.venv\\Scripts\\python.exe -m fantozzi.cli "
             "auditar-operacoes-especiais --pasta XML_fatture_acquisto\\xml "
-            "--saida reports\\operacoes_especiais.txt"
+            "--saida reports\\operacoes_especiais.txt\n"
+            "  .\\.venv\\Scripts\\python.exe -m fantozzi.cli "
+            "gerar-planilha-revisao-classificacao "
+            "--csv reports\\revisao_classificacao.csv "
+            "--saida reports\\revisao_classificacao_assistida.xlsx"
         ),
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -277,6 +285,35 @@ def build_parser() -> argparse.ArgumentParser:
         "--saida", required=True, help="Arquivo TXT de saida da auditoria."
     )
     auditar_operacoes.set_defaults(func=auditar_operacoes_especiais_command)
+
+    gerar_planilha_revisao = subparsers.add_parser(
+        "gerar-planilha-revisao-classificacao",
+        help="Gera XLSX assistido para revisao manual de classificacao.",
+        description=(
+            "Le o CSV de revisao de classificacao e gera uma planilha XLSX "
+            "assistida para preenchimento manual. Nao altera CSV, Excel de "
+            "lancamentos, YAML ou regras."
+        ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    gerar_planilha_revisao.add_argument(
+        "--csv",
+        required=True,
+        help="Caminho do CSV de revisao de classificacao.",
+    )
+    gerar_planilha_revisao.add_argument(
+        "--saida",
+        required=True,
+        help="Caminho do arquivo XLSX assistido de saida.",
+    )
+    gerar_planilha_revisao.add_argument(
+        "--plano-contas",
+        default=str(DEFAULT_PLANO_CONTAS),
+        help="Arquivo YAML do plano de contas gerencial consultado em modo leitura.",
+    )
+    gerar_planilha_revisao.set_defaults(
+        func=gerar_planilha_revisao_classificacao_command
+    )
 
     return parser
 
@@ -541,6 +578,24 @@ def auditar_operacoes_especiais_command(args: argparse.Namespace) -> int:
     for line in operation_audit_console_lines(result):
         print(line)
     print(f"[OK] Relatorio salvo em: {args.saida}")
+    return 0
+
+
+def gerar_planilha_revisao_classificacao_command(args: argparse.Namespace) -> int:
+    try:
+        output_path = gerar_planilha_revisao_classificacao(
+            Path(args.csv),
+            Path(args.saida),
+            Path(args.plano_contas),
+        )
+    except ClassificationReviewWorkbookError as exc:
+        print(f"[ERRO] {exc}")
+        return 1
+    except Exception:
+        print(f"[ERRO] Nao foi possivel gerar planilha assistida: {args.saida}")
+        return 1
+
+    print(f"[OK] Planilha assistida gerada: {output_path}")
     return 0
 
 

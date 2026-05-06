@@ -166,6 +166,24 @@ def test_parser_accepts_auditar_operacoes_especiais_command():
     assert args.saida == "reports/operacoes_especiais.txt"
 
 
+def test_parser_accepts_gerar_planilha_revisao_classificacao_command():
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "gerar-planilha-revisao-classificacao",
+            "--csv",
+            "reports/revisao_classificacao.csv",
+            "--saida",
+            "reports/revisao_classificacao_assistida.xlsx",
+        ]
+    )
+
+    assert args.command == "gerar-planilha-revisao-classificacao"
+    assert args.csv == "reports/revisao_classificacao.csv"
+    assert args.saida == "reports/revisao_classificacao_assistida.xlsx"
+
+
 def test_general_help_returns_zero_and_lists_commands(capsys):
     with pytest.raises(SystemExit) as exc_info:
         main(["--help"])
@@ -182,6 +200,7 @@ def test_general_help_returns_zero_and_lists_commands(capsys):
     assert "validar-revisao-classificacao" in captured.out
     assert "gerar-proposta-classificacao" in captured.out
     assert "auditar-operacoes-especiais" in captured.out
+    assert "gerar-planilha-revisao-classificacao" in captured.out
 
 
 def test_importar_nfe_help_returns_zero_and_lists_options(capsys):
@@ -279,6 +298,19 @@ def test_auditar_operacoes_especiais_help_returns_zero_and_lists_options(capsys)
     assert exc_info.value.code == 0
     assert "--pasta" in captured.out
     assert "--saida" in captured.out
+
+
+def test_gerar_planilha_revisao_classificacao_help_returns_zero_and_lists_options(
+    capsys,
+):
+    with pytest.raises(SystemExit) as exc_info:
+        main(["gerar-planilha-revisao-classificacao", "--help"])
+
+    captured = capsys.readouterr()
+    assert exc_info.value.code == 0
+    assert "--csv" in captured.out
+    assert "--saida" in captured.out
+    assert "--plano-contas" in captured.out
 
 
 def test_importar_nfe_command_writes_excel_with_sample_xml(tmp_path):
@@ -709,6 +741,59 @@ def test_auditar_operacoes_especiais_command_returns_error_for_missing_folder(
 
     assert result == 1
     assert not report_path.exists()
+
+
+def test_gerar_planilha_revisao_classificacao_command_gera_xlsx(tmp_path, capsys):
+    csv_path = tmp_path / "revisao_classificacao.csv"
+    output_path = tmp_path / "reports" / "revisao_classificacao_assistida.xlsx"
+    plano_path = _save_proposal_plano_contas(tmp_path)
+    _save_review_csv(csv_path)
+    original_csv = csv_path.read_text(encoding="utf-8-sig")
+
+    result = main(
+        [
+            "gerar-planilha-revisao-classificacao",
+            "--csv",
+            str(csv_path),
+            "--saida",
+            str(output_path),
+            "--plano-contas",
+            str(plano_path),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert result == 0
+    assert output_path.exists()
+    assert "[OK] Planilha assistida gerada:" in captured.out
+    assert load_workbook(output_path)["Revisao"].max_row == 2
+    assert csv_path.read_text(encoding="utf-8-sig") == original_csv
+
+
+def test_gerar_planilha_revisao_classificacao_command_retorna_erro_csv_inexistente(
+    tmp_path,
+    capsys,
+):
+    missing_csv = tmp_path / "inexistente.csv"
+    output_path = tmp_path / "reports" / "revisao_classificacao_assistida.xlsx"
+    plano_path = _save_proposal_plano_contas(tmp_path)
+
+    result = main(
+        [
+            "gerar-planilha-revisao-classificacao",
+            "--csv",
+            str(missing_csv),
+            "--saida",
+            str(output_path),
+            "--plano-contas",
+            str(plano_path),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert result == 1
+    assert "[ERRO] CSV de revisao nao encontrado:" in captured.out
+    assert not output_path.exists()
 
 
 def _xml_dir_with_sample(tmp_path: Path, *, filename: str = "sample.xml") -> Path:
