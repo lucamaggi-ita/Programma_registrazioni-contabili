@@ -72,6 +72,24 @@ def test_parser_accepts_relatorio_revisao_command():
     assert args.saida == "reports/revisao.txt"
 
 
+def test_parser_accepts_relatorio_candidatos_classificacao_command():
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "relatorio-candidatos-classificacao",
+            "--excel",
+            "output.xlsx",
+            "--saida",
+            "reports/candidatos.txt",
+        ]
+    )
+
+    assert args.command == "relatorio-candidatos-classificacao"
+    assert args.excel == "output.xlsx"
+    assert args.saida == "reports/candidatos.txt"
+
+
 def test_general_help_returns_zero_and_lists_commands(capsys):
     with pytest.raises(SystemExit) as exc_info:
         main(["--help"])
@@ -83,6 +101,7 @@ def test_general_help_returns_zero_and_lists_commands(capsys):
     assert "importar-pasta-nfe" in captured.out
     assert "diagnosticar-excel" in captured.out
     assert "relatorio-revisao" in captured.out
+    assert "relatorio-candidatos-classificacao" in captured.out
 
 
 def test_importar_nfe_help_returns_zero_and_lists_options(capsys):
@@ -122,6 +141,16 @@ def test_diagnosticar_excel_help_returns_zero_and_lists_options(capsys):
 def test_relatorio_revisao_help_returns_zero_and_lists_options(capsys):
     with pytest.raises(SystemExit) as exc_info:
         main(["relatorio-revisao", "--help"])
+
+    captured = capsys.readouterr()
+    assert exc_info.value.code == 0
+    assert "--excel" in captured.out
+    assert "--saida" in captured.out
+
+
+def test_relatorio_candidatos_classificacao_help_returns_zero_and_lists_options(capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        main(["relatorio-candidatos-classificacao", "--help"])
 
     captured = capsys.readouterr()
     assert exc_info.value.code == 0
@@ -276,6 +305,47 @@ def test_relatorio_revisao_command_returns_error_for_missing_excel(tmp_path):
     assert result == 1
 
 
+def test_relatorio_candidatos_command_with_saida_returns_success(tmp_path):
+    excel_path = tmp_path / "lancamentos.xlsx"
+    report_path = tmp_path / "reports" / "candidatos.txt"
+    _save_candidates_workbook(excel_path)
+
+    result = main(
+        [
+            "relatorio-candidatos-classificacao",
+            "--excel",
+            str(excel_path),
+            "--saida",
+            str(report_path),
+        ]
+    )
+
+    assert result == 0
+    assert report_path.exists()
+
+
+def test_relatorio_candidatos_command_without_saida_prints_report(tmp_path, capsys):
+    excel_path = tmp_path / "lancamentos.xlsx"
+    _save_candidates_workbook(excel_path)
+
+    result = main(["relatorio-candidatos-classificacao", "--excel", str(excel_path)])
+
+    captured = capsys.readouterr()
+    assert result == 0
+    assert "RELATORIO DE CANDIDATOS PARA CLASSIFICACAO" in captured.out
+    assert "PRODUTO DESCONHECIDO" in captured.out
+
+
+def test_relatorio_candidatos_command_returns_error_for_missing_excel(tmp_path):
+    missing_excel = tmp_path / "inexistente.xlsx"
+
+    result = main(
+        ["relatorio-candidatos-classificacao", "--excel", str(missing_excel)]
+    )
+
+    assert result == 1
+
+
 def _xml_dir_with_sample(tmp_path: Path, *, filename: str = "sample.xml") -> Path:
     xml_dir = tmp_path / "nfe_xml"
     xml_dir.mkdir()
@@ -304,6 +374,36 @@ def _save_revision_workbook(excel_path: Path) -> None:
                 "chave_origem": "chave-1",
                 "status_revisao": "OK",
                 "hash_registro": "hash-1",
+                "duplicatas_json": "[]",
+            }.get(header)
+            for header in HEADERS
+        ]
+    )
+    workbook.save(excel_path)
+
+
+def _save_candidates_workbook(excel_path: Path) -> None:
+    workbook = Workbook()
+    lancamentos_sheet = workbook.active
+    lancamentos_sheet.title = LANCAMENTOS_SHEET
+    revisao_sheet = workbook.create_sheet(REVISAO_SHEET)
+    lancamentos_sheet.append(HEADERS)
+    revisao_sheet.append(HEADERS)
+    revisao_sheet.append(
+        [
+            {
+                "data_documento": "2026-05-05",
+                "fornecedor_ou_favorecido": "Fornecedor teste",
+                "documento": "NF-1",
+                "conta_id": "13.01.001",
+                "conta_nome": "Revisar - Produto Nao Classificado",
+                "descricao_itens": "PRODUTO DESCONHECIDO",
+                "valor": 10,
+                "origem": "XML_NFE",
+                "chave_origem": "chave-1",
+                "status_revisao": "REVISAR",
+                "hash_registro": "hash-1",
+                "alertas": "CLASSIFICACAO_NAO_ENCONTRADA",
                 "duplicatas_json": "[]",
             }.get(header)
             for header in HEADERS

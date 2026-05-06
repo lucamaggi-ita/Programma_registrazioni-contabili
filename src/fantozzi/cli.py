@@ -5,6 +5,12 @@ from pathlib import Path
 
 from fantozzi.allocation import allocate_nfe_to_lancamentos
 from fantozzi.chart_of_accounts import ChartOfAccounts
+from fantozzi.classification_candidates import (
+    ClassificationCandidatesError,
+    console_lines as candidates_console_lines,
+    generate_classification_candidates_report,
+    save_report as save_candidates_report,
+)
 from fantozzi.excel_diagnostics import (
     ExcelDiagnosticError,
     ExcelDiagnosticFailure,
@@ -49,7 +55,10 @@ def build_parser() -> argparse.ArgumentParser:
             "  .\\.venv\\Scripts\\python.exe -m fantozzi.cli diagnosticar-excel "
             "--excel output\\lancamentos.xlsx --relatorio reports\\diagnostico.txt\n"
             "  .\\.venv\\Scripts\\python.exe -m fantozzi.cli relatorio-revisao "
-            "--excel output\\lancamentos.xlsx --saida reports\\revisao_lancamentos.txt"
+            "--excel output\\lancamentos.xlsx --saida reports\\revisao_lancamentos.txt\n"
+            "  .\\.venv\\Scripts\\python.exe -m fantozzi.cli "
+            "relatorio-candidatos-classificacao --excel output\\lancamentos.xlsx "
+            "--saida reports\\candidatos_classificacao.txt"
         ),
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -116,6 +125,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="Arquivo TXT para salvar o relatorio de revisao.",
     )
     relatorio_revisao.set_defaults(func=relatorio_revisao_command)
+
+    relatorio_candidatos = subparsers.add_parser(
+        "relatorio-candidatos-classificacao",
+        help="Gera relatorio de candidatos para novas regras de classificacao.",
+        description=(
+            "Gera relatorio read-only de candidatos para novas regras de "
+            "classificacao a partir dos lancamentos em revisao."
+        ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    relatorio_candidatos.add_argument(
+        "--excel", required=True, help="Arquivo Excel .xlsx para analisar."
+    )
+    relatorio_candidatos.add_argument(
+        "--saida",
+        help="Arquivo TXT para salvar o relatorio de candidatos.",
+    )
+    relatorio_candidatos.set_defaults(func=relatorio_candidatos_command)
 
     return parser
 
@@ -266,6 +293,27 @@ def relatorio_revisao_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def relatorio_candidatos_command(args: argparse.Namespace) -> int:
+    report_path = Path(args.saida) if args.saida else None
+
+    try:
+        result, text = generate_classification_candidates_report(Path(args.excel))
+    except ClassificationCandidatesError as exc:
+        print(f"[ERRO] {exc}")
+        return 1
+
+    if report_path:
+        for line in candidates_console_lines(result):
+            print(line)
+        if not _try_save_candidates_report(report_path, text):
+            return 1
+        print(f"[OK] Relatorio salvo em: {report_path}")
+    else:
+        print(text, end="")
+
+    return 0
+
+
 def _add_config_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--plano-contas",
@@ -326,6 +374,15 @@ def _try_save_report(report_path: Path, text: str) -> bool:
 def _try_save_revision_report(report_path: Path, text: str) -> bool:
     try:
         save_revision_report(report_path, text)
+    except Exception:
+        print(f"[ERRO] Nao foi possivel salvar relatorio: {report_path}")
+        return False
+    return True
+
+
+def _try_save_candidates_report(report_path: Path, text: str) -> bool:
+    try:
+        save_candidates_report(report_path, text)
     except Exception:
         print(f"[ERRO] Nao foi possivel salvar relatorio: {report_path}")
         return False
