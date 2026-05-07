@@ -18,8 +18,8 @@ def resolver_arquivos_lancamentos_xlsx(entrada: Path | str) -> tuple[Path, ...]:
     Se entrada e um arquivo, valida que e .xlsx e retorna-o.
     Se entrada e um diretorio, recursa nele mas pula subdiretórios cujo nome
     (case-insensitive) esteja em _EXCLUDED_DIR_NAMES.
-    O ponto de entrada em si nunca e excluido — passar
-    runs/2026-05-06_001/ diretamente funciona corretamente.
+    Passar uma run especifica diretamente (runs/2026-05-06_001/) funciona.
+    Passar a pasta agregadora (runs/) e rejeitado com ValueError.
     """
     entrada = Path(entrada)
     if not entrada.exists():
@@ -31,6 +31,11 @@ def resolver_arquivos_lancamentos_xlsx(entrada: Path | str) -> tuple[Path, ...]:
             raise PipelinePathsError(f"Arquivo temporario nao permitido: {entrada}")
         return (entrada,)
     if entrada.is_dir():
+        if entrada.name.lower() in _EXCLUDED_DIR_NAMES:
+            raise ValueError(
+                f"Entrada aponta para pasta agregadora de runs; "
+                f"informe uma run especifica em runs/{{run_id}}: {entrada}"
+            )
         found = _find_xlsx_in_dir(entrada)
         if not found:
             raise PipelinePathsError(

@@ -179,3 +179,21 @@ def test_resolver_exclui_dirs_case_insensitive(tmp_path):
     result = resolver_arquivos_lancamentos_xlsx(tmp_path)
 
     assert result == (xlsx_ok,)
+
+
+def test_resolver_rejeita_pasta_agregadora_runs(tmp_path):
+    """Passar runs/ diretamente deve falhar — misturaria todas as runs."""
+    runs_dir = tmp_path / "runs"
+    _make_xlsx(runs_dir / "2026-05-06_001" / "cnpj" / "l.xlsx")
+
+    with pytest.raises(ValueError, match="run especifica"):
+        resolver_arquivos_lancamentos_xlsx(runs_dir)
+
+
+def test_resolver_rejeita_pasta_agregadora_runs_case_insensitive(tmp_path):
+    """RUNS, Runs devem ser rejeitados da mesma forma que runs."""
+    runs_upper = tmp_path / "RUNS"
+    _make_xlsx(runs_upper / "2026-05-06_001" / "cnpj" / "l.xlsx")
+
+    with pytest.raises(ValueError, match="run especifica"):
+        resolver_arquivos_lancamentos_xlsx(runs_upper)

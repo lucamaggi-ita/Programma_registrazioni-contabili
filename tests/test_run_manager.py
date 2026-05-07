@@ -223,6 +223,75 @@ def test_manifesto_cnpj_pasta_vs_cnpj_real(tmp_path):
     assert "nota" in fonte
 
 
+def test_manifesto_cnpj_real_lido_de_xml_apos_primeiros_invalidos(tmp_path):
+    """Os 3 primeiros XML sem CNPJ legivel nao devem impedir a leitura do 4o."""
+    xml_base = tmp_path / "xml_base"
+    xml_base.mkdir()
+    xml_dir = xml_base / "8884180000123" / "xml"
+    xml_dir.mkdir(parents=True)
+
+    # XML invalido (malformado)
+    (xml_dir / "nota_01.xml").write_text("nao e xml valido", encoding="utf-8")
+    # XML sem elemento dest
+    (xml_dir / "nota_02.xml").write_text(
+        '<?xml version="1.0"?>'
+        '<nfeProc xmlns="http://www.portalfiscal.inf.br/nfe">'
+        '<NFe><infNFe Id="NFe1"></infNFe></NFe>'
+        '</nfeProc>',
+        encoding="utf-8",
+    )
+    # XML com dest mas sem CNPJ (apenas CPF)
+    (xml_dir / "nota_03.xml").write_text(
+        '<?xml version="1.0"?>'
+        '<nfeProc xmlns="http://www.portalfiscal.inf.br/nfe">'
+        '<NFe><infNFe Id="NFe1"><dest><CPF>12345678901</CPF></dest></infNFe></NFe>'
+        '</nfeProc>',
+        encoding="utf-8",
+    )
+    # XML valido com CNPJ real — deve ser encontrado
+    _make_nfe_xml(xml_dir / "nota_04.xml", "08884180000123")
+
+    out = tmp_path / "output"
+    rep = tmp_path / "reports"
+    result = preparar_run(
+        xml_base, out, rep, today=date(2026, 5, 6), project_root=tmp_path
+    )
+
+    data = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    fonte = data["fontes_xml"][0]
+    assert fonte["cnpj_pasta"] == "8884180000123"
+    assert fonte["cnpj_real"] == "08884180000123"
+    assert fonte["origem_cnpj_real"] == "lido_do_xml"
+
+
+def test_manifesto_cnpj_real_inferido_da_pasta_quando_xml_sem_cnpj(tmp_path):
+    """Quando nenhum XML fornece CNPJ, usa zero-padding com origem inferido_da_pasta."""
+    xml_base = tmp_path / "xml_base"
+    xml_base.mkdir()
+    xml_dir = xml_base / "8884180000123" / "xml"
+    xml_dir.mkdir(parents=True)
+    # XML sem CNPJ do dest
+    (xml_dir / "nota.xml").write_text(
+        '<?xml version="1.0"?>'
+        '<nfeProc xmlns="http://www.portalfiscal.inf.br/nfe">'
+        '<NFe><infNFe Id="NFe1"></infNFe></NFe>'
+        '</nfeProc>',
+        encoding="utf-8",
+    )
+
+    out = tmp_path / "output"
+    rep = tmp_path / "reports"
+    result = preparar_run(
+        xml_base, out, rep, today=date(2026, 5, 6), project_root=tmp_path
+    )
+
+    data = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    fonte = data["fontes_xml"][0]
+    assert fonte["cnpj_pasta"] == "8884180000123"
+    assert fonte["cnpj_real"] == "08884180000123"
+    assert fonte["origem_cnpj_real"] == "inferido_da_pasta"
+
+
 # ---------------------------------------------------------------------------
 # Validacao de paths
 # ---------------------------------------------------------------------------

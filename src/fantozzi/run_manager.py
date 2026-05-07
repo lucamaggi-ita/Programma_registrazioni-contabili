@@ -300,7 +300,7 @@ def _resolve_cnpj(
     cnpj_pasta: str,
     xml_files: list[Path],
 ) -> tuple[str, str, str]:
-    for xml_path in xml_files[:3]:
+    for xml_path in xml_files:
         cnpj = _ler_cnpj_dest_xml(xml_path)
         if cnpj:
             nota = ""
