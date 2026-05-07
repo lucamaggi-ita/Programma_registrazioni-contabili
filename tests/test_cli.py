@@ -346,6 +346,30 @@ def test_parser_accepts_auditar_relatorios_gerenciais_ok_provisorios_command():
     ]
 
 
+def test_parser_accepts_gerar_dre_gerencial_ok_provisoria_command():
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "gerar-dre-gerencial-ok-provisoria",
+            "--entrada",
+            "output/importacao_real",
+            "--mapeamento-dre",
+            "config/mapeamento_dre.yaml",
+            "--saida-xlsx",
+            "reports/importacao_real/dre_gerencial_ok_provisoria.xlsx",
+            "--relatorio",
+            "reports/importacao_real/dre_gerencial_ok_provisoria.txt",
+        ]
+    )
+
+    assert args.command == "gerar-dre-gerencial-ok-provisoria"
+    assert args.entrada == ["output/importacao_real"]
+    assert args.mapeamento_dre == "config/mapeamento_dre.yaml"
+    assert args.saida_xlsx == "reports/importacao_real/dre_gerencial_ok_provisoria.xlsx"
+    assert args.relatorio == "reports/importacao_real/dre_gerencial_ok_provisoria.txt"
+
+
 def test_general_help_returns_zero_and_lists_commands(capsys):
     with pytest.raises(SystemExit) as exc_info:
         main(["--help"])
@@ -369,6 +393,7 @@ def test_general_help_returns_zero_and_lists_commands(capsys):
     assert "gerar-pacote-revisao-contabil" in captured.out
     assert "gerar-relatorios-gerenciais-ok-provisorios" in captured.out
     assert "auditar-relatorios-gerenciais-ok-provisorios" in captured.out
+    assert "gerar-dre-gerencial-ok-provisoria" in captured.out
 
 
 def test_importar_nfe_help_returns_zero_and_lists_options(capsys):
@@ -556,6 +581,18 @@ def test_auditar_relatorios_gerenciais_ok_provisorios_help_lists_options(capsys)
     assert "--saida-xlsx" in captured.out
     assert "--relatorio" in captured.out
     assert "--pasta-operacoes-especiais" in captured.out
+
+
+def test_gerar_dre_gerencial_ok_provisoria_help_lists_options(capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        main(["gerar-dre-gerencial-ok-provisoria", "--help"])
+
+    captured = capsys.readouterr()
+    assert exc_info.value.code == 0
+    assert "--entrada" in captured.out
+    assert "--mapeamento-dre" in captured.out
+    assert "--saida-xlsx" in captured.out
+    assert "--relatorio" in captured.out
 
 
 def test_importar_nfe_command_writes_excel_with_sample_xml(tmp_path):
@@ -1391,6 +1428,51 @@ def test_auditar_relatorios_gerenciais_ok_provisorios_command_gera_xlsx_e_txt(
     assert output_path.exists()
     assert report_path.exists()
     assert "[OK] Auditoria dos relatorios gerenciais OK provisorios gerada." in captured.out
+
+
+def test_gerar_dre_gerencial_ok_provisoria_command_gera_xlsx_e_txt(
+    tmp_path,
+    capsys,
+):
+    excel_path = tmp_path / "55746722000181" / "lancamentos.xlsx"
+    excel_path.parent.mkdir(parents=True)
+    _save_revision_workbook(excel_path)
+    mapping_path = tmp_path / "mapeamento_dre.yaml"
+    mapping_path.write_text(
+        """\
+linhas_dre:
+  - id: "03.02"
+    nome: "CMV - Bebidas"
+    grupo: "Custos"
+    sinal: "-"
+    ordem: 302
+mapeamento:
+  "2.01.004": { dre_linha_id: "03.02", entra_dre: true }
+""",
+        encoding="utf-8",
+    )
+    output_path = tmp_path / "reports" / "dre.xlsx"
+    report_path = tmp_path / "reports" / "dre.txt"
+
+    result = main(
+        [
+            "gerar-dre-gerencial-ok-provisoria",
+            "--entrada",
+            str(excel_path.parent),
+            "--mapeamento-dre",
+            str(mapping_path),
+            "--saida-xlsx",
+            str(output_path),
+            "--relatorio",
+            str(report_path),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert result == 0
+    assert output_path.exists()
+    assert report_path.exists()
+    assert "[OK] DRE gerencial OK provisoria gerada." in captured.out
 
 
 def _xml_dir_with_sample(tmp_path: Path, *, filename: str = "sample.xml") -> Path:

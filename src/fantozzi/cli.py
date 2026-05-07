@@ -51,6 +51,12 @@ from fantozzi.classification_rule_proposal import (
     gerar_relatorio_proposta_classificacao,
     salvar_relatorio_proposta,
 )
+from fantozzi.dre_gerencial_provisoria import (
+    DEFAULT_MAPEAMENTO_DRE,
+    DreGerencialProvisoriaError,
+    console_lines as dre_provisoria_console_lines,
+    gerar_dre_gerencial_ok_provisoria,
+)
 from fantozzi.excel_diagnostics import (
     ExcelDiagnosticError,
     ExcelDiagnosticFailure,
@@ -161,7 +167,12 @@ def build_parser() -> argparse.ArgumentParser:
             "auditar-relatorios-gerenciais-ok-provisorios "
             "--entrada output\\importacao_real "
             "--saida-xlsx reports\\auditoria_relatorios_gerenciais_ok.xlsx "
-            "--relatorio reports\\auditoria_relatorios_gerenciais_ok.txt"
+            "--relatorio reports\\auditoria_relatorios_gerenciais_ok.txt\n"
+            "  .\\.venv\\Scripts\\python.exe -m fantozzi.cli "
+            "gerar-dre-gerencial-ok-provisoria "
+            "--entrada output\\importacao_real "
+            "--saida-xlsx reports\\dre_gerencial_ok_provisoria.xlsx "
+            "--relatorio reports\\dre_gerencial_ok_provisoria.txt"
         ),
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -589,6 +600,47 @@ def build_parser() -> argparse.ArgumentParser:
     auditar_relatorios_ok.set_defaults(
         func=auditar_relatorios_gerenciais_ok_provisorios_command
     )
+
+    gerar_dre_provisoria = subparsers.add_parser(
+        "gerar-dre-gerencial-ok-provisoria",
+        help="Gera DRE gerencial provisoria somente com lancamentos OK.",
+        description=(
+            "Le Excel de lancamentos ou diretorios com Excel, usa somente "
+            "status_revisao OK nao especial e aplica mapeamento DRE em modo "
+            "somente leitura. Gera XLSX e TXT provisorios."
+        ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    gerar_dre_provisoria.add_argument(
+        "--entrada",
+        action="append",
+        required=True,
+        help="Arquivo Excel .xlsx ou diretorio com Excel de lancamentos.",
+    )
+    gerar_dre_provisoria.add_argument(
+        "--mapeamento-dre",
+        default=str(DEFAULT_MAPEAMENTO_DRE),
+        help="Arquivo YAML de mapeamento DRE consultado em modo leitura.",
+    )
+    gerar_dre_provisoria.add_argument(
+        "--saida-xlsx",
+        required=True,
+        help="Arquivo XLSX de saida da DRE gerencial OK provisoria.",
+    )
+    gerar_dre_provisoria.add_argument(
+        "--relatorio",
+        help="Arquivo TXT opcional para salvar o resumo da DRE.",
+    )
+    gerar_dre_provisoria.add_argument(
+        "--pasta-operacoes-especiais",
+        action="append",
+        default=[],
+        help=(
+            "Pasta XML opcional para auditar e excluir comodato, bonificacao "
+            "e outras operacoes especiais."
+        ),
+    )
+    gerar_dre_provisoria.set_defaults(func=gerar_dre_gerencial_ok_provisoria_command)
 
     return parser
 
@@ -1018,6 +1070,30 @@ def auditar_relatorios_gerenciais_ok_provisorios_command(
         return 1
 
     for line in auditoria_relatorios_ok_console_lines(result):
+        print(line)
+    return 0
+
+
+def gerar_dre_gerencial_ok_provisoria_command(args: argparse.Namespace) -> int:
+    try:
+        result = gerar_dre_gerencial_ok_provisoria(
+            [Path(entrada) for entrada in args.entrada],
+            Path(args.mapeamento_dre),
+            Path(args.saida_xlsx),
+            Path(args.relatorio) if args.relatorio else None,
+            [Path(pasta) for pasta in (args.pasta_operacoes_especiais or [])],
+        )
+    except DreGerencialProvisoriaError as exc:
+        print(f"[ERRO] {exc}")
+        return 1
+    except Exception:
+        print(
+            "[ERRO] Nao foi possivel gerar DRE gerencial OK provisoria: "
+            f"{args.saida_xlsx}"
+        )
+        return 1
+
+    for line in dre_provisoria_console_lines(result):
         print(line)
     return 0
 
