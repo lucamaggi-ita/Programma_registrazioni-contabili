@@ -4,6 +4,11 @@ import argparse
 from pathlib import Path
 
 from fantozzi.allocation import allocate_nfe_to_lancamentos
+from fantozzi.auditoria_relatorios_gerenciais_ok import (
+    AuditoriaRelatoriosGerenciaisOkError,
+    auditar_relatorios_gerenciais_ok_provisorios,
+    console_lines as auditoria_relatorios_ok_console_lines,
+)
 from fantozzi.chart_of_accounts import ChartOfAccounts
 from fantozzi.classification_candidates import (
     ClassificationCandidatesError,
@@ -151,7 +156,12 @@ def build_parser() -> argparse.ArgumentParser:
             "gerar-relatorios-gerenciais-ok-provisorios "
             "--entrada output\\importacao_real "
             "--saida-xlsx reports\\relatorios_gerenciais_ok_provisorios.xlsx "
-            "--relatorio reports\\relatorios_gerenciais_ok_provisorios.txt"
+            "--relatorio reports\\relatorios_gerenciais_ok_provisorios.txt\n"
+            "  .\\.venv\\Scripts\\python.exe -m fantozzi.cli "
+            "auditar-relatorios-gerenciais-ok-provisorios "
+            "--entrada output\\importacao_real "
+            "--saida-xlsx reports\\auditoria_relatorios_gerenciais_ok.xlsx "
+            "--relatorio reports\\auditoria_relatorios_gerenciais_ok.txt"
         ),
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -540,6 +550,44 @@ def build_parser() -> argparse.ArgumentParser:
     )
     gerar_relatorios_ok.set_defaults(
         func=gerar_relatorios_gerenciais_ok_provisorios_command
+    )
+
+    auditar_relatorios_ok = subparsers.add_parser(
+        "auditar-relatorios-gerenciais-ok-provisorios",
+        help="Audita criterios e reconciliacoes dos relatorios gerenciais OK.",
+        description=(
+            "Le a mesma base dos relatorios gerenciais OK provisorios e verifica "
+            "reconciliacoes entre OK, REVISAR e operacoes especiais. Gera XLSX "
+            "e TXT de auditoria sem alterar dados de origem."
+        ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    auditar_relatorios_ok.add_argument(
+        "--entrada",
+        action="append",
+        required=True,
+        help="Arquivo Excel .xlsx ou diretorio com Excel de lancamentos.",
+    )
+    auditar_relatorios_ok.add_argument(
+        "--saida-xlsx",
+        required=True,
+        help="Arquivo XLSX de saida da auditoria.",
+    )
+    auditar_relatorios_ok.add_argument(
+        "--relatorio",
+        help="Arquivo TXT opcional para salvar o resumo da auditoria.",
+    )
+    auditar_relatorios_ok.add_argument(
+        "--pasta-operacoes-especiais",
+        action="append",
+        default=[],
+        help=(
+            "Pasta XML opcional para auditar comodato, bonificacao e outras "
+            "operacoes especiais."
+        ),
+    )
+    auditar_relatorios_ok.set_defaults(
+        func=auditar_relatorios_gerenciais_ok_provisorios_command
     )
 
     return parser
@@ -945,6 +993,31 @@ def gerar_relatorios_gerenciais_ok_provisorios_command(
         return 1
 
     for line in relatorios_ok_console_lines(result):
+        print(line)
+    return 0
+
+
+def auditar_relatorios_gerenciais_ok_provisorios_command(
+    args: argparse.Namespace,
+) -> int:
+    try:
+        result = auditar_relatorios_gerenciais_ok_provisorios(
+            [Path(entrada) for entrada in args.entrada],
+            Path(args.saida_xlsx),
+            Path(args.relatorio) if args.relatorio else None,
+            [Path(pasta) for pasta in (args.pasta_operacoes_especiais or [])],
+        )
+    except AuditoriaRelatoriosGerenciaisOkError as exc:
+        print(f"[ERRO] {exc}")
+        return 1
+    except Exception:
+        print(
+            "[ERRO] Nao foi possivel auditar relatorios gerenciais OK "
+            f"provisorios: {args.saida_xlsx}"
+        )
+        return 1
+
+    for line in auditoria_relatorios_ok_console_lines(result):
         print(line)
     return 0
 
