@@ -394,6 +394,7 @@ def test_general_help_returns_zero_and_lists_commands(capsys):
     assert "gerar-relatorios-gerenciais-ok-provisorios" in captured.out
     assert "auditar-relatorios-gerenciais-ok-provisorios" in captured.out
     assert "gerar-dre-gerencial-ok-provisoria" in captured.out
+    assert "reprocessar-importacao-real" in captured.out
 
 
 def test_importar_nfe_help_returns_zero_and_lists_options(capsys):
@@ -1692,6 +1693,26 @@ def test_parser_aceita_preparar_run_reprocessamento():
     assert args.dry_run is False
 
 
+def test_parser_aceita_reprocessar_importacao_real():
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "reprocessar-importacao-real",
+            "--xml-base", "XML_fatture_acquisto",
+            "--saida-output", "output/importacao_real",
+            "--saida-reports", "reports/importacao_real",
+        ]
+    )
+
+    assert args.command == "reprocessar-importacao-real"
+    assert args.xml_base == "XML_fatture_acquisto"
+    assert args.saida_output == "output/importacao_real"
+    assert args.saida_reports == "reports/importacao_real"
+    assert args.modo == "provisorio"
+    assert args.dry_run is False
+
+
 def test_cli_preparar_run_cria_pastas_manifesto_current_run(tmp_path, capsys):
     import json
 
@@ -1796,3 +1817,87 @@ def test_cli_preparar_run_rejeita_xml_base_dentro_saida(tmp_path, capsys):
     captured = capsys.readouterr()
     assert result == 1
     assert "[ERRO]" in captured.out
+
+
+def test_cli_reprocessar_importacao_real_dry_run_nao_escreve(tmp_path, capsys):
+    xml_base = tmp_path / "XML_fatture_acquisto"
+    (xml_base / "55746722000181" / "xml").mkdir(parents=True)
+    saida_output = tmp_path / "output"
+    saida_reports = tmp_path / "reports"
+
+    from fantozzi import run_manager as _rm
+    original_root = _rm.PROJECT_ROOT
+    _rm.PROJECT_ROOT = tmp_path
+    try:
+        result = main(
+            [
+                "reprocessar-importacao-real",
+                "--xml-base", str(xml_base),
+                "--saida-output", str(saida_output),
+                "--saida-reports", str(saida_reports),
+                "--dry-run",
+            ]
+        )
+    finally:
+        _rm.PROJECT_ROOT = original_root
+
+    captured = capsys.readouterr()
+    assert result == 0
+    assert "[DRY-RUN] Nenhum arquivo foi criado." in captured.out
+    assert "[DRY-RUN] Nenhum XML foi importado." in captured.out
+    assert "[DRY-RUN] Nenhum relatorio foi gerado." in captured.out
+    assert not (saida_output / "runs").exists()
+    assert not (saida_reports / "runs").exists()
+    assert not (saida_output / "current_run.txt").exists()
+    assert not (saida_reports / "current_run.txt").exists()
+
+
+def test_cli_reprocessar_importacao_real_bloqueia_modo_definitivo(tmp_path, capsys):
+    xml_base = tmp_path / "XML_fatture_acquisto"
+    xml_base.mkdir()
+
+    from fantozzi import run_manager as _rm
+    original_root = _rm.PROJECT_ROOT
+    _rm.PROJECT_ROOT = tmp_path
+    try:
+        result = main(
+            [
+                "reprocessar-importacao-real",
+                "--xml-base", str(xml_base),
+                "--saida-output", str(tmp_path / "output"),
+                "--saida-reports", str(tmp_path / "reports"),
+                "--modo", "definitivo",
+            ]
+        )
+    finally:
+        _rm.PROJECT_ROOT = original_root
+
+    captured = capsys.readouterr()
+    assert result == 1
+    assert "[ERRO] Modo definitivo bloqueado: Fase 9 ainda nao foi aprovada." in captured.out
+
+
+def test_cli_retorna_erro_quando_pipeline_falha(monkeypatch, tmp_path, capsys):
+    from fantozzi import reprocessamento_pipeline
+
+    def _falha(**kwargs):
+        raise reprocessamento_pipeline.ReprocessamentoPipelineError("falha controlada")
+
+    monkeypatch.setattr(
+        reprocessamento_pipeline,
+        "reprocessar_importacao_real_provisoria",
+        _falha,
+    )
+
+    result = main(
+        [
+            "reprocessar-importacao-real",
+            "--xml-base", str(tmp_path / "xml"),
+            "--saida-output", str(tmp_path / "output"),
+            "--saida-reports", str(tmp_path / "reports"),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert result == 1
+    assert "[ERRO] falha controlada" in captured.out

@@ -147,6 +147,17 @@ def update_manifest_status(manifest_path: Path, status: str) -> None:
     )
 
 
+def load_manifest(manifest_path: Path) -> dict:
+    return json.loads(manifest_path.read_text(encoding="utf-8"))
+
+
+def save_manifest(manifest_path: Path, data: dict) -> None:
+    manifest_path.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
 # ---------------------------------------------------------------------------
 # Internos
 # ---------------------------------------------------------------------------

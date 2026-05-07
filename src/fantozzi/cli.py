@@ -92,6 +92,7 @@ from fantozzi.relatorios_gerenciais_ok import (
     console_lines as relatorios_ok_console_lines,
     gerar_relatorios_gerenciais_ok_provisorios,
 )
+from fantozzi import reprocessamento_pipeline
 from fantozzi.run_manager import RunManagerError, preparar_run
 
 
@@ -676,6 +677,44 @@ def build_parser() -> argparse.ArgumentParser:
     )
     preparar_run_cmd.set_defaults(func=preparar_run_reprocessamento_command)
 
+    reprocessar_real = subparsers.add_parser(
+        "reprocessar-importacao-real",
+        help="Executa pipeline provisoria completa de reprocessamento real.",
+        description=(
+            "Cria uma nova run segura, importa XML reais dentro da run e gera "
+            "relatorios provisorios. Modo definitivo permanece bloqueado."
+        ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    reprocessar_real.add_argument(
+        "--xml-base",
+        required=True,
+        help="Pasta raiz com subpastas de XML NF-e por CNPJ.",
+    )
+    reprocessar_real.add_argument(
+        "--saida-output",
+        required=True,
+        help="Pasta raiz de output onde sera criada runs/{run_id}/.",
+    )
+    reprocessar_real.add_argument(
+        "--saida-reports",
+        required=True,
+        help="Pasta raiz de reports onde sera criada runs/{run_id}/.",
+    )
+    reprocessar_real.add_argument(
+        "--modo",
+        choices=("provisorio", "definitivo"),
+        default="provisorio",
+        help="Modo de execucao da pipeline.",
+    )
+    reprocessar_real.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        help="Calcula run e etapas sem escrever arquivos nem importar XML.",
+    )
+    reprocessar_real.set_defaults(func=reprocessar_importacao_real_command)
+
     return parser
 
 
@@ -1161,6 +1200,44 @@ def preparar_run_reprocessamento_command(args: argparse.Namespace) -> int:
         print(f"[OK] current_run.txt atualizado: {result.current_run_output}")
         print(f"[OK] current_run.txt atualizado: {result.current_run_reports}")
         print("[INFO] Nenhum reprocessamento executado nesta fase.")
+    return 0
+
+
+def reprocessar_importacao_real_command(args: argparse.Namespace) -> int:
+    try:
+        result = reprocessamento_pipeline.reprocessar_importacao_real_provisoria(
+            xml_base=Path(args.xml_base),
+            saida_output=Path(args.saida_output),
+            saida_reports=Path(args.saida_reports),
+            modo=args.modo,
+            dry_run=args.dry_run,
+        )
+    except reprocessamento_pipeline.ReprocessamentoPipelineError as exc:
+        print(f"[ERRO] {exc}")
+        return 1
+    except RunManagerError as exc:
+        print(f"[ERRO] {exc}")
+        return 1
+    except Exception as exc:
+        print(f"[ERRO] Nao foi possivel reprocessar importacao real: {exc}")
+        return 1
+
+    if result.dry_run:
+        print(f"[DRY-RUN] Run calculada: {result.run_id}")
+        print(f"[DRY-RUN] Output da run: {result.output_run_dir}")
+        print(f"[DRY-RUN] Reports da run: {result.reports_run_dir}")
+        print(f"[DRY-RUN] Manifesto (nao criado): {result.manifest_path}")
+        print("[DRY-RUN] Etapas previstas:")
+        for etapa in result.etapas_executadas:
+            print(f"     - {etapa}")
+        print("[DRY-RUN] Nenhum arquivo foi criado.")
+        print("[DRY-RUN] Nenhum XML foi importado.")
+        print("[DRY-RUN] Nenhum relatorio foi gerado.")
+        return 0
+
+    print(f"[OK] Reprocessamento provisorio concluido: {result.run_id}")
+    print(f"[OK] Manifesto: {result.manifest_path}")
+    print("[INFO] Fase 9 nao executada; relatorios permanecem provisorios.")
     return 0
 
 
