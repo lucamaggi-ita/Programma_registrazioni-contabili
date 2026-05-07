@@ -271,29 +271,16 @@ def relatorio_texto(
 def _resolve_excel_paths(entradas: tuple[Path, ...]) -> tuple[Path, ...]:
     if not entradas:
         raise RelatoriosGerenciaisOkError("Informe ao menos uma entrada.")
+    from fantozzi.pipeline_paths import (  # noqa: PLC0415
+        PipelinePathsError,
+        resolver_arquivos_lancamentos_xlsx,
+    )
     excel_paths: list[Path] = []
     for entrada in entradas:
-        if not entrada.exists():
-            raise RelatoriosGerenciaisOkError(f"Entrada nao encontrada: {entrada}")
-        if entrada.is_file():
-            if entrada.suffix.lower() != ".xlsx":
-                raise RelatoriosGerenciaisOkError(
-                    f"Entrada nao e um Excel .xlsx: {entrada}"
-                )
-            excel_paths.append(entrada)
-        elif entrada.is_dir():
-            excel_paths.extend(
-                sorted(
-                    (
-                        path
-                        for path in entrada.rglob("*.xlsx")
-                        if path.is_file() and not path.name.startswith("~$")
-                    ),
-                    key=lambda path: str(path).lower(),
-                )
-            )
-        else:
-            raise RelatoriosGerenciaisOkError(f"Entrada invalida: {entrada}")
+        try:
+            excel_paths.extend(resolver_arquivos_lancamentos_xlsx(entrada))
+        except PipelinePathsError as exc:
+            raise RelatoriosGerenciaisOkError(str(exc)) from exc
     unique = tuple(dict.fromkeys(excel_paths))
     if not unique:
         raise RelatoriosGerenciaisOkError("Nenhum Excel .xlsx encontrado nas entradas.")

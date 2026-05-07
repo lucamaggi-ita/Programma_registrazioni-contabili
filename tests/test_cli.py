@@ -1667,3 +1667,132 @@ regras_por_fornecedor: []
         encoding="utf-8",
     )
     return regras_path
+
+
+# ---------------------------------------------------------------------------
+# preparar-run-reprocessamento
+# ---------------------------------------------------------------------------
+
+def test_parser_aceita_preparar_run_reprocessamento():
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "preparar-run-reprocessamento",
+            "--xml-base", "XML_fatture_acquisto",
+            "--saida-output", "output/importacao_real",
+            "--saida-reports", "reports/importacao_real",
+        ]
+    )
+
+    assert args.command == "preparar-run-reprocessamento"
+    assert args.xml_base == "XML_fatture_acquisto"
+    assert args.saida_output == "output/importacao_real"
+    assert args.saida_reports == "reports/importacao_real"
+    assert args.dry_run is False
+
+
+def test_cli_preparar_run_cria_pastas_manifesto_current_run(tmp_path, capsys):
+    import json
+
+    xml_base = tmp_path / "xml_base"
+    xml_base.mkdir()
+    saida_output = tmp_path / "output"
+    saida_reports = tmp_path / "reports"
+
+    from fantozzi import run_manager as _rm
+    original_root = _rm.PROJECT_ROOT
+    _rm.PROJECT_ROOT = tmp_path
+    try:
+        result = main(
+            [
+                "preparar-run-reprocessamento",
+                "--xml-base", str(xml_base),
+                "--saida-output", str(saida_output),
+                "--saida-reports", str(saida_reports),
+            ]
+        )
+    finally:
+        _rm.PROJECT_ROOT = original_root
+
+    captured = capsys.readouterr()
+    assert result == 0
+    assert "[OK] Run preparada:" in captured.out
+    assert "[OK] Manifesto criado:" in captured.out
+    assert "[OK] current_run.txt atualizado:" in captured.out
+
+    # Verifica arquivos criados
+    import re
+    run_id_match = re.search(r"\d{4}-\d{2}-\d{2}_\d{3}", captured.out)
+    assert run_id_match, "run_id nao encontrado no output"
+    run_id = run_id_match.group()
+
+    manifest_path = saida_reports / "runs" / run_id / "manifest_run.json"
+    assert manifest_path.exists()
+    data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert data["run_id"] == run_id
+    assert data["status_run"] == "INICIADA"
+
+    assert (saida_output / "runs" / run_id).is_dir()
+    assert (saida_output / "current_run.txt").read_text(encoding="utf-8").strip() == run_id
+    assert (saida_reports / "current_run.txt").read_text(encoding="utf-8").strip() == run_id
+
+    # Manifesto NAO em output
+    assert not (saida_output / "runs" / run_id / "manifest_run.json").exists()
+
+
+def test_cli_preparar_run_dry_run_nao_escreve_nada(tmp_path, capsys):
+    xml_base = tmp_path / "xml_base"
+    xml_base.mkdir()
+    saida_output = tmp_path / "output"
+    saida_reports = tmp_path / "reports"
+
+    from fantozzi import run_manager as _rm
+    original_root = _rm.PROJECT_ROOT
+    _rm.PROJECT_ROOT = tmp_path
+    try:
+        result = main(
+            [
+                "preparar-run-reprocessamento",
+                "--xml-base", str(xml_base),
+                "--saida-output", str(saida_output),
+                "--saida-reports", str(saida_reports),
+                "--dry-run",
+            ]
+        )
+    finally:
+        _rm.PROJECT_ROOT = original_root
+
+    captured = capsys.readouterr()
+    assert result == 0
+    assert "[DRY-RUN]" in captured.out
+    assert "Nenhum arquivo foi escrito" in captured.out
+    # Nenhum arquivo ou pasta criado
+    assert not saida_output.exists()
+    assert not saida_reports.exists()
+
+
+def test_cli_preparar_run_rejeita_xml_base_dentro_saida(tmp_path, capsys):
+    saida_output = tmp_path / "output"
+    saida_output.mkdir()
+    xml_dentro_saida = saida_output / "xml_base"
+    xml_dentro_saida.mkdir()
+
+    from fantozzi import run_manager as _rm
+    original_root = _rm.PROJECT_ROOT
+    _rm.PROJECT_ROOT = tmp_path
+    try:
+        result = main(
+            [
+                "preparar-run-reprocessamento",
+                "--xml-base", str(xml_dentro_saida),
+                "--saida-output", str(saida_output),
+                "--saida-reports", str(tmp_path / "reports"),
+            ]
+        )
+    finally:
+        _rm.PROJECT_ROOT = original_root
+
+    captured = capsys.readouterr()
+    assert result == 1
+    assert "[ERRO]" in captured.out

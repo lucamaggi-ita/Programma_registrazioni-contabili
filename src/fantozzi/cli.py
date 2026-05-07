@@ -92,6 +92,7 @@ from fantozzi.relatorios_gerenciais_ok import (
     console_lines as relatorios_ok_console_lines,
     gerar_relatorios_gerenciais_ok_provisorios,
 )
+from fantozzi.run_manager import RunManagerError, preparar_run
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -642,6 +643,39 @@ def build_parser() -> argparse.ArgumentParser:
     )
     gerar_dre_provisoria.set_defaults(func=gerar_dre_gerencial_ok_provisoria_command)
 
+    preparar_run_cmd = subparsers.add_parser(
+        "preparar-run-reprocessamento",
+        help="Prepara infraestrutura segura para uma nova run de reprocessamento.",
+        description=(
+            "Cria as pastas da run, current_run.txt e manifest_run.json inicial. "
+            "Nao executa importacao, DRE, pre-livro nem qualquer reprocessamento. "
+            "Com --dry-run, calcula run_id e caminhos sem escrever nada."
+        ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    preparar_run_cmd.add_argument(
+        "--xml-base",
+        required=True,
+        help="Pasta raiz com subpastas de XML NF-e por CNPJ.",
+    )
+    preparar_run_cmd.add_argument(
+        "--saida-output",
+        required=True,
+        help="Pasta raiz de output onde sera criada runs/{run_id}/.",
+    )
+    preparar_run_cmd.add_argument(
+        "--saida-reports",
+        required=True,
+        help="Pasta raiz de reports onde sera criada runs/{run_id}/ e manifest_run.json.",
+    )
+    preparar_run_cmd.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        help="Calcula run_id e caminhos sem criar pastas nem escrever arquivos.",
+    )
+    preparar_run_cmd.set_defaults(func=preparar_run_reprocessamento_command)
+
     return parser
 
 
@@ -1095,6 +1129,38 @@ def gerar_dre_gerencial_ok_provisoria_command(args: argparse.Namespace) -> int:
 
     for line in dre_provisoria_console_lines(result):
         print(line)
+    return 0
+
+
+def preparar_run_reprocessamento_command(args: argparse.Namespace) -> int:
+    try:
+        result = preparar_run(
+            xml_base=Path(args.xml_base),
+            saida_output=Path(args.saida_output),
+            saida_reports=Path(args.saida_reports),
+            dry_run=args.dry_run,
+        )
+    except RunManagerError as exc:
+        print(f"[ERRO] {exc}")
+        return 1
+    except Exception as exc:
+        print(f"[ERRO] Nao foi possivel preparar a run: {exc}")
+        return 1
+
+    if result.dry_run:
+        print(f"[DRY-RUN] Run calculada: {result.run_id}")
+        print(f"[DRY-RUN] Output da run: {result.output_run_dir}")
+        print(f"[DRY-RUN] Reports da run: {result.reports_run_dir}")
+        print(f"[DRY-RUN] Manifesto (nao criado): {result.manifest_path}")
+        print("[DRY-RUN] Nenhum arquivo foi escrito.")
+    else:
+        print(f"[OK] Run preparada: {result.run_id}")
+        print(f"[OK] Output da run: {result.output_run_dir}")
+        print(f"[OK] Reports da run: {result.reports_run_dir}")
+        print(f"[OK] Manifesto criado: {result.manifest_path}")
+        print(f"[OK] current_run.txt atualizado: {result.current_run_output}")
+        print(f"[OK] current_run.txt atualizado: {result.current_run_reports}")
+        print("[INFO] Nenhum reprocessamento executado nesta fase.")
     return 0
 
 
