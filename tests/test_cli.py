@@ -1,3 +1,4 @@
+import csv
 from pathlib import Path
 from shutil import copyfile
 
@@ -1102,7 +1103,11 @@ def test_gerar_planilha_revisao_classificacao_command_gera_xlsx(tmp_path, capsys
     assert result == 0
     assert output_path.exists()
     assert "[OK] Planilha assistida gerada:" in captured.out
-    assert load_workbook(output_path)["Revisao"].max_row == 2
+    workbook = load_workbook(output_path)
+    assert workbook["Revisao"].max_row == 2
+    assert "conta_escolhida" in [cell.value for cell in workbook["Revisao"][1]]
+    assert "Guia_Alias_e_Regras" in workbook.sheetnames
+    assert "Exemplos" in workbook.sheetnames
     assert csv_path.read_text(encoding="utf-8-sig") == original_csv
 
 
@@ -1156,6 +1161,41 @@ def test_importar_planilha_revisao_classificacao_command_gera_csv(tmp_path, caps
     assert "[OK] Planilha importada com sucesso." in captured.out
     assert "[OK] CSV revisado gerado:" in captured.out
     assert xlsx_path.read_bytes() == original_xlsx
+
+
+def test_importar_planilha_revisao_classificacao_command_aceita_conta_escolhida(
+    tmp_path,
+    capsys,
+):
+    xlsx_path = _save_assisted_review_workbook(
+        tmp_path,
+        formato_melhorado=True,
+        conta_escolhida="2.01.004 - Refrigerantes",
+        conta_id_sugerida="",
+        conta_nome_sugerida="",
+    )
+    csv_path = tmp_path / "reports" / "revisao_classificacao_revisada.csv"
+    plano_path = _save_proposal_plano_contas(tmp_path)
+
+    result = main(
+        [
+            "importar-planilha-revisao-classificacao",
+            "--xlsx",
+            str(xlsx_path),
+            "--saida",
+            str(csv_path),
+            "--plano-contas",
+            str(plano_path),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert result == 0
+    assert "[OK] Planilha importada com sucesso." in captured.out
+    with csv_path.open("r", encoding="utf-8-sig", newline="") as file:
+        row = next(csv.DictReader(file, delimiter=";"))
+    assert row["conta_id_sugerida"] == "2.01.004"
+    assert row["conta_nome_sugerida"] == "Refrigerantes"
 
 
 def test_importar_planilha_revisao_classificacao_command_aceita_relatorio(
@@ -1236,6 +1276,36 @@ def test_importar_planilha_revisao_classificacao_command_retorna_erro_acao_inval
     captured = capsys.readouterr()
     assert result == 1
     assert "[ERRO] Linha 2: acao_manual invalida: APROVAR" in captured.out
+    assert not csv_path.exists()
+
+
+def test_importar_planilha_revisao_classificacao_command_falha_regra_sem_palavras(
+    tmp_path,
+    capsys,
+):
+    xlsx_path = _save_assisted_review_workbook(
+        tmp_path,
+        acao_manual="CRIAR_REGRA",
+        palavras_chave_sugeridas="",
+    )
+    csv_path = tmp_path / "reports" / "revisao_classificacao_revisada.csv"
+    plano_path = _save_proposal_plano_contas(tmp_path)
+
+    result = main(
+        [
+            "importar-planilha-revisao-classificacao",
+            "--xlsx",
+            str(xlsx_path),
+            "--saida",
+            str(csv_path),
+            "--plano-contas",
+            str(plano_path),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert result == 1
+    assert "palavras_chave_sugeridas obrigatorias" in captured.out
     assert not csv_path.exists()
 
 
@@ -1585,12 +1655,18 @@ def _save_assisted_review_workbook(
     tmp_path: Path,
     *,
     acao_manual: str = "CLASSIFICAR",
+    conta_id_sugerida: str = "2.01.004",
+    conta_nome_sugerida: str = "Refrigerantes",
+    palavras_chave_sugeridas: str = "produto desconhecido",
+    conta_escolhida: str = "",
+    formato_melhorado: bool = False,
 ) -> Path:
     xlsx_path = tmp_path / "revisao_classificacao_assistida.xlsx"
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "Revisao"
-    sheet.append(CSV_HEADERS)
+    headers = [*CSV_HEADERS, "conta_escolhida"] if formato_melhorado else CSV_HEADERS
+    sheet.append(headers)
     row = {
         "tipo_candidato": "CLASSIFICACAO_PRODUTO",
         "descricao_normalizada": "produto desconhecido",
@@ -1604,12 +1680,13 @@ def _save_assisted_review_workbook(
         "status_revisao": "REVISAR",
         "alertas": "CLASSIFICACAO_NAO_ENCONTRADA",
         "acao_manual": acao_manual,
-        "conta_id_sugerida": "2.01.004",
-        "conta_nome_sugerida": "Refrigerantes",
-        "palavras_chave_sugeridas": "produto desconhecido",
+        "conta_id_sugerida": conta_id_sugerida,
+        "conta_nome_sugerida": conta_nome_sugerida,
+        "palavras_chave_sugeridas": palavras_chave_sugeridas,
         "observacao_manual": "",
+        "conta_escolhida": conta_escolhida,
     }
-    sheet.append([row.get(header, "") for header in CSV_HEADERS])
+    sheet.append([row.get(header, "") for header in headers])
     workbook.save(xlsx_path)
     return xlsx_path
 

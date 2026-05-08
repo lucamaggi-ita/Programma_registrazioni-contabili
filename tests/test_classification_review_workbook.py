@@ -5,6 +5,8 @@ from openpyxl import load_workbook
 from fantozzi.classification_review_export import CSV_HEADERS
 from fantozzi.classification_review_workbook import (
     ACOES_VALIDAS_SHEET,
+    EXEMPLOS_SHEET,
+    GUIA_ALIAS_REGRAS_SHEET,
     INSTRUCOES_SHEET,
     PLANO_CONTAS_SHEET,
     REVISAO_SHEET,
@@ -32,17 +34,20 @@ def test_workbook_contem_abas_obrigatorias(tmp_path):
         REVISAO_SHEET,
         PLANO_CONTAS_SHEET,
         ACOES_VALIDAS_SHEET,
+        GUIA_ALIAS_REGRAS_SHEET,
+        EXEMPLOS_SHEET,
         INSTRUCOES_SHEET,
     ]
 
 
-def test_aba_revisao_mantem_cabecalhos_originais_do_csv(tmp_path):
+def test_aba_revisao_mantem_cabecalhos_contratados_do_csv(tmp_path):
     output_path = _generate_workbook(tmp_path)
     sheet = load_workbook(output_path)[REVISAO_SHEET]
 
     headers = [cell.value for cell in sheet[1]]
 
-    assert headers == CSV_HEADERS
+    for header in CSV_HEADERS:
+        assert header in headers
 
 
 def test_colunas_manuais_esperadas_existem_na_aba_revisao(tmp_path):
@@ -51,6 +56,7 @@ def test_colunas_manuais_esperadas_existem_na_aba_revisao(tmp_path):
     headers = [cell.value for cell in sheet[1]]
 
     assert "acao_manual" in headers
+    assert "conta_escolhida" in headers
     assert "conta_id_sugerida" in headers
 
 
@@ -82,11 +88,15 @@ def test_plano_de_contas_e_carregado_do_yaml(tmp_path):
         "conta_id",
         "conta_nome",
         "grupo",
+        "nivel",
+        "conta_formatada",
+        "ativo",
         "observacao",
     ]
     assert sheet["A2"].value == "2.01.004"
     assert sheet["B2"].value == "Refrigerantes"
     assert sheet["C2"].value == "Custos de Mercadorias e Insumos"
+    assert sheet["E2"].value == "2.01.004 - Refrigerantes"
 
 
 def test_csv_original_nao_e_modificado(tmp_path):
@@ -117,7 +127,7 @@ def test_aba_revisao_tem_filtro_automatico(tmp_path):
     output_path = _generate_workbook(tmp_path)
     sheet = load_workbook(output_path)[REVISAO_SHEET]
 
-    assert sheet.auto_filter.ref == "A1:P3"
+    assert sheet.auto_filter.ref == sheet.dimensions
 
 
 def test_aba_revisao_congela_primeira_linha(tmp_path):
@@ -125,6 +135,54 @@ def test_aba_revisao_congela_primeira_linha(tmp_path):
     sheet = load_workbook(output_path)[REVISAO_SHEET]
 
     assert sheet.freeze_panes == "A2"
+
+
+def test_planilha_melhorada_tem_dropdown_conta_escolhida(tmp_path):
+    output_path = _generate_workbook(tmp_path)
+    sheet = load_workbook(output_path)[REVISAO_SHEET]
+    headers = [cell.value for cell in sheet[1]]
+    conta_col = headers.index("conta_escolhida") + 1
+    conta_letter = sheet.cell(row=1, column=conta_col).column_letter
+    validations = list(sheet.data_validations.dataValidation)
+
+    assert any(
+        validation.type == "list"
+        and "Plano_de_Contas!$E$2:$E$3" in validation.formula1
+        and f"{conta_letter}2:{conta_letter}3" in str(validation.sqref)
+        for validation in validations
+    )
+
+
+def test_planilha_melhorada_tem_guia_alias_e_regras(tmp_path):
+    output_path = _generate_workbook(tmp_path)
+    sheet = load_workbook(output_path)[GUIA_ALIAS_REGRAS_SHEET]
+    values = [cell.value for row in sheet.iter_rows() for cell in row if cell.value]
+
+    assert "ALIAS" in values
+    assert "REGRA" in values
+    assert any("prefira CRIAR_ALIAS" in value for value in values if isinstance(value, str))
+
+
+def test_planilha_melhorada_tem_exemplos_alias_e_regras(tmp_path):
+    output_path = _generate_workbook(tmp_path)
+    sheet = load_workbook(output_path)[EXEMPLOS_SHEET]
+    values = [cell.value for row in sheet.iter_rows() for cell in row if cell.value]
+
+    assert "CRIAR_ALIAS" in values
+    assert "CRIAR_REGRA" in values
+    assert any("Evite palavras genericas" in value for value in values)
+
+
+def test_planilha_melhorada_nao_exige_digitacao_manual_conta_id(tmp_path):
+    output_path = _generate_workbook(tmp_path)
+    sheet = load_workbook(output_path)[REVISAO_SHEET]
+    headers = [cell.value for cell in sheet[1]]
+    conta_escolhida_col = headers.index("conta_escolhida") + 1
+    conta_id_col = headers.index("conta_id_sugerida") + 1
+
+    assert not sheet.cell(row=2, column=conta_escolhida_col).protection.locked
+    assert sheet.cell(row=2, column=conta_id_col).protection.locked
+    assert sheet.protection.sheet
 
 
 def _generate_workbook(tmp_path: Path) -> Path:

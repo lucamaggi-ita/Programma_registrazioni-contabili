@@ -105,7 +105,7 @@ def test_falha_se_classificar_sem_conta_id_sugerida(tmp_path):
             xlsx_path, tmp_path / "revisao.csv", plano_path
         )
 
-    assert "conta_id_sugerida obrigatoria para acao_manual CLASSIFICAR" in str(
+    assert "conta_escolhida obrigatoria para acao_manual CLASSIFICAR" in str(
         exc_info.value
     )
 
@@ -121,8 +121,116 @@ def test_falha_se_criar_regra_sem_conta_id_sugerida(tmp_path):
             xlsx_path, tmp_path / "revisao.csv", plano_path
         )
 
-    assert "conta_id_sugerida obrigatoria para acao_manual CRIAR_REGRA" in str(
+    assert "conta_escolhida obrigatoria para acao_manual CRIAR_REGRA" in str(
         exc_info.value
+    )
+
+
+def test_importa_conta_escolhida_e_preenche_conta_id_e_nome(tmp_path):
+    xlsx_path = _save_review_workbook(
+        tmp_path,
+        rows=[
+            _row(
+                acao_manual="CLASSIFICAR",
+                conta_id_sugerida="",
+                conta_nome_sugerida="",
+                conta_escolhida="1.01.002 - Bebidas",
+            )
+        ],
+        headers=[*CSV_HEADERS, "conta_escolhida"],
+    )
+    plano_path = _save_plano_contas(tmp_path)
+    csv_path = tmp_path / "revisao.csv"
+
+    importar_planilha_revisao_classificacao(xlsx_path, csv_path, plano_path)
+
+    with csv_path.open("r", encoding="utf-8-sig", newline="") as file:
+        row = next(csv.DictReader(file, delimiter=";"))
+    assert row["conta_id_sugerida"] == "1.01.002"
+    assert row["conta_nome_sugerida"] == "Bebidas"
+
+
+def test_falha_se_criar_alias_sem_conta(tmp_path):
+    xlsx_path = _save_review_workbook(
+        tmp_path, rows=[_row(acao_manual="CRIAR_ALIAS", conta_id_sugerida="")]
+    )
+    plano_path = _save_plano_contas(tmp_path)
+
+    with pytest.raises(ClassificationReviewWorkbookImportError) as exc_info:
+        importar_planilha_revisao_classificacao(
+            xlsx_path, tmp_path / "revisao.csv", plano_path
+        )
+
+    assert "conta_escolhida obrigatoria para acao_manual CRIAR_ALIAS" in str(
+        exc_info.value
+    )
+
+
+def test_falha_se_criar_regra_sem_palavras_chave(tmp_path):
+    xlsx_path = _save_review_workbook(
+        tmp_path,
+        rows=[
+            _row(
+                acao_manual="CRIAR_REGRA",
+                conta_id_sugerida="1.01.001",
+                palavras_chave_sugeridas="",
+            )
+        ],
+    )
+    plano_path = _save_plano_contas(tmp_path)
+
+    with pytest.raises(ClassificationReviewWorkbookImportError) as exc_info:
+        importar_planilha_revisao_classificacao(
+            xlsx_path, tmp_path / "revisao.csv", plano_path
+        )
+
+    assert "palavras_chave_sugeridas obrigatorias" in str(exc_info.value)
+
+
+def test_rejeita_regra_com_todas_palavras_genericas(tmp_path):
+    xlsx_path = _save_review_workbook(
+        tmp_path,
+        rows=[
+            _row(
+                acao_manual="CRIAR_REGRA",
+                conta_id_sugerida="1.01.001",
+                palavras_chave_sugeridas="UN; KG; PET",
+            )
+        ],
+    )
+    plano_path = _save_plano_contas(tmp_path)
+
+    with pytest.raises(ClassificationReviewWorkbookImportError) as exc_info:
+        importar_planilha_revisao_classificacao(
+            xlsx_path, tmp_path / "revisao.csv", plano_path
+        )
+
+    assert "possui apenas palavras-chave genericas" in str(exc_info.value)
+
+
+def test_alerta_palavra_chave_generica(tmp_path):
+    xlsx_path = _save_review_workbook(
+        tmp_path,
+        rows=[
+            _row(
+                acao_manual="CRIAR_REGRA",
+                conta_id_sugerida="1.01.001",
+                palavras_chave_sugeridas="BEBIDA; REFRIGERANTE; PET",
+            )
+        ],
+    )
+    plano_path = _save_plano_contas(tmp_path)
+    csv_path = tmp_path / "revisao.csv"
+    report_path = tmp_path / "validacao.txt"
+
+    result = importar_planilha_revisao_classificacao(
+        xlsx_path, csv_path, plano_path, report_path
+    )
+
+    assert result.is_ok
+    assert result.avisos
+    assert "palavras-chave genericas detectadas" in report_path.read_text(
+        encoding="utf-8"
     )
 
 
