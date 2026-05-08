@@ -1228,7 +1228,7 @@ def reprocessar_importacao_real_command(args: argparse.Namespace) -> int:
         print(f"[DRY-RUN] Reports da run: {result.reports_run_dir}")
         print(f"[DRY-RUN] Manifesto (nao criado): {result.manifest_path}")
         print("[DRY-RUN] Etapas previstas:")
-        for etapa in result.etapas_executadas:
+        for etapa in result.etapas_previstas:
             print(f"     - {etapa}")
         print("[DRY-RUN] Nenhum arquivo foi criado.")
         print("[DRY-RUN] Nenhum XML foi importado.")

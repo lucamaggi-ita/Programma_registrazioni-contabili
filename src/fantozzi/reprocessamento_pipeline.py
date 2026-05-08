@@ -117,6 +117,7 @@ class ReprocessamentoResultado:
     etapas_executadas: tuple[str, ...]
     arquivos_gerados: tuple[Path, ...]
     avisos: tuple[str, ...]
+    etapas_previstas: tuple[str, ...] = ()
 
 
 def reprocessar_importacao_real_provisoria(
@@ -139,16 +140,14 @@ def reprocessar_importacao_real_provisoria(
     if modo != "provisorio":
         raise ReprocessamentoPipelineError(f"Modo invalido: {modo}")
 
-    fontes_xml = descobrir_fontes_xml(xml_base)
-    planned_run = run_manager.preparar_run(
-        xml_base=xml_base,
-        saida_output=saida_output,
-        saida_reports=saida_reports,
-        dry_run=True,
-        project_root=project_root,
-    )
-
     if dry_run:
+        planned_run = run_manager.preparar_run(
+            xml_base=xml_base,
+            saida_output=saida_output,
+            saida_reports=saida_reports,
+            dry_run=True,
+            project_root=project_root,
+        )
         return ReprocessamentoResultado(
             run_id=planned_run.run_id,
             output_run_dir=planned_run.output_run_dir,
@@ -156,15 +155,17 @@ def reprocessar_importacao_real_provisoria(
             manifest_path=planned_run.manifest_path,
             dry_run=True,
             status_run=run_manager.STATUS_DRY_RUN,
-            etapas_executadas=ETAPAS_PREVISTAS,
+            etapas_executadas=(),
             arquivos_gerados=(),
             avisos=(
                 "Nenhum arquivo foi criado.",
                 "Nenhum XML foi importado.",
                 "Nenhum relatorio foi gerado.",
             ),
+            etapas_previstas=ETAPAS_PREVISTAS,
         )
 
+    fontes_xml = descobrir_fontes_xml(xml_base)
     if not fontes_xml:
         raise ReprocessamentoPipelineError(
             f"Nenhuma fonte XML encontrada em: {xml_base}"
@@ -301,10 +302,17 @@ def reprocessar_importacao_real_provisoria(
         etapas_executadas=tuple(etapas_executadas),
         arquivos_gerados=tuple(arquivos_gerados),
         avisos=tuple(final_manifest.get("avisos", ())),
+        etapas_previstas=ETAPAS_PREVISTAS,
     )
 
 
 def descobrir_fontes_xml(xml_base: Path) -> tuple[XmlSource, ...]:
+    """Descobre fontes XML por CNPJ.
+
+    Estrutura preferida: <xml_base>/<cnpj>/xml/*.xml.
+    Tambem aceita XML diretamente em <xml_base>/<cnpj> para evitar silencio
+    quando a subpasta xml ainda nao existir.
+    """
     xml_base = Path(xml_base)
     if not xml_base.exists() or not xml_base.is_dir():
         return ()
@@ -315,6 +323,8 @@ def descobrir_fontes_xml(xml_base: Path) -> tuple[XmlSource, ...]:
         xml_dir = subdir / "xml"
         if xml_dir.is_dir():
             fontes.append(XmlSource(cnpj_pasta=subdir.name, xml_dir=xml_dir))
+        elif _find_xml_files(subdir):
+            fontes.append(XmlSource(cnpj_pasta=subdir.name, xml_dir=subdir))
     return tuple(fontes)
 
 
@@ -509,6 +519,11 @@ def _step_gerar_pacote_revisao(context: PipelineContext) -> StepResult:
             key=lambda path: str(path).lower(),
         )
     )
+    if not csv_paths:
+        raise ReprocessamentoPipelineError(
+            "Nenhum CSV de revisao_classificacao_real.csv encontrado "
+            "para gerar pacote de revisao contabil."
+        )
     output_path = context.reports_run_dir / "pacote_revisao_contabil_fase8_1.xlsx"
     report_path = context.reports_run_dir / "pacote_revisao_contabil_fase8_1.txt"
     result = gerar_pacote_revisao_contabil(

@@ -7,9 +7,13 @@ import pytest
 
 from fantozzi.reprocessamento_pipeline import (
     MODO_DEFINITIVO_BLOQUEADO,
+    ETAPAS_PREVISTAS,
+    PipelineContext,
     PipelineSteps,
     ReprocessamentoPipelineError,
     StepResult,
+    _step_gerar_pacote_revisao,
+    descobrir_fontes_xml,
     reprocessar_importacao_real_provisoria,
 )
 
@@ -310,6 +314,8 @@ def test_pipeline_dry_run_nao_escreve_nada(tmp_path):
     )
 
     assert result.dry_run is True
+    assert result.etapas_executadas == ()
+    assert result.etapas_previstas == ETAPAS_PREVISTAS
     assert calls == []
     assert not (saida_output / "runs").exists()
     assert not (saida_reports / "runs").exists()
@@ -379,3 +385,34 @@ def test_pipeline_quando_etapa_falha_preserva_arquivos_ja_gerados(tmp_path):
         / "55746722000181"
         / "lancamentos_fantozzi_real.xlsx"
     ).exists()
+
+
+def test_descobrir_fontes_xml_aceita_xml_direto_na_pasta_cnpj(tmp_path):
+    xml_base = tmp_path / "XML_fatture_acquisto"
+    cnpj_dir = xml_base / "55746722000181"
+    cnpj_dir.mkdir(parents=True)
+    (cnpj_dir / "nota.xml").write_text("<xml />", encoding="utf-8")
+
+    fontes = descobrir_fontes_xml(xml_base)
+
+    assert len(fontes) == 1
+    assert fontes[0].cnpj_pasta == "55746722000181"
+    assert fontes[0].xml_dir == cnpj_dir
+
+
+def test_gerar_pacote_revisao_falha_sem_csvs(tmp_path):
+    context = PipelineContext(
+        xml_base=tmp_path / "XML_fatture_acquisto",
+        saida_output=tmp_path / "output",
+        saida_reports=tmp_path / "reports",
+        project_root=tmp_path,
+        run_id="2026-05-07_001",
+        output_run_dir=tmp_path / "output" / "runs" / "2026-05-07_001",
+        reports_run_dir=tmp_path / "reports" / "runs" / "2026-05-07_001",
+        manifest_path=tmp_path / "reports" / "runs" / "2026-05-07_001" / "manifest_run.json",
+        fontes_xml=(),
+    )
+    context.reports_run_dir.mkdir(parents=True)
+
+    with pytest.raises(ReprocessamentoPipelineError, match="Nenhum CSV"):
+        _step_gerar_pacote_revisao(context)
