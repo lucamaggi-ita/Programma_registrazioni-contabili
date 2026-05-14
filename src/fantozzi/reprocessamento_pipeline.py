@@ -325,9 +325,11 @@ def descobrir_fontes_xml(xml_base: Path) -> tuple[XmlSource, ...]:
         if not subdir.is_dir():
             continue
         xml_dir = subdir / "xml"
-        if xml_dir.is_dir():
+        xml_dir_files = _find_xml_files(xml_dir) if xml_dir.is_dir() else []
+        direct_xml_files = _find_xml_files(subdir)
+        if xml_dir_files:
             fontes.append(XmlSource(cnpj_pasta=subdir.name, xml_dir=xml_dir))
-        elif _find_xml_files(subdir):
+        elif direct_xml_files:
             fontes.append(XmlSource(cnpj_pasta=subdir.name, xml_dir=subdir))
     return tuple(fontes)
 

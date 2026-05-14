@@ -132,6 +132,27 @@ def test_current_run_txt_contem_apenas_run_id(tmp_path):
     assert "\n" not in content_rep
 
 
+def test_preparar_run_dry_run_nao_escreve_infraestrutura(tmp_path):
+    xml, out, rep = _dirs(tmp_path)
+
+    result = preparar_run(
+        xml,
+        out,
+        rep,
+        dry_run=True,
+        today=date(2026, 5, 6),
+        project_root=tmp_path,
+    )
+
+    assert result.dry_run is True
+    assert result.run_id == "2026-05-06_001"
+    assert not result.output_run_dir.exists()
+    assert not result.reports_run_dir.exists()
+    assert not result.current_run_output.exists()
+    assert not result.current_run_reports.exists()
+    assert not result.manifest_path.exists()
+
+
 # ---------------------------------------------------------------------------
 # manifest_run.json
 # ---------------------------------------------------------------------------

@@ -281,6 +281,12 @@ def test_pipeline_provisoria_nao_mistura_runs(tmp_path):
     assert result.run_id != "2026-05-07_001"
     assert result.output_run_dir.name.endswith("_002")
     assert (saida_output / "runs" / "2026-05-07_001" / "antigo").exists()
+    assert (saida_output / "current_run.txt").read_text(encoding="utf-8").strip() == result.run_id
+    assert (saida_reports / "current_run.txt").read_text(encoding="utf-8").strip() == result.run_id
+    assert result.manifest_path == result.reports_run_dir / "manifest_run.json"
+    assert result.manifest_path.exists()
+    assert not (saida_reports / "runs" / "2026-05-07_001" / "manifest_run.json").exists()
+    assert {path for _, path in calls} == {result.output_run_dir}
 
 
 def test_pipeline_provisoria_nao_usa_raiz_output_como_entrada_consolidada(tmp_path):
@@ -323,6 +329,7 @@ def test_pipeline_dry_run_nao_escreve_nada(tmp_path):
     assert not (saida_reports / "runs").exists()
     assert not (saida_output / "current_run.txt").exists()
     assert not (saida_reports / "current_run.txt").exists()
+    assert not result.manifest_path.exists()
 
 
 def test_pipeline_quando_etapa_falha_status_manifesto_erro(tmp_path):
@@ -393,6 +400,19 @@ def test_descobrir_fontes_xml_aceita_xml_direto_na_pasta_cnpj(tmp_path):
     xml_base = tmp_path / "XML_fatture_acquisto"
     cnpj_dir = xml_base / "55746722000181"
     cnpj_dir.mkdir(parents=True)
+    (cnpj_dir / "nota.xml").write_text("<xml />", encoding="utf-8")
+
+    fontes = descobrir_fontes_xml(xml_base)
+
+    assert len(fontes) == 1
+    assert fontes[0].cnpj_pasta == "55746722000181"
+    assert fontes[0].xml_dir == cnpj_dir
+
+
+def test_descobrir_fontes_xml_aceita_xml_direto_com_subpasta_xml_vazia(tmp_path):
+    xml_base = tmp_path / "XML_fatture_acquisto"
+    cnpj_dir = xml_base / "55746722000181"
+    (cnpj_dir / "xml").mkdir(parents=True)
     (cnpj_dir / "nota.xml").write_text("<xml />", encoding="utf-8")
 
     fontes = descobrir_fontes_xml(xml_base)
