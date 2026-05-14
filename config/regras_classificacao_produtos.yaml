@@ -15,13 +15,18 @@ politica_de_match:
     Aliases curtos (3 chars ou menos) so fazem match por palavra inteira.
     Em caso de ambiguidade, usa a regra de maior prioridade mas registra alerta.
 
-# Regras por fornecedor (alta especificidade, executadas antes das regras gerais)
+# Regras por fornecedor (fallback quando produto nao tem classificacao segura)
 regras_por_fornecedor:
   - fornecedor_contem: "E SANTOS DE OLIVEIRA CARNES E DERIVADOS"
     produto_normalizado_contem: "kilos"
     conta_id: "2.02.001"
     conta_nome: "Carnes Bovinas"
     observacao: "Fornecedor usa descricao generica KILOS para carnes bovinas."
+  - fornecedor_aliases:
+      - pataxo
+    conta_id: "8.01.001"
+    conta_nome: "Manutencao Predial"
+    observacao: "Fornecedor recorrente de materiais de manutencao predial."
 
 # Regras gerais de classificacao
 regras:

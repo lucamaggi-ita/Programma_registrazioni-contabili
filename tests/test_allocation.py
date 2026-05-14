@@ -148,6 +148,24 @@ def test_unclassified_product_generates_revisar_status(product_classifier):
     assert "NAO_CLASSIFICADO" in lancamentos[0].alertas
 
 
+def test_supplier_rule_classifies_unmatched_product(product_classifier):
+    nfe = _synthetic_nfe(
+        chave="NFE-SUPPLIER-RULE-001",
+        valor_total=Decimal("100.00"),
+        duplicata_valor=Decimal("100.00"),
+        fornecedor="PATAXO MATERIAIS DE CONSTRUCAO LTDA EPP",
+        produto_descricao="ITEM GENERICO DE OBRA",
+    )
+
+    lancamentos = allocate_nfe_to_lancamentos(nfe, product_classifier)
+
+    assert len(lancamentos) == 1
+    assert lancamentos[0].conta_id == "8.01.001"
+    assert lancamentos[0].conta_nome == "Manutencao Predial"
+    assert lancamentos[0].status_revisao == "OK"
+    assert lancamentos[0].alertas == ""
+
+
 def test_positive_accessory_cost_creates_separate_lancamento(product_classifier):
     nfe = _synthetic_nfe(
         chave="NFE-ACCESSORY-001",
@@ -198,6 +216,8 @@ def _synthetic_nfe(
     duplicata_valor: Decimal,
     valor_frete: Decimal = Decimal("0.00"),
     valor_desconto: Decimal = Decimal("0.00"),
+    fornecedor: str = "FORNECEDOR TESTE",
+    produto_descricao: str = "COCA-COLA KS 290ML",
 ) -> NFE:
     return NFE(
         chave=chave,
@@ -205,7 +225,7 @@ def _synthetic_nfe(
         serie="1",
         data_emissao=date(2026, 5, 6),
         cnpj_emitente="12345678000195",
-        nome_emitente="FORNECEDOR TESTE",
+        nome_emitente=fornecedor,
         cnpj_destinatario="55746722000181",
         nome_destinatario="TRATTORIA DO SOSSEGO RESTAURANTE LTDA",
         valor_total=valor_total,
@@ -216,7 +236,7 @@ def _synthetic_nfe(
             ProdutoNFE(
                 n_item=1,
                 codigo="REFR",
-                descricao="COCA-COLA KS 290ML",
+                descricao=produto_descricao,
                 ncm="22021000",
                 cfop="5102",
                 unidade="CX",

@@ -154,6 +154,39 @@ def test_product_pataxo_fornecedor_nao_vira_manutencao(product_clf):
     assert result.confianca == "NAO_CLASSIFICADO"
 
 
+@pytest.mark.parametrize(
+    "fornecedor",
+    [
+        "PATAXO MATERIAIS DE CONSTRUCAO",
+        "pataxo materiais de construcao",
+        "Pataxo Materiais de Construcao",
+        "Pataxó Materiais de Construção",
+    ],
+)
+def test_product_fornecedor_pataxo_classifica_fallback_manutencao(
+    product_clf, fornecedor
+):
+    result = product_clf.classify("ITEM GENERICO DE OBRA", fornecedor=fornecedor)
+    assert result.conta.id == "8.01.001"
+    assert result.confianca == "OK"
+
+
+def test_product_pataxo_na_descricao_nao_dispara_regra_fornecedor(product_clf):
+    result = product_clf.classify(
+        "ALGUM PRODUTO PATAXO", fornecedor="OUTRO FORNECEDOR"
+    )
+    assert result.conta.id == "13.01.001"
+    assert result.confianca == "NAO_CLASSIFICADO"
+
+
+def test_product_especifico_prevalece_sobre_fornecedor_pataxo(product_clf):
+    result = product_clf.classify(
+        "SACO DE LIXO MULTIPOP", fornecedor="PATAXO MATERIAIS DE CONSTRUCAO"
+    )
+    assert result.conta.id == "2.04.001"
+    assert result.confianca == "OK"
+
+
 def test_expense_energia_eletrica(expense_clf):
     result = expense_clf.classify("energia eletrica")
     assert result.conta.id == "4.01.011"

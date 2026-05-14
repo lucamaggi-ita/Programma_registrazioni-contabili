@@ -66,7 +66,9 @@ def _group_products_by_account(
     groups: OrderedDict[str, _AllocationGroup] = OrderedDict()
 
     for produto in nfe.produtos:
-        classification = product_classifier.classify(produto.descricao)
+        classification = product_classifier.classify(
+            produto.descricao, fornecedor=nfe.nome_emitente
+        )
         conta = classification.conta
 
         if conta.id not in groups:
