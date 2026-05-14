@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -274,6 +275,7 @@ def test_pipeline_provisoria_nao_mistura_runs(tmp_path):
         saida_reports,
         project_root=tmp_path,
         steps=_fake_steps(calls),
+        today=date(2026, 5, 7),
     )
 
     assert result.run_id != "2026-05-07_001"

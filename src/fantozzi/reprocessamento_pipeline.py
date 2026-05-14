@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date
 from decimal import Decimal
 from pathlib import Path
 from typing import Callable, Mapping
@@ -129,6 +130,7 @@ def reprocessar_importacao_real_provisoria(
     dry_run: bool = False,
     project_root: Path | None = None,
     steps: PipelineSteps | None = None,
+    today: date | None = None,
 ) -> ReprocessamentoResultado:
     xml_base = Path(xml_base)
     saida_output = Path(saida_output)
@@ -147,6 +149,7 @@ def reprocessar_importacao_real_provisoria(
             saida_reports=saida_reports,
             dry_run=True,
             project_root=project_root,
+            today=today,
         )
         return ReprocessamentoResultado(
             run_id=planned_run.run_id,
@@ -177,6 +180,7 @@ def reprocessar_importacao_real_provisoria(
         saida_reports=saida_reports,
         dry_run=False,
         project_root=project_root,
+        today=today,
     )
 
     context = PipelineContext(
