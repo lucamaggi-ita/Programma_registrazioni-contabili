@@ -44,12 +44,22 @@ regras:
       - itaipava
       - petra
       - spaten
+      - baden
+      - blue moon
+      - sol premium
+      - brahma original
       - budweiser
       - skol
       - schin
+      - schin cerveja
       - kaiser
       - bohemia
       - praya lager
+      - ita pils
+      - cerv lok pils
+      - cerv cry pils
+      - malzebier
+      - brahma
 
   - conta_id: "2.01.002"
     conta_nome: "Vinhos e Espumantes"
@@ -70,7 +80,8 @@ regras:
       - merlot
       - malbec
       - carmenere
-      - rose
+      - bianco beneventano
+      - hote
       - solopaca
       - falanghina
       - lambrusco
@@ -81,6 +92,8 @@ regras:
       - lianto
       - parthenium
       - las perdices
+      - pinot noir
+      - puente austral
 
   - conta_id: "2.01.003"
     conta_nome: "Destilados, Licores e Aperitivos"
@@ -110,6 +123,10 @@ regras:
       - aperitivo
       - martini
       - aguardente
+      - tanqueray
+      - bombay
+      - montilla
+      - ballantines
 
   - conta_id: "2.01.004"
     conta_nome: "Refrigerantes"
@@ -129,10 +146,12 @@ regras:
       - schweppes
       - h2oh
       - fys
-      - fantea
-    evitar_aliases:
-      - sch
-      - sol
+      - del valle
+      - del val
+      - fanta
+      - ft colot
+      - fl lt
+      - pepsi
 
   - conta_id: "2.01.005"
     conta_nome: "Aguas Minerais"
@@ -151,6 +170,7 @@ regras:
     aliases:
       - red bull
       - monster
+      - tnt ener
       - energetico
 
   - conta_id: "2.01.007"
@@ -158,15 +178,23 @@ regras:
     prioridade: 90
     aliases:
       - suco
-      - del valle
-      - del val
       - nectar
       - cha mate
       - agua de coco
-      - polpa
       - sempre viva
       - monin
       - xarope
+      - polpa sempre viva
+      - polpa acerola
+      - polpa caja
+      - polpa caju
+      - polpa goiaba
+      - polpa graviola
+      - polpa manga
+      - polpa maracuja
+      - polpa morango
+      - polpa cupuacu
+      - polpa cacau
 
   - conta_id: "2.01.008"
     conta_nome: "Gelo"
@@ -191,7 +219,6 @@ regras:
       - alface
       - tomate longa vida
       - tomate italiano
-      - tomate s pele
       - cebola
       - batatinha
       - batata asterix
@@ -228,6 +255,14 @@ regras:
       - abobora
       - brocolis
       - chuchu
+      - batata inglesa
+      - tomate b6
+      - tomate b7
+      - quiabo
+      - beringela
+      - manjericao
+      - salsinha
+      - cuentro
 
   - conta_id: "2.02.009"
     conta_nome: "Paes e Padaria"
@@ -262,6 +297,7 @@ regras:
       - lagarto
       - figado bovino
       - carne file
+      - kilos
 
   - conta_id: "2.02.002"
     conta_nome: "Aves"
@@ -274,6 +310,13 @@ regras:
       - galinha
       - sassami
       - naturaves
+      - coxa/sobre
+      - sobrecoxa
+      - fgo file peito
+      - fgo coxa
+      - file peite
+      - linguica de carne de frango
+      - frango inteiro
 
   - conta_id: "2.02.004"
     conta_nome: "Pescados e Frutos do Mar"
@@ -294,6 +337,8 @@ regras:
       - mexilhao
       - frutos do mar
       - frescatto
+      - manjuba
+      - manjubinha
 
   - conta_id: "2.02.005"
     conta_nome: "Frios e Embutidos"
@@ -317,13 +362,21 @@ regras:
     prioridade: 80
     aliases:
       - queijo mozzarella
+      - mozzarella
       - queijo mussarela
+      - mussarela
       - queijo parmesao
+      - parmesao
       - queijo parmesao tres estrela
+      - parmesao tres estrela
       - queijo gorgonzola
+      - gorgonzola
       - queijo provolone
+      - provolone
       - queijo coalho
+      - coalho
       - queijo bufala
+      - bufala
       - requeijao
       - creme de leite
       - creme culinario
@@ -335,6 +388,12 @@ regras:
       - chantilly
       - laticinio
       - davaca
+      - leite condensado
+      - leite integral
+      - leite uht
+      - damare
+      - natville
+      - piracanjuba
 
   - conta_id: "2.02.010"
     conta_nome: "Mercearia Seca"
@@ -347,6 +406,7 @@ regras:
       - farinha mandioca
       - acucar
       - sal refinado
+      - sal fino
       - sal grosso
       - sal sache
       - macarrao
@@ -367,6 +427,11 @@ regras:
       - farofa
       - trident
       - bis champ
+      - venturelli
+      - divella
+      - arborio
+      - farinha trigo
+      - kicaldo
 
   - conta_id: "2.02.011"
     conta_nome: "Oleos, Azeites e Gorduras"
@@ -380,6 +445,8 @@ regras:
       - oleo de soja
       - margarina
       - oliva ext vrg
+      - oleo soja
+      - dom gameiro
 
   - conta_id: "2.02.012"
     conta_nome: "Molhos, Temperos e Condimentos"
@@ -404,6 +471,16 @@ regras:
       - shoyu
       - corante
       - pimenta
+      - leite de coco
+      - ducoco
+      - canela
+      - anis estrelado
+      - hibisco
+      - cravo
+      - alecrim
+      - louro
+    evitar_aliases:
+      - essencia coala
 
   - conta_id: "2.02.013"
     conta_nome: "Conservas e Enlatados"
@@ -424,6 +501,8 @@ regras:
       - ervilha
       - atum lata
       - la bella
+      - tomate s pele
+      - atum ral
 
   - conta_id: "2.02.014"
     conta_nome: "Batatas Congeladas e Pre-prontos"
@@ -452,6 +531,22 @@ regras:
       - pacoca
       - cone cx
       - leite trufado
+      - paletitas
+      - trento bites
+      - mentos
+
+  - conta_id: "2.02.016"
+    conta_nome: "Cigarros e Tabacaria"
+    prioridade: 85
+    aliases:
+      - dunhill
+      - rothmans
+      - carlton blend
+      - lucky strike
+      - payol
+      - souza cruz
+      - cigarros
+      - isqueiro
 
   # ---- MATERIAIS DE OPERACAO ----
   - conta_id: "2.03.001"
@@ -483,6 +578,21 @@ regras:
       - bandeja aluminio
       - palito dente
       - embalagem
+      - coposchio
+      - coposcchio
+      - copobras
+      - copo 50ml
+      - copo 500ml
+      - colher sobremesa cristal
+      - pote kit cristal
+
+  # ---- EMBALAGENS PARA DELIVERY ----
+  - conta_id: "2.03.003"
+    conta_nome: "Embalagens para Delivery"
+    prioridade: 65
+    aliases:
+      - assadadeira retang
+      - boreda
 
   - conta_id: "2.04.001"
     conta_nome: "Produtos de Limpeza e Higiene"
@@ -528,6 +638,14 @@ regras:
       - bombril
       - inseticida
       - master bac
+      - pa lixo
+      - pa de lixo
+      - deter zab
+      - fibra verde
+      - bicarbonato
+      - essencia coala
+      - dispenser porta higienico
+      - deter radiante
 
   - conta_id: "2.04.002"
     conta_nome: "Utensilios de Cozinha e Salao"
@@ -633,6 +751,30 @@ regras:
       - caixa termica
       - arco de baloes
       - confete
+
+  # ---- MATERIAL DE ESCRITORIO ----
+  - conta_id: "6.01.005"
+    conta_nome: "Material de Escritorio"
+    prioridade: 50
+    aliases:
+      - fita crepe
+      - prancheta duratex
+      - caneta azul trilux
+      - caneta preta retro projetor
+      - pincel marc permanente
+      - clips n 2 0
+      - extrator p grampo
+      - grampo 26 6
+      - pasta escolar
+
+  # ---- MANUTENCAO DE EQUIPAMENTOS ----
+  - conta_id: "8.02.005"
+    conta_nome: "Manutencao de Equipamentos Eletronicos"
+    prioridade: 50
+    aliases:
+      - rolamento
+      - oring
+      - selo mecanico
 
 conta_fallback_id: "13.01.001"
 conta_fallback_nome: "Revisar - Produto Nao Classificado"

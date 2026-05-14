@@ -14,6 +14,9 @@ from fantozzi.classification_review_workbook import (
 )
 
 
+CONFIG_DIR = Path(__file__).parent.parent / "config"
+
+
 def test_gera_workbook_a_partir_de_csv_valido(tmp_path):
     csv_path = _save_review_csv(tmp_path)
     plano_path = _save_plano_contas(tmp_path)
@@ -97,6 +100,29 @@ def test_plano_de_contas_e_carregado_do_yaml(tmp_path):
     assert sheet["B2"].value == "Refrigerantes"
     assert sheet["C2"].value == "Custos de Mercadorias e Insumos"
     assert sheet["E2"].value == "2.01.004 - Refrigerantes"
+
+
+def test_plano_de_contas_real_inclui_cigarros_e_tabacaria(tmp_path):
+    csv_path = _save_review_csv(tmp_path)
+    output_path = tmp_path / "reports" / "revisao_assistida.xlsx"
+
+    gerar_planilha_revisao_classificacao(
+        csv_path,
+        output_path,
+        CONFIG_DIR / "plano_contas_gerencial.yaml",
+    )
+
+    sheet = load_workbook(output_path)[PLANO_CONTAS_SHEET]
+    rows = list(sheet.iter_rows(min_row=2, values_only=True))
+    cigarros_row = next(row for row in rows if row[0] == "2.02.016")
+    assert cigarros_row[:6] == (
+        "2.02.016",
+        "Cigarros e Tabacaria",
+        "Custos de Mercadorias e Insumos",
+        "3",
+        "2.02.016 - Cigarros e Tabacaria",
+        "sim",
+    )
 
 
 def test_csv_original_nao_e_modificado(tmp_path):

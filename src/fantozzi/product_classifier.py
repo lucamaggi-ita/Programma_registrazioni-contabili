@@ -24,12 +24,14 @@ class ProductClassifier:
 
         for rule in data.get("regras", []):
             aliases_norm = [normalize(a) for a in rule.get("aliases", [])]
+            evitar_norm = [normalize(a) for a in rule.get("evitar_aliases", [])]
             self._rules.append(
                 {
                     "conta_id": rule["conta_id"],
                     "conta_nome": rule.get("conta_nome", ""),
                     "prioridade": rule.get("prioridade", 0),
                     "aliases_norm": [a for a in aliases_norm if a],
+                    "evitar_norm": [a for a in evitar_norm if a],
                 }
             )
 
@@ -41,6 +43,8 @@ class ProductClassifier:
         hits: List[Tuple[Dict[str, Any], str]] = []
 
         for rule in self._rules:
+            if any(ev in norm_desc for ev in rule["evitar_norm"]):
+                continue
             for alias in rule["aliases_norm"]:
                 if alias in norm_desc:
                     hits.append((rule, alias))

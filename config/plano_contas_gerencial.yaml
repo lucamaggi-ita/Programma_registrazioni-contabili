@@ -153,6 +153,10 @@ contas:
     nome: "Sobremesas, Sorvetes e Picoles"
     grupo: "Custos de Mercadorias e Insumos"
     tipo: custo
+  - id: "2.02.016"
+    nome: "Cigarros e Tabacaria"
+    grupo: "Custos de Mercadorias e Insumos"
+    tipo: custo
   # Materiais diretamente ligados a venda
   - id: "2.03.001"
     nome: "Descartaveis e Embalagens"

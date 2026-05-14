@@ -150,6 +150,40 @@ def test_importa_conta_escolhida_e_preenche_conta_id_e_nome(tmp_path):
     assert row["conta_nome_sugerida"] == "Bebidas"
 
 
+def test_importa_conta_escolhida_cigarros_e_tabacaria(tmp_path):
+    xlsx_path = _save_review_workbook(
+        tmp_path,
+        rows=[
+            _row(
+                descricao_normalizada="dunhill rothmans",
+                descricao_exemplo=(
+                    "DUNHILL CARLTON BLEND 2.0 BOX 10X1; "
+                    "ROTHMANS HAND SELECTED BLUE BOX HW25"
+                ),
+                acao_manual="CRIAR_REGRA",
+                conta_id_sugerida="",
+                conta_nome_sugerida="",
+                conta_escolhida="2.02.016 - Cigarros e Tabacaria",
+                palavras_chave_sugeridas="dunhill; rothmans; carlton blend",
+                observacao_manual=(
+                    "Produtos de tabacaria/cigarros adquiridos para revenda."
+                ),
+            )
+        ],
+        headers=[*CSV_HEADERS, "conta_escolhida"],
+    )
+    plano_path = _save_plano_contas(tmp_path)
+    csv_path = tmp_path / "revisao.csv"
+
+    importar_planilha_revisao_classificacao(xlsx_path, csv_path, plano_path)
+
+    with csv_path.open("r", encoding="utf-8-sig", newline="") as file:
+        row = next(csv.DictReader(file, delimiter=";"))
+    assert row["conta_id_sugerida"] == "2.02.016"
+    assert row["conta_nome_sugerida"] == "Cigarros e Tabacaria"
+    assert row["palavras_chave_sugeridas"] == "dunhill; rothmans; carlton blend"
+
+
 def test_falha_se_criar_alias_sem_conta(tmp_path):
     xlsx_path = _save_review_workbook(
         tmp_path, rows=[_row(acao_manual="CRIAR_ALIAS", conta_id_sugerida="")]
@@ -386,6 +420,9 @@ contas:
   - id: "1.01.002"
     nome: "Bebidas"
     grupo: "Compras"
+  - id: "2.02.016"
+    nome: "Cigarros e Tabacaria"
+    grupo: "Custos de Mercadorias e Insumos"
 """,
         encoding="utf-8",
     )

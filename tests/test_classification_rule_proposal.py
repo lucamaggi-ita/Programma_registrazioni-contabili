@@ -315,6 +315,44 @@ def test_proposta_real_gera_yaml_com_secoes_principais(tmp_path):
     assert plano_path.read_text(encoding="utf-8") == original_plan
 
 
+def test_proposta_real_aceita_cigarros_e_tabacaria(tmp_path):
+    csv_path = tmp_path / "revisao_classificacao_revisada.csv"
+    yaml_path = tmp_path / "reports" / "proposta_real.yaml"
+    plano_path = _save_plano_contas(tmp_path)
+    _save_csv(
+        csv_path,
+        [
+            _row(
+                descricao_normalizada="dunhill rothmans",
+                descricao_exemplo=(
+                    "DUNHILL CARLTON BLEND 2.0 BOX 10X1; "
+                    "ROTHMANS HAND SELECTED BLUE BOX HW25"
+                ),
+                acao_manual="CRIAR_REGRA",
+                conta_id_sugerida="2.02.016",
+                conta_nome_sugerida="Cigarros e Tabacaria",
+                palavras_chave_sugeridas="dunhill; rothmans; carlton blend",
+                observacao_manual=(
+                    "Produtos de tabacaria/cigarros adquiridos para revenda. "
+                    "Classificar em Cigarros e Tabacaria, nao em Mercearia Seca."
+                ),
+            )
+        ],
+    )
+
+    gerar_proposta_regras_classificacao_real([csv_path], yaml_path, plano_path)
+
+    data = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+    proposta = data["propostas_regras"][0]
+    assert proposta["conta_id_destino"] == "2.02.016"
+    assert proposta["conta_nome_destino"] == "Cigarros e Tabacaria"
+    assert proposta["criterios"]["palavras_chave"] == [
+        "dunhill",
+        "rothmans",
+        "carlton blend",
+    ]
+
+
 def test_proposta_real_bloqueia_conta_sugerida_inexistente(tmp_path):
     csv_path = tmp_path / "revisao_classificacao_revisada.csv"
     yaml_path = tmp_path / "reports" / "proposta_real.yaml"
@@ -452,6 +490,10 @@ contas:
     tipo: "custo"
   - id: "2.02.010"
     nome: "Mercearia Seca"
+    grupo: "Custos de Mercadorias e Insumos"
+    tipo: "custo"
+  - id: "2.02.016"
+    nome: "Cigarros e Tabacaria"
     grupo: "Custos de Mercadorias e Insumos"
     tipo: "custo"
   - id: "13.01.001"

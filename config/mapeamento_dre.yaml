@@ -202,6 +202,7 @@ mapeamento:
   "2.02.013": { dre_linha_id: "03.01", entra_dre: true }
   "2.02.014": { dre_linha_id: "03.01", entra_dre: true }
   "2.02.015": { dre_linha_id: "03.03", entra_dre: true }
+  "2.02.016": { dre_linha_id: "03.01", entra_dre: true }
 
   # EMBALAGENS E MATERIAIS
   "2.03.001": { dre_linha_id: "03.04", entra_dre: true }

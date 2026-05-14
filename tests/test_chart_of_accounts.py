@@ -22,6 +22,13 @@ def test_get_by_id_refrigerantes(chart):
     assert conta.nome == "Refrigerantes"
 
 
+def test_get_by_id_cigarros_e_tabacaria(chart):
+    conta = chart.get_by_id("2.02.016")
+    assert conta.nome == "Cigarros e Tabacaria"
+    assert conta.grupo == "Custos de Mercadorias e Insumos"
+    assert conta.tipo == "custo"
+
+
 def test_all_six_review_accounts_exist(chart):
     review_ids = [
         "13.01.001",
