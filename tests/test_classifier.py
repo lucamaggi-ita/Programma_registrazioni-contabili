@@ -97,6 +97,50 @@ def test_product_essencia_coala_limpeza(product_clf):
     assert result.confianca == "OK"
 
 
+@pytest.mark.parametrize(
+    ("descricao", "conta_id"),
+    [
+        ("SHINE & DRY 20 LITROS", "2.04.001"),
+        ("MOLHO SALADA ROSE 12X236ML", "2.02.012"),
+        ("MOLHO PIM. VERDE C/ ESPC. CREM. 12X450ML", "2.02.012"),
+        ("LEITE COND SEMID ITALAC 395G", "2.02.006"),
+        ("CREME LEITE ITALAC", "2.02.006"),
+        ("VINAG BALS VILLA GRIMELLI 500ML", "2.02.012"),
+        ("OVOS BRANCO CRIVO 30 DZ", "2.02.007"),
+        ("MASSA GAB REFRATARIA 10KG", "8.01.001"),
+        ("SACO DE LIXO MULTIPOP 60L", "2.04.001"),
+    ],
+)
+def test_product_aliases_especificos_pos_12b(product_clf, descricao, conta_id):
+    result = product_clf.classify(descricao)
+    assert result.conta.id == conta_id
+    assert result.confianca == "OK"
+
+
+@pytest.mark.parametrize(
+    ("descricao", "conta_id"),
+    [
+        ("CC SEM ACUCAR LT 350ML COLORCX12", "2.01.004"),
+        ("COCA COLA ZERO ACUCAR PET 1L", "2.01.004"),
+        ("POLPA SEMPRE VIVA MARACUJA 100GR", "2.01.007"),
+        ("H2OH LIMAO C/GAS PET 500ML", "2.01.004"),
+        ("REFRIGERADOR VERTICAL PEPSI CAPACIDADE 324L", "13.01.009"),
+        ("CERVEJEIRA BLK PRIN PM CVIS 8 CX 220V", "13.01.009"),
+        ("M/B BLUECASE BMBH470-D3HGU-M2 REV 2.0 BOX", "13.01.009"),
+    ],
+)
+def test_product_casos_sensiveis_pos_12b(product_clf, descricao, conta_id):
+    result = product_clf.classify(descricao)
+    assert result.conta.id == conta_id
+    assert result.confianca == "OK"
+
+
+def test_product_pataxo_fornecedor_nao_vira_manutencao(product_clf):
+    result = product_clf.classify("PATAXO MATERIAIS DE CONSTRUCAO LTDA EPP")
+    assert result.conta.id == "13.01.001"
+    assert result.confianca == "NAO_CLASSIFICADO"
+
+
 def test_expense_energia_eletrica(expense_clf):
     result = expense_clf.classify("energia eletrica")
     assert result.conta.id == "4.01.011"

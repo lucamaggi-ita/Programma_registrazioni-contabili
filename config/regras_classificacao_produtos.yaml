@@ -60,6 +60,10 @@ regras:
       - cerv cry pils
       - malzebier
       - brahma
+    evitar_aliases:
+      - refrigerador
+      - cervejeira
+      - refr vt vn
 
   - conta_id: "2.01.002"
     conta_nome: "Vinhos e Espumantes"
@@ -152,6 +156,10 @@ regras:
       - ft colot
       - fl lt
       - pepsi
+    evitar_aliases:
+      - refrigerador
+      - cervejeira
+      - refr vt vn
 
   - conta_id: "2.01.005"
     conta_nome: "Aguas Minerais"
@@ -208,6 +216,7 @@ regras:
     prioridade: 85
     aliases:
       - ovo branco
+      - ovos branco
       - ovos brancos
       - ovo extra
       - ovo grande
@@ -263,6 +272,20 @@ regras:
       - manjericao
       - salsinha
       - cuentro
+    evitar_aliases:
+      - coca cola
+      - coca-cola
+      - cc sem acucar
+      - sprite
+      - fanta
+      - schweppes
+      - guarana chp
+      - h2oh
+      - red bull
+      - polpa
+      - picole
+      - trident
+      - halls
 
   - conta_id: "2.02.009"
     conta_nome: "Paes e Padaria"
@@ -389,11 +412,13 @@ regras:
       - laticinio
       - davaca
       - leite condensado
+      - leite cond
       - leite integral
       - leite uht
       - damare
       - natville
       - piracanjuba
+      - creme leite italac
 
   - conta_id: "2.02.010"
     conta_nome: "Mercearia Seca"
@@ -432,6 +457,10 @@ regras:
       - arborio
       - farinha trigo
       - kicaldo
+    evitar_aliases:
+      - cc sem acucar
+      - sem acucar
+      - zero acucar
 
   - conta_id: "2.02.011"
     conta_nome: "Oleos, Azeites e Gorduras"
@@ -471,6 +500,9 @@ regras:
       - shoyu
       - corante
       - pimenta
+      - molho salada rose
+      - molho pim verde
+      - vinag bals
       - leite de coco
       - ducoco
       - canela
@@ -621,6 +653,7 @@ regras:
       - toa rolo
       - toalha rolo
       - saco lixo
+      - saco de lixo multipop
       - saco lix
       - luva latex
       - luva vinil
@@ -628,6 +661,7 @@ regras:
       - espuma hig
       - warewasher
       - shine dry
+      - shine & dry
       - master dish
       - master sec
       - master grill
@@ -682,11 +716,14 @@ regras:
     prioridade: 50
     aliases:
       - refrigerador
+      - refrigerador vertical
       - cervejeira
+      - cervejeira blk
       - chopeira
       - refresqueira
       - metalfrio
       - fricon
+      - refr vt vn
       - geladeira nova
       - freezer novo
       - forno novo
@@ -703,6 +740,7 @@ regras:
       - adaptador usb wireless
       - cooler intel
       - computador
+      - m/b bluecase
 
   # ---- MANUTENCAO E OBRAS ----
   - conta_id: "8.01.001"
@@ -712,6 +750,7 @@ regras:
       - tijolo
       - refratario
       - massa refrataria
+      - massa gab refrataria
       - cimento
       - argamassa
       - tinta
