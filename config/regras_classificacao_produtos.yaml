@@ -728,6 +728,12 @@ regras:
       - monitor novo
       - nobreak
       - balanca nova
+
+  - conta_id: "10.01.005"
+    conta_nome: "Equipamentos Eletronicos"
+    prioridade: 50
+    aliases:
+      - equipamento eletronico
       - gabinete slim
       - proc intel
       - memoria ddr

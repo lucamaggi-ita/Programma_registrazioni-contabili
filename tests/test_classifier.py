@@ -124,7 +124,8 @@ def test_product_aliases_especificos_pos_12b(product_clf, descricao, conta_id):
         ("COCA COLA ZERO ACUCAR PET 1L", "2.01.004"),
         ("POLPA SEMPRE VIVA MARACUJA 100GR", "2.01.007"),
         ("H2OH LIMAO C/GAS PET 500ML", "2.01.004"),
-        ("M/B BLUECASE BMBH470-D3HGU-M2 REV 2.0 BOX", "13.01.009"),
+        ("M/B BLUECASE BMBH470-D3HGU-M2 REV 2.0 BOX", "10.01.005"),
+        ("EQUIPAMENTO ELETRONICO GABINETE CPU", "10.01.005"),
     ],
 )
 def test_product_casos_sensiveis_pos_12b(product_clf, descricao, conta_id):
