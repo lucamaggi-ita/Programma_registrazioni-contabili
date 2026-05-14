@@ -124,8 +124,6 @@ def test_product_aliases_especificos_pos_12b(product_clf, descricao, conta_id):
         ("COCA COLA ZERO ACUCAR PET 1L", "2.01.004"),
         ("POLPA SEMPRE VIVA MARACUJA 100GR", "2.01.007"),
         ("H2OH LIMAO C/GAS PET 500ML", "2.01.004"),
-        ("REFRIGERADOR VERTICAL PEPSI CAPACIDADE 324L", "13.01.009"),
-        ("CERVEJEIRA BLK PRIN PM CVIS 8 CX 220V", "13.01.009"),
         ("M/B BLUECASE BMBH470-D3HGU-M2 REV 2.0 BOX", "13.01.009"),
     ],
 )
@@ -133,6 +131,20 @@ def test_product_casos_sensiveis_pos_12b(product_clf, descricao, conta_id):
     result = product_clf.classify(descricao)
     assert result.conta.id == conta_id
     assert result.confianca == "OK"
+
+
+@pytest.mark.parametrize(
+    "descricao",
+    [
+        "REFRIGERADOR VERTICAL PEPSI CAPACIDADE 324L",
+        "CERVEJEIRA BLK PRIN PM CVIS 8 CX 220V",
+        "REFR VT VN PC SCHIN 8CX 220V FRICON",
+    ],
+)
+def test_product_comodato_nao_classifica_como_custo_ou_investimento(product_clf, descricao):
+    result = product_clf.classify(descricao)
+    assert result.conta.id == "13.01.001"
+    assert result.confianca == "NAO_CLASSIFICADO"
 
 
 def test_product_pataxo_fornecedor_nao_vira_manutencao(product_clf):

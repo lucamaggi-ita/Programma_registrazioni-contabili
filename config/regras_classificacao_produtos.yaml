@@ -715,15 +715,9 @@ regras:
     conta_nome: "Revisar - Possivel Investimento"
     prioridade: 50
     aliases:
-      - refrigerador
-      - refrigerador vertical
-      - cervejeira
-      - cervejeira blk
       - chopeira
       - refresqueira
       - metalfrio
-      - fricon
-      - refr vt vn
       - geladeira nova
       - freezer novo
       - forno novo
