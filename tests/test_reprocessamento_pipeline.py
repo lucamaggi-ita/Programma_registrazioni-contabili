@@ -179,7 +179,7 @@ def _run_pipeline(tmp_path: Path, *, fail_at: str | None = None):
     return result, calls, saida_output, saida_reports
 
 
-def _run_pipeline_com_fase9(tmp_path: Path, fase9_csv_path: Path):
+def _run_pipeline_com_fase9(tmp_path: Path, fase9_csv_path):
     calls: list[tuple[str, Path]] = []
     xml_base = _make_xml_base(tmp_path)
     saida_output = tmp_path / "output" / "importacao_real"
@@ -308,7 +308,81 @@ def test_pipeline_com_fase9_explicita_gera_csv_separado_e_manifest(tmp_path):
     assert classificacao["promovidos"] == 1
     assert classificacao["bloqueados"] == 4
     assert classificacao["fora_escopo"] == 0
+    assert classificacao["csvs_processados"] == [
+        {
+            "input_csv": str(fase9_csv),
+            "output_csv": str(output_csv),
+            "promovidos": 1,
+            "bloqueados": 4,
+            "fora_escopo": 0,
+        }
+    ]
     assert str(output_csv) in manifest["relatorios_gerados"]
+
+
+def test_pipeline_com_varios_csv_fase9_gera_outputs_distintos_e_manifest_agregado(
+    tmp_path,
+):
+    _save_plano_contas_fase9(tmp_path)
+    primeiro_csv = (
+        tmp_path / "55746722000181" / "revisao_classificacao_revisada.csv"
+    )
+    segundo_csv = (
+        tmp_path / "08884180000123" / "revisao_classificacao_revisada.csv"
+    )
+    _save_fase9_csv(primeiro_csv, [_fase9_row(documentos="100")])
+    _save_fase9_csv(
+        segundo_csv,
+        [
+            _fase9_row(documentos="200"),
+            _fase9_row(documentos="201", cfop="1949"),
+        ],
+    )
+
+    result, _, _, _ = _run_pipeline_com_fase9(
+        tmp_path,
+        [primeiro_csv, segundo_csv],
+    )
+
+    primeiro_output = (
+        result.reports_run_dir
+        / "lancamentos_aplicados_fase9_55746722000181.csv"
+    )
+    segundo_output = (
+        result.reports_run_dir
+        / "lancamentos_aplicados_fase9_08884180000123.csv"
+    )
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    classificacao = manifest["classificacao"]
+    assert primeiro_output.exists()
+    assert segundo_output.exists()
+    assert not (result.reports_run_dir / "lancamentos_aplicados_fase9.csv").exists()
+    assert _read_csv_rows(segundo_output)[1]["motivo_bloqueio_fase9"] == (
+        "CFOP_1949_CONTROLE_MANUAL"
+    )
+    assert classificacao["fase9_executada"] is True
+    assert classificacao["promovidos"] == 2
+    assert classificacao["bloqueados"] == 1
+    assert classificacao["fora_escopo"] == 0
+    assert classificacao["regras_aplicadas"] == 2
+    assert classificacao["csvs_processados"] == [
+        {
+            "input_csv": str(primeiro_csv),
+            "output_csv": str(primeiro_output),
+            "promovidos": 1,
+            "bloqueados": 0,
+            "fora_escopo": 0,
+        },
+        {
+            "input_csv": str(segundo_csv),
+            "output_csv": str(segundo_output),
+            "promovidos": 1,
+            "bloqueados": 1,
+            "fora_escopo": 0,
+        },
+    ]
+    assert str(primeiro_output) in manifest["relatorios_gerados"]
+    assert str(segundo_output) in manifest["relatorios_gerados"]
 
 
 def test_pipeline_com_fase9_registra_checkpoint_antes_dos_relatorios_ok(tmp_path):
@@ -624,6 +698,7 @@ def _fase9_row(**overrides: str) -> dict[str, str]:
 
 
 def _save_fase9_csv(path: Path, rows: list[dict[str, str]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8-sig", newline="") as file:
         writer = csv.DictWriter(file, fieldnames=tuple(rows[0].keys()), delimiter=";")
         writer.writeheader()

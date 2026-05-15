@@ -24,6 +24,32 @@ def test_parser_aceita_aplicar_fase9_revisao():
     assert args.dry_run is True
 
 
+def test_parser_aceita_varios_csv_fase9_na_pipeline():
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "reprocessar-importacao-real",
+            "--xml-base",
+            "xml",
+            "--saida-output",
+            "output",
+            "--saida-reports",
+            "reports",
+            "--fase9-csv",
+            "55746722000181/revisao_classificacao_revisada.csv",
+            "--fase9-csv",
+            "08884180000123/revisao_classificacao_revisada.csv",
+        ]
+    )
+
+    assert args.command == "reprocessar-importacao-real"
+    assert args.fase9_csv == [
+        "55746722000181/revisao_classificacao_revisada.csv",
+        "08884180000123/revisao_classificacao_revisada.csv",
+    ]
+
+
 def test_aplicar_fase9_revisao_gera_csv_separado_sem_alterar_original(tmp_path, capsys):
     input_csv = tmp_path / "revisao_classificacao_revisada.csv"
     output_csv = tmp_path / "lancamentos_aplicados_fase9.csv"

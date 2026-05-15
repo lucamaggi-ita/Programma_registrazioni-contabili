@@ -759,8 +759,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     reprocessar_real.add_argument(
         "--fase9-csv",
+        action="append",
+        metavar="PATH",
         help=(
             "CSV revisionado para aplicar Fase 9 em output separado dentro da run. "
+            "Pode ser repetido para processar varios CNPJs. "
             "Se omitido, a Fase 9 nao e executada."
         ),
     )
@@ -1343,7 +1346,7 @@ def reprocessar_importacao_real_command(args: argparse.Namespace) -> int:
             saida_reports=Path(args.saida_reports),
             modo=args.modo,
             dry_run=args.dry_run,
-            fase9_csv_path=Path(args.fase9_csv) if args.fase9_csv else None,
+            fase9_csv_path=args.fase9_csv,
         )
     except reprocessamento_pipeline.ReprocessamentoPipelineError as exc:
         print(f"[ERRO] {exc}")
@@ -1370,7 +1373,13 @@ def reprocessar_importacao_real_command(args: argparse.Namespace) -> int:
 
     print(f"[OK] Reprocessamento provisorio concluido: {result.run_id}")
     print(f"[OK] Manifesto: {result.manifest_path}")
-    print("[INFO] Fase 9 nao executada; relatorios permanecem provisorios.")
+    if args.fase9_csv:
+        print(
+            "[INFO] Fase 9 executada em CSV separado; "
+            "relatorios permanecem provisorios."
+        )
+    else:
+        print("[INFO] Fase 9 nao executada; relatorios permanecem provisorios.")
     return 0
 
 

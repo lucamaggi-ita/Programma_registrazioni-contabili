@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
-from typing import Callable, Mapping
+from typing import Callable, Mapping, Sequence
 
 from fantozzi import run_manager
 from fantozzi.allocation import allocate_nfe_to_lancamentos
@@ -97,7 +97,7 @@ class PipelineContext:
     reports_run_dir: Path
     manifest_path: Path
     fontes_xml: tuple[XmlSource, ...]
-    fase9_csv_path: Path | None = None
+    fase9_csv_paths: tuple[Path, ...] = ()
     lancamentos_xlsx: tuple[Path, ...] = ()
 
 
@@ -137,13 +137,13 @@ def reprocessar_importacao_real_provisoria(
     project_root: Path | None = None,
     steps: PipelineSteps | None = None,
     today: date | None = None,
-    fase9_csv_path: Path | None = None,
+    fase9_csv_path: Path | str | Sequence[Path | str] | None = None,
 ) -> ReprocessamentoResultado:
     xml_base = Path(xml_base)
     saida_output = Path(saida_output)
     saida_reports = Path(saida_reports)
     project_root = Path(project_root or run_manager.PROJECT_ROOT)
-    fase9_csv_path = Path(fase9_csv_path) if fase9_csv_path is not None else None
+    fase9_csv_paths = _normalize_fase9_csv_paths(fase9_csv_path)
 
     if modo == "definitivo":
         raise ReprocessamentoPipelineError(MODO_DEFINITIVO_BLOQUEADO)
@@ -201,7 +201,7 @@ def reprocessar_importacao_real_provisoria(
         reports_run_dir=run_result.reports_run_dir,
         manifest_path=run_result.manifest_path,
         fontes_xml=fontes_xml,
-        fase9_csv_path=fase9_csv_path,
+        fase9_csv_paths=fase9_csv_paths,
     )
     steps = steps or default_pipeline_steps()
     arquivos_gerados: list[Path] = []
@@ -255,7 +255,7 @@ def reprocessar_importacao_real_provisoria(
             avisos,
             etapas_executadas,
         )
-        if context.fase9_csv_path is not None:
+        if context.fase9_csv_paths:
             _executar_step(
                 context,
                 "FASE9_APLICADA",
@@ -295,10 +295,10 @@ def reprocessar_importacao_real_provisoria(
 
     manifest = run_manager.load_manifest(context.manifest_path)
     manifest.setdefault("avisos", [])
-    if context.fase9_csv_path is None and AVISO_FASE9_BLOQUEADA not in manifest["avisos"]:
+    if not context.fase9_csv_paths and AVISO_FASE9_BLOQUEADA not in manifest["avisos"]:
         manifest["avisos"].append(AVISO_FASE9_BLOQUEADA)
     manifest.setdefault("classificacao", {})
-    if context.fase9_csv_path is None:
+    if not context.fase9_csv_paths:
         manifest["classificacao"].update(
             {
                 "fase9_executada": False,
@@ -566,20 +566,58 @@ def _step_gerar_pacote_revisao(context: PipelineContext) -> StepResult:
     )
 
 
-def _step_aplicar_fase9(context: PipelineContext) -> StepResult:
-    if context.fase9_csv_path is None:
-        return StepResult()
+def _normalize_fase9_csv_paths(
+    fase9_csv_path: Path | str | Sequence[Path | str] | None,
+) -> tuple[Path, ...]:
+    if fase9_csv_path is None:
+        return ()
+    if isinstance(fase9_csv_path, Path | str):
+        return (Path(fase9_csv_path),)
+    return tuple(Path(path) for path in fase9_csv_path)
 
-    input_csv = context.fase9_csv_path
-    output_csv = context.reports_run_dir / "lancamentos_aplicados_fase9.csv"
-    if input_csv.resolve() == output_csv.resolve():
-        raise ReprocessamentoPipelineError(
-            "CSV de entrada da Fase 9 deve ser diferente do output aplicado."
-        )
-    if not input_csv.exists() or not input_csv.is_file():
-        raise ReprocessamentoPipelineError(
-            f"CSV revisionado Fase 9 nao encontrado: {input_csv}"
-        )
+
+def _fase9_output_paths(
+    reports_run_dir: Path,
+    fase9_csv_paths: tuple[Path, ...],
+) -> tuple[Path, ...]:
+    if len(fase9_csv_paths) == 1:
+        return (reports_run_dir / "lancamentos_aplicados_fase9.csv",)
+
+    outputs: list[Path] = []
+    used_names: set[str] = set()
+    for csv_path in fase9_csv_paths:
+        identifier = _fase9_csv_identifier(csv_path)
+        candidate = reports_run_dir / f"lancamentos_aplicados_fase9_{identifier}.csv"
+        suffix = 2
+        while candidate.name.lower() in used_names:
+            candidate = (
+                reports_run_dir
+                / f"lancamentos_aplicados_fase9_{identifier}_{suffix}.csv"
+            )
+            suffix += 1
+        used_names.add(candidate.name.lower())
+        outputs.append(candidate)
+    return tuple(outputs)
+
+
+def _fase9_csv_identifier(csv_path: Path) -> str:
+    parent_name = csv_path.parent.name
+    if parent_name.isdigit():
+        return _sanitize_fase9_identifier(parent_name)
+    return _sanitize_fase9_identifier(csv_path.stem)
+
+
+def _sanitize_fase9_identifier(value: str) -> str:
+    sanitized = "".join(
+        char if char.isalnum() or char in ("-", "_") else "_"
+        for char in value.strip()
+    ).strip("_")
+    return sanitized or "csv"
+
+
+def _step_aplicar_fase9(context: PipelineContext) -> StepResult:
+    if not context.fase9_csv_paths:
+        return StepResult()
 
     chart = ChartOfAccounts.load(
         context.project_root / "config" / "plano_contas_gerencial.yaml"
@@ -590,32 +628,73 @@ def _step_aplicar_fase9(context: PipelineContext) -> StepResult:
             "Plano de contas invalido: " + "; ".join(validation_errors)
         )
     valid_account_ids, account_names_by_id = _fase9_account_maps(chart)
-    decisions = load_fase9_decisions_from_csv(input_csv)
-    decision_result = evaluate_fase9_decisions(
-        decisions,
-        valid_account_ids=valid_account_ids,
-        account_names_by_id=account_names_by_id,
+    csv_outputs = _fase9_output_paths(
+        context.reports_run_dir,
+        context.fase9_csv_paths,
     )
-    writeback_result = write_fase9_applied_csv(
-        input_csv,
-        output_csv,
-        decision_result,
-    )
+
+    arquivos: list[Path] = []
+    csvs_processados: list[dict[str, object]] = []
+    promovidos = 0
+    bloqueados = 0
+    fora_escopo = 0
+    for input_csv, output_csv in zip(
+        context.fase9_csv_paths,
+        csv_outputs,
+        strict=True,
+    ):
+        if input_csv.resolve() == output_csv.resolve():
+            raise ReprocessamentoPipelineError(
+                "CSV de entrada da Fase 9 deve ser diferente do output aplicado."
+            )
+        if not input_csv.exists() or not input_csv.is_file():
+            raise ReprocessamentoPipelineError(
+                f"CSV revisionado Fase 9 nao encontrado: {input_csv}"
+            )
+        decisions = load_fase9_decisions_from_csv(input_csv)
+        decision_result = evaluate_fase9_decisions(
+            decisions,
+            valid_account_ids=valid_account_ids,
+            account_names_by_id=account_names_by_id,
+        )
+        writeback_result = write_fase9_applied_csv(
+            input_csv,
+            output_csv,
+            decision_result,
+        )
+        arquivos.append(output_csv)
+        promovidos += writeback_result.promoted_rows
+        bloqueados += writeback_result.blocked_rows
+        fora_escopo += writeback_result.out_of_scope_rows
+        csvs_processados.append(
+            {
+                "input_csv": str(input_csv),
+                "output_csv": str(output_csv),
+                "promovidos": writeback_result.promoted_rows,
+                "bloqueados": writeback_result.blocked_rows,
+                "fora_escopo": writeback_result.out_of_scope_rows,
+            }
+        )
+
+    classificacao: dict[str, object] = {
+        "fase9_executada": True,
+        "promovidos": promovidos,
+        "bloqueados": bloqueados,
+        "fora_escopo": fora_escopo,
+        "regras_aplicadas": promovidos,
+        "csvs_processados": csvs_processados,
+        "nota": (
+            "Fase 9 aplicada em CSV separado. "
+            "Relatorios gerados permanecem provisorios."
+        ),
+    }
+    if len(csvs_processados) == 1:
+        classificacao["input_csv"] = csvs_processados[0]["input_csv"]
+        classificacao["output_csv"] = csvs_processados[0]["output_csv"]
+
     return StepResult(
-        arquivos_gerados=(output_csv,),
-        classificacao={
-            "fase9_executada": True,
-            "input_csv": str(input_csv),
-            "output_csv": str(output_csv),
-            "promovidos": writeback_result.promoted_rows,
-            "bloqueados": writeback_result.blocked_rows,
-            "fora_escopo": writeback_result.out_of_scope_rows,
-            "regras_aplicadas": writeback_result.promoted_rows,
-            "nota": (
-                "Fase 9 aplicada em CSV separado. "
-                "Relatorios gerados permanecem provisorios."
-            ),
-        },
+        arquivos_gerados=tuple(arquivos),
+        classificacao=classificacao,
     )
 
 
