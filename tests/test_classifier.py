@@ -222,7 +222,7 @@ def test_product_fornecedores_recorrentes_pos_12g(product_clf, fornecedor, conta
             "2.02.015",
         ),
         ("PICOLE CX COM 27UN 68G SPACE MONSTERS PALETITAS", "2.02.015"),
-        ("ATUM RAL C/OLEO E CALDO VEG POUCH 500 GR 88", "2.02.004"),
+        ("ATUM RAL C/OLEO E CALDO VEG POUCH 500 GR 88", "2.02.013"),
         ("MONIN XAROPE PESSEGO 700ML", "2.01.007"),
         ("AGUA TONICA FYS ZERO LT 350ML", "2.01.004"),
         ("REFR FYS LIMAO ZERO 0,350LT DESC 12UN", "2.01.004"),

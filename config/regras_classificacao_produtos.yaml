@@ -164,12 +164,10 @@ regras:
       - sprite
       - guarana antarctica
       - guarana chp
-      - guarana
       - tonica antarctica
       - tonica
       - schweppes
       - h2oh
-      - fys
       - agua tonica fys
       - refr fys
       - fys guarana
@@ -259,9 +257,7 @@ regras:
       - batata asterix
       - batata doce
       - cenoura
-      - limao
       - laranja
-      - maracuja
       - banana
       - abacaxi
       - coentro
@@ -392,6 +388,7 @@ regras:
       - frescatto
       - manjuba
       - manjubinha
+    evitar_aliases:
       - atum ral c oleo e caldo veg pouch
 
   - conta_id: "2.02.005"
@@ -449,10 +446,11 @@ regras:
       - damare
       - natville
       - piracanjuba
-      - creme leite italac
+      - creme leite
     evitar_aliases:
-      - paletitas
-      - paleta cx
+      - paleta cx com 24un 120g morango com leite cond paletitas
+      - picole cx com 24un 65g paletito zero ad de acucar paletitas
+      - picole cx com 27un 68g space monsters paletitas
 
   - conta_id: "2.02.010"
     conta_nome: "Mercearia Seca"
@@ -473,6 +471,7 @@ regras:
       - massa espaguetti
       - massa penne
       - massa fusilli
+      - spaghetti
       - granulado
       - chocolate
       - cacau
@@ -577,8 +576,8 @@ regras:
       - atum lata
       - la bella
       - tomate s pele
+      - tomate pelate
       - atum ral
-    evitar_aliases:
       - atum ral c oleo e caldo veg pouch
 
   - conta_id: "2.02.014"
@@ -588,6 +587,7 @@ regras:
       - batata 9mm
       - batata congelada
       - batata pre frita
+      - aipim pre
       - mais batata
       - bem brasil
       - nuggets
@@ -787,6 +787,8 @@ regras:
     aliases:
       - equipamento eletronico
       - gabinete slim
+      - roteador
+      - tplink
       - proc intel
       - memoria ddr
       - adaptador usb wireless
