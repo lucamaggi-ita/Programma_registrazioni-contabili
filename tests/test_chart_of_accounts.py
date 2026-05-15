@@ -29,6 +29,13 @@ def test_get_by_id_cigarros_e_tabacaria(chart):
     assert conta.tipo == "custo"
 
 
+def test_get_by_id_bonificacoes_recebidas(chart):
+    conta = chart.get_by_id("2.05.003")
+    assert conta.nome == "Reducao de Custos - Bonificacoes Recebidas"
+    assert conta.grupo == "Custos de Mercadorias e Insumos"
+    assert conta.tipo == "reducao_custo"
+
+
 def test_all_review_accounts_exist(chart):
     review_ids = [
         "13.01.001",
@@ -36,7 +43,6 @@ def test_all_review_accounts_exist(chart):
         "13.01.006",
         "13.01.009",
         "13.01.010",
-        "13.01.011",
         "13.01.999",
     ]
     for rid in review_ids:

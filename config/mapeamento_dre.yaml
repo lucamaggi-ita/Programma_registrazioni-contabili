@@ -212,6 +212,7 @@ mapeamento:
   "2.04.002": { dre_linha_id: "03.07", entra_dre: true }
   "2.05.001": { dre_linha_id: "03.01", entra_dre: true }
   "2.05.002": { dre_linha_id: "03.01", entra_dre: true }
+  "2.05.003": { dre_linha_id: "03.01", entra_dre: true }
 
   # PESSOAL
   "3.01.001": { dre_linha_id: "05.01", entra_dre: true }
@@ -299,5 +300,4 @@ mapeamento:
   "13.01.006": { dre_linha_id: "99.01", entra_dre: true }
   "13.01.009": { dre_linha_id: "99.01", entra_dre: true }
   "13.01.010": { dre_linha_id: "99.01", entra_dre: true }
-  "13.01.011": { dre_linha_id: "99.01", entra_dre: true }
   "13.01.999": { dre_linha_id: "99.01", entra_dre: true }

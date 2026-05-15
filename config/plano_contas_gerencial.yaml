@@ -190,6 +190,11 @@ contas:
     grupo: "Custos de Mercadorias e Insumos"
     tipo: custo
     exige_revisao: false
+  - id: "2.05.003"
+    nome: "Reducao de Custos - Bonificacoes Recebidas"
+    grupo: "Custos de Mercadorias e Insumos"
+    tipo: reducao_custo
+    exige_revisao: false
 
   # --- 3. PESSOAL, ENCARGOS E SERVICOS DE MAO DE OBRA ---
   - id: "3.01.001"
@@ -562,11 +567,6 @@ contas:
     exige_revisao: true
   - id: "13.01.010"
     nome: "Revisar - Pagamento de Pessoal a Regularizar"
-    grupo: "Contas de Revisao e Classificacao Pendente"
-    tipo: revisao
-    exige_revisao: true
-  - id: "13.01.011"
-    nome: "Revisar - Bonificacao Recebida"
     grupo: "Contas de Revisao e Classificacao Pendente"
     tipo: revisao
     exige_revisao: true

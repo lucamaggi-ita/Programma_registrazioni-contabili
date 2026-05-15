@@ -88,7 +88,7 @@ def test_report_includes_fiscal_metadata(tmp_path):
                 natureza_operacao="BONIFICACAO",
                 tipo_operacao_especial="BONIFICACAO_RECEBIDA",
                 confianca_operacao_especial="FORTE",
-                tratamento_operacao_especial="REDUCAO_CUSTO_OU_RECEITA",
+                tratamento_operacao_especial="REDUCAO_CUSTO",
             )
         ],
     )
