@@ -565,6 +565,11 @@ contas:
     grupo: "Contas de Revisao e Classificacao Pendente"
     tipo: revisao
     exige_revisao: true
+  - id: "13.01.011"
+    nome: "Revisar - Bonificacao Recebida"
+    grupo: "Contas de Revisao e Classificacao Pendente"
+    tipo: revisao
+    exige_revisao: true
   - id: "13.01.999"
     nome: "Revisar - Outros Casos"
     grupo: "Contas de Revisao e Classificacao Pendente"

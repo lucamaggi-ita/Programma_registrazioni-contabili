@@ -199,11 +199,38 @@ def test_bonificacao_cfop_goes_to_special_review_before_product_alias(product_cl
     lancamentos = allocate_nfe_to_lancamentos(nfe, product_classifier)
 
     assert len(lancamentos) == 1
-    assert lancamentos[0].conta_id == "13.01.001"
+    assert lancamentos[0].conta_id == "13.01.011"
+    assert lancamentos[0].conta_nome == "Revisar - Bonificacao Recebida"
     assert lancamentos[0].status_revisao == "REVISAR"
     assert "OPERACAO_ESPECIAL_BONIFICACAO" in lancamentos[0].alertas
     assert lancamentos[0].tipo_operacao_especial == "BONIFICACAO_RECEBIDA"
-    assert lancamentos[0].tratamento_operacao_especial == "FORA_CUSTO_COMPRA"
+    assert lancamentos[0].tratamento_operacao_especial == "REDUCAO_CUSTO_OU_RECEITA"
+
+
+@pytest.mark.parametrize(
+    ("descricao", "conta_custo_normal"),
+    [
+        ("REFR GUARANA DA AMAZONIA FYS", "2.01.004"),
+        ("MASSA ESPAGUETE", "2.02.010"),
+        ("BATATA 9MM", "2.02.014"),
+    ],
+)
+def test_bonificacao_cfop_never_goes_to_normal_cost_accounts(
+    product_classifier, descricao, conta_custo_normal
+):
+    nfe = _synthetic_nfe(
+        chave=f"NFE-BONIFICACAO-{conta_custo_normal}",
+        valor_total=Decimal("100.00"),
+        duplicata_valor=Decimal("100.00"),
+        natureza_operacao="BONIFICACAO",
+        produto_descricao=descricao,
+        produto_cfop="5910",
+    )
+
+    lancamentos = allocate_nfe_to_lancamentos(nfe, product_classifier)
+
+    assert {lancamento.conta_id for lancamento in lancamentos} == {"13.01.011"}
+    assert conta_custo_normal not in {lancamento.conta_id for lancamento in lancamentos}
 
 
 def test_normal_cfop_still_uses_product_classifier(product_classifier):
@@ -239,9 +266,12 @@ def test_mixed_nfe_keeps_normal_item_and_routes_special_item(product_classifier)
     assert by_operacao["COMPRA_NORMAL"].conta_id == "2.01.004"
     assert by_operacao["COMPRA_NORMAL"].status_revisao == "OK"
     assert by_operacao["COMPRA_NORMAL"].cfop == "5405"
-    assert by_operacao["BONIFICACAO_RECEBIDA"].conta_id == "13.01.001"
+    assert by_operacao["BONIFICACAO_RECEBIDA"].conta_id == "13.01.011"
     assert by_operacao["BONIFICACAO_RECEBIDA"].status_revisao == "REVISAR"
     assert by_operacao["BONIFICACAO_RECEBIDA"].cfop == "5910"
+    assert by_operacao["BONIFICACAO_RECEBIDA"].tratamento_operacao_especial == (
+        "REDUCAO_CUSTO_OU_RECEITA"
+    )
 
 
 def test_positive_accessory_cost_creates_separate_lancamento(product_classifier):

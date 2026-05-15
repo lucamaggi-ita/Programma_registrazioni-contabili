@@ -29,8 +29,8 @@ def test_export_csv_with_candidates(tmp_path):
     assert rows[0]["fornecedores"] == "Fornecedor teste"
     assert rows[0]["documentos"] == "NF-1"
     assert rows[0]["valor_total"] == "R$ 10,00"
-    assert rows[0]["conta_atual_id"] == "13.01.001"
-    assert rows[0]["conta_atual_nome"] == "Revisar - Produto Nao Classificado"
+    assert rows[0]["conta_atual_id"] == "13.01.011"
+    assert rows[0]["conta_atual_nome"] == "Revisar - Bonificacao Recebida"
     assert rows[0]["status_revisao"] == "REVISAR"
     assert rows[0]["alertas"] == "CLASSIFICACAO_NAO_ENCONTRADA"
     assert rows[0]["cfop"] == "5910"
@@ -130,8 +130,8 @@ def _row(**overrides: object) -> list[object]:
         "data_documento": "2026-05-05",
         "fornecedor_ou_favorecido": "Fornecedor teste",
         "documento": "NF-1",
-        "conta_id": "13.01.001",
-        "conta_nome": "Revisar - Produto Nao Classificado",
+        "conta_id": "13.01.011",
+        "conta_nome": "Revisar - Bonificacao Recebida",
         "descricao_itens": "PRODUTO DESCONHECIDO",
         "valor": 10,
         "origem": "XML_NFE",
@@ -143,7 +143,7 @@ def _row(**overrides: object) -> list[object]:
         "natureza_operacao": "BONIFICACAO",
         "tipo_operacao_especial": "BONIFICACAO_RECEBIDA",
         "confianca_operacao_especial": "FORTE",
-        "tratamento_operacao_especial": "FORA_CUSTO_COMPRA",
+        "tratamento_operacao_especial": "REDUCAO_CUSTO_OU_RECEITA",
         "duplicatas_json": "[]",
     }
     values.update(overrides)

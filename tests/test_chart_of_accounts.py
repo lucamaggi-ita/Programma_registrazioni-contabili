@@ -29,13 +29,14 @@ def test_get_by_id_cigarros_e_tabacaria(chart):
     assert conta.tipo == "custo"
 
 
-def test_all_six_review_accounts_exist(chart):
+def test_all_review_accounts_exist(chart):
     review_ids = [
         "13.01.001",
         "13.01.002",
         "13.01.006",
         "13.01.009",
         "13.01.010",
+        "13.01.011",
         "13.01.999",
     ]
     for rid in review_ids:

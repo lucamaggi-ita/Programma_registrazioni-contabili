@@ -23,8 +23,10 @@ CENT = Decimal("0.01")
 ORIGEM_XML_NFE = "XML_NFE"
 ACCESSORY_ACCOUNT_ID = "2.05.001"
 DISCOUNT_ACCOUNT_ID = "2.05.002"
-SPECIAL_REVIEW_ACCOUNT_ID = "13.01.001"
+COMODATO_REVIEW_ACCOUNT_ID = "13.01.001"
+BONIFICACAO_RECEBIDA_ACCOUNT_ID = "13.01.011"
 ALERTA_VALOR_INCONSISTENTE = "VALOR_INCONSISTENTE"
+TRATAMENTO_BONIFICACAO_RECEBIDA = "REDUCAO_CUSTO_OU_RECEITA"
 
 
 @dataclass
@@ -91,11 +93,11 @@ def _group_products_by_account(
             )
         else:
             conta_revisao = _get_classifier_account(
-                product_classifier, SPECIAL_REVIEW_ACCOUNT_ID
+                product_classifier, _special_review_account_id(operacao)
             )
             classification = ClassificationResult(
                 conta=conta_revisao,
-                confianca="NAO_CLASSIFICADO",
+                confianca="OK",
                 alertas=_operacao_especial_alertas(operacao),
                 matches=list(operacao.motivos),
             )
@@ -142,6 +144,18 @@ def _operacao_especial_alertas(
     return _unique([*base, *operacao.motivos, *operacao.alertas])
 
 
+def _special_review_account_id(operacao: ClassificacaoOperacaoEspecial) -> str:
+    if operacao.tipo == TIPO_BONIFICACAO:
+        return BONIFICACAO_RECEBIDA_ACCOUNT_ID
+    return COMODATO_REVIEW_ACCOUNT_ID
+
+
+def _tratamento_operacao_especial(operacao: ClassificacaoOperacaoEspecial) -> str:
+    if operacao.tipo == TIPO_BONIFICACAO:
+        return TRATAMENTO_BONIFICACAO_RECEBIDA
+    return operacao.destino_gerencial
+
+
 def _group_key(conta_id: str, tipo_operacao: str) -> str:
     suffix = tipo_operacao if tipo_operacao != TIPO_COMPRA_NORMAL else ""
     return f"{conta_id}|{suffix}"
@@ -183,7 +197,7 @@ def _build_lancamento(nfe: NFE, group: _AllocationGroup) -> Lancamento:
             op.confianca for op in group.operacoes_especiais
         ),
         tratamento_operacao_especial=_join_operacao_values(
-            op.destino_gerencial for op in group.operacoes_especiais
+            _tratamento_operacao_especial(op) for op in group.operacoes_especiais
         ),
         tipo_lancamento=group.tipo_lancamento,
     )
