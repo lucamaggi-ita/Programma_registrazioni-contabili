@@ -6,6 +6,7 @@ from io import StringIO
 from pathlib import Path
 from typing import Mapping
 
+from fantozzi.csv_utils import sniff_delimiter
 from fantozzi.fase9_decision_engine import (
     Fase9BlockedDecision,
     Fase9DecisionReason,
@@ -136,14 +137,14 @@ def write_fase9_applied_csv(
     if input_csv_path.resolve() == output_csv_path.resolve():
         raise ValueError("output_csv_path deve ser diferente do CSV original.")
 
-    headers, rows, dialect = _read_csv(input_csv_path)
+    headers, rows, delimiter = _read_csv(input_csv_path)
     result = apply_fase9_writeback(rows, decision_result, headers=headers)
     output_csv_path.parent.mkdir(parents=True, exist_ok=True)
     with output_csv_path.open("w", encoding="utf-8-sig", newline="") as file:
         writer = csv.DictWriter(
             file,
             fieldnames=result.headers,
-            delimiter=getattr(dialect, "delimiter", ";") or ";",
+            delimiter=delimiter,
             lineterminator="\n",
         )
         writer.writeheader()
@@ -219,15 +220,20 @@ def _apply_no_decision(row: dict[str, str]) -> None:
     row["motivo_bloqueio_fase9"] = "SEM_DECISAO_FASE9"
 
 
-def _read_csv(csv_path: Path) -> tuple[tuple[str, ...], tuple[dict[str, str], ...], csv.Dialect]:
+def _read_csv(csv_path: Path) -> tuple[tuple[str, ...], tuple[dict[str, str], ...], str]:
     with csv_path.open("r", encoding="utf-8-sig", newline="") as file:
         sample = file.read(4096)
         file.seek(0)
-        dialect = csv.Sniffer().sniff(sample, delimiters=";,") if sample else csv.excel
-        reader = csv.DictReader(file, dialect=dialect)
+        delimiter = sniff_delimiter(sample)
+        reader = csv.DictReader(
+            file,
+            delimiter=delimiter,
+            quotechar='"',
+            doublequote=True,
+        )
         headers = tuple(reader.fieldnames or ())
         rows = tuple({key: _text(value) for key, value in row.items()} for row in reader)
-    return headers, rows, dialect
+    return headers, rows, delimiter
 
 
 def _headers_from_rows(

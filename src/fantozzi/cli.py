@@ -52,6 +52,7 @@ from fantozzi.classification_rule_proposal import (
     gerar_relatorio_proposta_classificacao,
     salvar_relatorio_proposta,
 )
+from fantozzi.csv_utils import sniff_delimiter
 from fantozzi.dre_gerencial_provisoria import (
     DEFAULT_MAPEAMENTO_DRE,
     DreGerencialProvisoriaError,
@@ -1077,8 +1078,12 @@ def _read_csv_rows_for_fase9(csv_path: Path) -> tuple[tuple[str, ...], tuple[dic
     with csv_path.open("r", encoding="utf-8-sig", newline="") as file:
         sample = file.read(4096)
         file.seek(0)
-        dialect = csv.Sniffer().sniff(sample, delimiters=";,") if sample else csv.excel
-        reader = csv.DictReader(file, dialect=dialect)
+        reader = csv.DictReader(
+            file,
+            delimiter=sniff_delimiter(sample),
+            quotechar='"',
+            doublequote=True,
+        )
         headers = tuple(reader.fieldnames or ())
         rows = tuple(
             {header: _text(value) for header, value in row.items()}

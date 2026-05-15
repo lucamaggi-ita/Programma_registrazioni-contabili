@@ -9,6 +9,7 @@ from types import MappingProxyType
 from typing import Iterable, Mapping
 
 from fantozzi.classification_review_workbook import GENERIC_KEYWORDS
+from fantozzi.csv_utils import sniff_delimiter
 from fantozzi.normalization import normalize
 
 
@@ -111,8 +112,12 @@ def load_fase9_decisions_from_csv(csv_path: Path | str) -> tuple[Fase9Decision, 
     with csv_path.open("r", encoding="utf-8-sig", newline="") as file:
         sample = file.read(4096)
         file.seek(0)
-        dialect = csv.Sniffer().sniff(sample, delimiters=";,") if sample else csv.excel
-        reader = csv.DictReader(file, dialect=dialect)
+        reader = csv.DictReader(
+            file,
+            delimiter=sniff_delimiter(sample),
+            quotechar='"',
+            doublequote=True,
+        )
         return tuple(
             _decision_from_row(_clean_row(row), line_number)
             for line_number, row in enumerate(reader, start=2)

@@ -338,6 +338,30 @@ def test_load_fase9_decisions_from_csv_suporta_colunas_variaveis(tmp_path):
     assert decision.valor == "12.34"
 
 
+def test_load_fase9_decisions_preserva_descricao_com_ponto_virgula_e_aspas(tmp_path):
+    csv_path = tmp_path / "revisao.csv"
+    csv_path.write_text(
+        "\ufeff"
+        "descricao_normalizada;descricao_exemplo;fornecedores;documentos;"
+        "status_revisao;alertas;acao_manual;conta_id_sugerida;"
+        "conta_nome_sugerida;palavras_chave_sugeridas;cfop\n"
+        'item complexo;"BUCHA RED 1.1/2"" BRANCO (17.32); '
+        'ADAPTADOR 1.1/2"" AZUL (7.10)";Fornecedor;123;REVISAR;;'
+        "CLASSIFICAR;2.01.004;Refrigerantes;;5102\n",
+        encoding="utf-8",
+    )
+
+    decision = load_fase9_decisions_from_csv(csv_path)[0]
+
+    assert decision.status_revisao == "REVISAR"
+    assert decision.action == "CLASSIFICAR"
+    assert decision.account_id == "2.01.004"
+    assert (
+        decision.description
+        == 'BUCHA RED 1.1/2" BRANCO (17.32); ADAPTADOR 1.1/2" AZUL (7.10)'
+    )
+
+
 def test_resultado_tem_estrutura_de_promocoes_bloqueios_e_ignorados():
     result = evaluate_fase9_decisions(
         [

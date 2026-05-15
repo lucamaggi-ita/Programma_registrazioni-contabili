@@ -147,6 +147,35 @@ def test_writeback_recusa_saida_igual_ao_csv_original(tmp_path):
         write_fase9_applied_csv(input_csv, input_csv, _decision_result(input_csv))
 
 
+def test_writeback_preserva_campos_com_ponto_virgula_e_aspas(tmp_path):
+    input_csv = tmp_path / "revisao.csv"
+    output_csv = tmp_path / "aplicado.csv"
+    input_csv.write_text(
+        "\ufeff"
+        "descricao_normalizada;descricao_exemplo;fornecedores;documentos;"
+        "status_revisao;alertas;acao_manual;conta_atual_id;conta_atual_nome;"
+        "conta_id_sugerida;conta_nome_sugerida;palavras_chave_sugeridas;"
+        "tipo_operacao_especial;tratamento_operacao_especial;cfop;valor_total\n"
+        'item complexo;"BUCHA RED 1.1/2"" BRANCO (17.32); '
+        'ADAPTADOR 1.1/2"" AZUL (7.10)";Fornecedor;123;REVISAR;;'
+        "CLASSIFICAR;13.01.001;Revisar;2.01.004;Refrigerantes;;"
+        "COMPRA_NORMAL;DRE;5102;R$ 10,00\n",
+        encoding="utf-8",
+    )
+
+    write_fase9_applied_csv(input_csv, output_csv, _decision_result(input_csv))
+
+    output_row = _read_rows(output_csv)[0]
+    assert (
+        output_row["descricao_exemplo"]
+        == 'BUCHA RED 1.1/2" BRANCO (17.32); ADAPTADOR 1.1/2" AZUL (7.10)'
+    )
+    assert output_row["status_revisao"] == "OK"
+    assert output_row["acao_fase9"] == "CLASSIFICAR"
+    assert output_row["fase9_status"] == STATUS_PROMOVIDO_OK
+    assert output_row.get(None) is None
+
+
 def test_sem_decisao_fica_fora_escopo():
     rows = [_row()]
     empty_result = evaluate_fase9_decisions((), valid_account_ids=VALID_ACCOUNTS)
