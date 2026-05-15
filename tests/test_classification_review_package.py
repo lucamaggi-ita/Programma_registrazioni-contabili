@@ -51,7 +51,25 @@ def test_gera_txt_com_resumo(tmp_path):
     text = report_path.read_text(encoding="utf-8")
     assert "PACOTE ASSISTIDO PARA REVISAO CONTABIL HUMANA" in text
     assert "Total de candidatos: 1" in text
+    assert "Metadados fiscais nos CSV:" in text
     assert "Resultado: OK" in text
+
+
+def test_pacote_preserva_metadados_fiscais_no_xlsx(tmp_path):
+    row = _package_row(
+        tmp_path,
+        _row(
+            cfop="6908",
+            natureza_operacao="COMODATO",
+            tipo_operacao_especial="COMODATO",
+            confianca_operacao_especial="FORTE",
+            tratamento_operacao_especial="FORA_DRE",
+        ),
+    )
+
+    assert row["cfop"] == "6908"
+    assert row["natureza_operacao"] == "COMODATO"
+    assert row["tipo_operacao_especial"] == "COMODATO"
 
 
 def test_calcula_prioridade_alta_por_valor_alto(tmp_path):
@@ -158,6 +176,11 @@ def _row(**overrides: str) -> dict[str, str]:
         "conta_atual_nome": "Refrigerantes",
         "status_revisao": "REVISAR",
         "alertas": "",
+        "cfop": "",
+        "natureza_operacao": "",
+        "tipo_operacao_especial": "",
+        "confianca_operacao_especial": "",
+        "tratamento_operacao_especial": "",
         "acao_manual": "MANTER_REVISAO",
         "conta_id_sugerida": "",
         "conta_nome_sugerida": "",

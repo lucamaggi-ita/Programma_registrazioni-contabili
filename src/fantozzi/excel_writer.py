@@ -39,6 +39,11 @@ HEADERS = [
     "alertas",
     "observacoes",
     "centro_custo",
+    "cfop",
+    "natureza_operacao",
+    "tipo_operacao_especial",
+    "confianca_operacao_especial",
+    "tratamento_operacao_especial",
     "tipo_lancamento",
     "dre_linha_id",
     "dre_linha_nome",
@@ -101,6 +106,13 @@ def _ensure_headers(sheet: Worksheet) -> None:
 
     existing_headers = [cell.value for cell in sheet[1]]
     if existing_headers[: len(HEADERS)] == HEADERS:
+        return
+
+    if existing_headers and existing_headers[0] == HEADERS[0]:
+        missing_headers = [header for header in HEADERS if header not in existing_headers]
+        next_column = len(existing_headers) + 1
+        for offset, header in enumerate(missing_headers):
+            sheet.cell(row=1, column=next_column + offset, value=header)
         return
 
     if sheet.max_row == 0:

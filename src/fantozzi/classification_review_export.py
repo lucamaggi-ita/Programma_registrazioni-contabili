@@ -24,6 +24,11 @@ CSV_HEADERS = [
     "conta_atual_nome",
     "status_revisao",
     "alertas",
+    "cfop",
+    "natureza_operacao",
+    "tipo_operacao_especial",
+    "confianca_operacao_especial",
+    "tratamento_operacao_especial",
     "acao_manual",
     "conta_id_sugerida",
     "conta_nome_sugerida",
@@ -102,6 +107,17 @@ def _csv_rows(result: ClassificationCandidatesResult) -> list[dict[str, object]]
                 "conta_atual_nome": _join_values(account_names),
                 "status_revisao": _join_values(candidate.statuses),
                 "alertas": _join_values(candidate.alerts),
+                "cfop": _join_values(candidate.cfops),
+                "natureza_operacao": _join_values(candidate.naturezas_operacao),
+                "tipo_operacao_especial": _join_values(
+                    candidate.tipos_operacao_especial
+                ),
+                "confianca_operacao_especial": _join_values(
+                    candidate.confiancas_operacao_especial
+                ),
+                "tratamento_operacao_especial": _join_values(
+                    candidate.tratamentos_operacao_especial
+                ),
                 **MANUAL_FIELDS,
             }
         )

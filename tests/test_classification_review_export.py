@@ -33,6 +33,9 @@ def test_export_csv_with_candidates(tmp_path):
     assert rows[0]["conta_atual_nome"] == "Revisar - Produto Nao Classificado"
     assert rows[0]["status_revisao"] == "REVISAR"
     assert rows[0]["alertas"] == "CLASSIFICACAO_NAO_ENCONTRADA"
+    assert rows[0]["cfop"] == "5910"
+    assert rows[0]["natureza_operacao"] == "BONIFICACAO"
+    assert rows[0]["tipo_operacao_especial"] == "BONIFICACAO_RECEBIDA"
 
 
 def test_export_csv_uses_semicolon_separator_and_utf8_sig(tmp_path):
@@ -136,6 +139,11 @@ def _row(**overrides: object) -> list[object]:
         "hash_registro": "hash-1",
         "status_revisao": "REVISAR",
         "alertas": "CLASSIFICACAO_NAO_ENCONTRADA",
+        "cfop": "5910",
+        "natureza_operacao": "BONIFICACAO",
+        "tipo_operacao_especial": "BONIFICACAO_RECEBIDA",
+        "confianca_operacao_especial": "FORTE",
+        "tratamento_operacao_especial": "FORA_CUSTO_COMPRA",
         "duplicatas_json": "[]",
     }
     values.update(overrides)

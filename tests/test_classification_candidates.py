@@ -78,6 +78,28 @@ def test_report_includes_manual_yaml_draft_only(tmp_path):
     assert "Nenhuma regra YAML foi alterada" in text
 
 
+def test_report_includes_fiscal_metadata(tmp_path):
+    excel_path = tmp_path / "fiscal.xlsx"
+    _save_workbook(
+        excel_path,
+        revisao_rows=[
+            _row(
+                cfop="5910",
+                natureza_operacao="BONIFICACAO",
+                tipo_operacao_especial="BONIFICACAO_RECEBIDA",
+                confianca_operacao_especial="FORTE",
+                tratamento_operacao_especial="FORA_CUSTO_COMPRA",
+            )
+        ],
+    )
+
+    _, text = generate_classification_candidates_report(excel_path)
+
+    assert "CFOP: 5910" in text
+    assert "Natureza operacao: BONIFICACAO" in text
+    assert "Tipo operacao especial: BONIFICACAO_RECEBIDA" in text
+
+
 def test_missing_excel_file_raises_clear_error(tmp_path):
     missing_excel = tmp_path / "inexistente.xlsx"
 
@@ -178,6 +200,11 @@ def _row(**overrides: object) -> list[object]:
         "hash_registro": "hash-1",
         "status_revisao": "REVISAR",
         "alertas": "CLASSIFICACAO_NAO_ENCONTRADA",
+        "cfop": "",
+        "natureza_operacao": "",
+        "tipo_operacao_especial": "",
+        "confianca_operacao_especial": "",
+        "tratamento_operacao_especial": "",
         "duplicatas_json": "[]",
     }
     values.update(overrides)

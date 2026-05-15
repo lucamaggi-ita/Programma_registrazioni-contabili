@@ -174,6 +174,10 @@ def relatorio_pacote(
     ]
     special_counts = Counter(_text(row["possivel_operacao_especial"]) for row in possiveis)
     contador_motivos = Counter(_text(row["possivel_operacao_especial"]) for row in para_contador)
+    fiscal_counts = Counter(
+        _text(row.get("tipo_operacao_especial")) or "NAO_INFORMADO"
+        for row in rows
+    )
 
     lines = [
         "PACOTE ASSISTIDO PARA REVISAO CONTABIL HUMANA",
@@ -220,6 +224,10 @@ def relatorio_pacote(
         f"- total: {len(possiveis)}",
         "- por tipo:",
         *_counter_lines(dict(special_counts)),
+        "",
+        "Metadados fiscais nos CSV:",
+        "- tipo_operacao_especial:",
+        *_counter_lines(dict(fiscal_counts)),
         "",
         "Resultado: OK",
     ]
@@ -418,6 +426,11 @@ def _combined_normalized_text(row: dict[str, object]) -> str:
         "conta_atual_nome",
         "status_revisao",
         "alertas",
+        "cfop",
+        "natureza_operacao",
+        "tipo_operacao_especial",
+        "confianca_operacao_especial",
+        "tratamento_operacao_especial",
         "acao_manual",
         "observacao_manual",
     ]
@@ -565,6 +578,11 @@ def _suggested_width(header: str) -> int:
         "valor_total": 16,
         "conta_atual_nome": 34,
         "alertas": 38,
+        "cfop": 16,
+        "natureza_operacao": 34,
+        "tipo_operacao_especial": 30,
+        "confianca_operacao_especial": 28,
+        "tratamento_operacao_especial": 30,
         "acao_manual": 28,
         "observacao_manual": 44,
     }
@@ -581,6 +599,10 @@ def _should_wrap(header: str) -> bool:
         "documentos",
         "conta_atual_nome",
         "alertas",
+        "natureza_operacao",
+        "tipo_operacao_especial",
+        "confianca_operacao_especial",
+        "tratamento_operacao_especial",
         "observacao_manual",
     }
 

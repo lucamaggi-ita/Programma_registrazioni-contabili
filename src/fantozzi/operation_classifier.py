@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from decimal import Decimal
 from pathlib import Path
 import unicodedata
@@ -195,6 +196,37 @@ def classificar_operacao_especial(nfe: NFE) -> ClassificacaoOperacaoEspecial:
     )
 
 
+def classificar_produto_operacao_especial(
+    produto: ProdutoNFE,
+    natureza_operacao: str = "",
+    *,
+    tem_cobranca: bool = True,
+    nfe_tem_cfop_especial: bool = False,
+) -> ClassificacaoOperacaoEspecial:
+    """Classifica um item sem transformar toda a NF-e mista em especial."""
+    cfop = produto.cfop.strip()
+    tem_cfop_especial = cfop in COMODATO_CFOPS or cfop in BONIFICACAO_CFOPS
+    if tem_cfop_especial:
+        return classificar_operacao_especial(
+            _nfe_sintetica_produto(produto, natureza_operacao, tem_cobranca)
+        )
+
+    if nfe_tem_cfop_especial:
+        return _compra_normal()
+
+    natureza = normalizar_texto_operacao(natureza_operacao)
+    tem_natureza_especial = (
+        "COMODATO" in natureza
+        or any(term in natureza for term in BONIFICACAO_TERMS)
+    )
+    if tem_natureza_especial:
+        return classificar_operacao_especial(
+            _nfe_sintetica_produto(produto, natureza_operacao, tem_cobranca)
+        )
+
+    return _compra_normal()
+
+
 def auditar_operacoes_especiais(pasta: Path | str) -> OperacaoEspecialAuditResult:
     pasta = Path(pasta)
     if not pasta.exists():
@@ -355,6 +387,38 @@ def _produtos_relevantes(
                 )
             )
     return tuple(produtos)
+
+
+def _nfe_sintetica_produto(
+    produto: ProdutoNFE, natureza_operacao: str, tem_cobranca: bool
+) -> NFE:
+    return NFE(
+        chave="",
+        numero="",
+        serie="",
+        data_emissao=date(1900, 1, 1),
+        cnpj_emitente="",
+        nome_emitente="",
+        cnpj_destinatario="",
+        nome_destinatario="",
+        valor_total=produto.valor_total,
+        natureza_operacao=natureza_operacao,
+        produtos=[produto],
+        tem_duplicatas=tem_cobranca,
+        tem_cobranca=tem_cobranca,
+        valor_cobranca=produto.valor_total if tem_cobranca else Decimal("0"),
+    )
+
+
+def _compra_normal() -> ClassificacaoOperacaoEspecial:
+    return ClassificacaoOperacaoEspecial(
+        tipo=TIPO_COMPRA_NORMAL,
+        confianca="NAO_APLICAVEL",
+        destino_gerencial="DRE",
+        status_revisao="OK",
+        motivos=(),
+        alertas=(),
+    )
 
 
 def _motivos_produto(produto: ProdutoNFE) -> tuple[tuple[str, ...], tuple[str, ...]]:

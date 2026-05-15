@@ -7,6 +7,15 @@ import hashlib
 from typing import List
 
 from fantozzi.models import ClassificationResult, Duplicata, Lancamento, NFE, ProdutoNFE
+from fantozzi.operation_classifier import (
+    BONIFICACAO_CFOPS,
+    COMODATO_CFOPS,
+    TIPO_BONIFICACAO,
+    TIPO_COMODATO,
+    TIPO_COMPRA_NORMAL,
+    ClassificacaoOperacaoEspecial,
+    classificar_produto_operacao_especial,
+)
 from fantozzi.product_classifier import ProductClassifier
 
 
@@ -14,6 +23,7 @@ CENT = Decimal("0.01")
 ORIGEM_XML_NFE = "XML_NFE"
 ACCESSORY_ACCOUNT_ID = "2.05.001"
 DISCOUNT_ACCOUNT_ID = "2.05.002"
+SPECIAL_REVIEW_ACCOUNT_ID = "13.01.001"
 ALERTA_VALOR_INCONSISTENTE = "VALOR_INCONSISTENTE"
 
 
@@ -25,8 +35,10 @@ class _AllocationGroup:
     tipo_lancamento: str
     produtos: List[ProdutoNFE] = field(default_factory=list)
     classificacoes: List[ClassificationResult] = field(default_factory=list)
+    operacoes_especiais: List[ClassificacaoOperacaoEspecial] = field(default_factory=list)
     valor: Decimal = Decimal("0")
     alertas: List[str] = field(default_factory=list)
+    natureza_operacao: str = ""
 
 
 def allocate_nfe_to_lancamentos(
@@ -64,24 +76,45 @@ def _group_products_by_account(
     nfe: NFE, product_classifier: ProductClassifier
 ) -> list[_AllocationGroup]:
     groups: OrderedDict[str, _AllocationGroup] = OrderedDict()
+    nfe_tem_cfop_especial = _nfe_tem_cfop_especial(nfe)
 
     for produto in nfe.produtos:
-        classification = product_classifier.classify(
-            produto.descricao, fornecedor=nfe.nome_emitente
+        operacao = classificar_produto_operacao_especial(
+            produto,
+            nfe.natureza_operacao,
+            tem_cobranca=_tem_cobranca(nfe),
+            nfe_tem_cfop_especial=nfe_tem_cfop_especial,
         )
+        if operacao.tipo == TIPO_COMPRA_NORMAL:
+            classification = product_classifier.classify(
+                produto.descricao, fornecedor=nfe.nome_emitente
+            )
+        else:
+            conta_revisao = _get_classifier_account(
+                product_classifier, SPECIAL_REVIEW_ACCOUNT_ID
+            )
+            classification = ClassificationResult(
+                conta=conta_revisao,
+                confianca="NAO_CLASSIFICADO",
+                alertas=_operacao_especial_alertas(operacao),
+                matches=list(operacao.motivos),
+            )
         conta = classification.conta
+        group_key = _group_key(conta.id, operacao.tipo)
 
-        if conta.id not in groups:
-            groups[conta.id] = _AllocationGroup(
+        if group_key not in groups:
+            groups[group_key] = _AllocationGroup(
                 conta_id=conta.id,
                 conta_nome=conta.nome,
                 grupo_conta=conta.grupo,
                 tipo_lancamento=conta.tipo,
+                natureza_operacao=nfe.natureza_operacao,
             )
 
-        group = groups[conta.id]
+        group = groups[group_key]
         group.produtos.append(produto)
         group.classificacoes.append(classification)
+        group.operacoes_especiais.append(operacao)
         group.valor += produto.valor_total
         group.alertas.extend(_classification_alertas(classification))
 
@@ -95,6 +128,23 @@ def _classification_alertas(classification: ClassificationResult) -> list[str]:
     elif classification.confianca == "AMBIGUO":
         alertas.append("CLASSIFICACAO_AMBIGUA")
     return alertas
+
+
+def _operacao_especial_alertas(
+    operacao: ClassificacaoOperacaoEspecial,
+) -> list[str]:
+    if operacao.tipo == TIPO_COMODATO:
+        base = ["OPERACAO_ESPECIAL_COMODATO"]
+    elif operacao.tipo == TIPO_BONIFICACAO:
+        base = ["OPERACAO_ESPECIAL_BONIFICACAO"]
+    else:
+        base = ["OPERACAO_ESPECIAL_REVISAR"]
+    return _unique([*base, *operacao.motivos, *operacao.alertas])
+
+
+def _group_key(conta_id: str, tipo_operacao: str) -> str:
+    suffix = tipo_operacao if tipo_operacao != TIPO_COMPRA_NORMAL else ""
+    return f"{conta_id}|{suffix}"
 
 
 def _build_lancamento(nfe: NFE, group: _AllocationGroup) -> Lancamento:
@@ -124,6 +174,17 @@ def _build_lancamento(nfe: NFE, group: _AllocationGroup) -> Lancamento:
         chave_origem=nfe.chave,
         status_revisao=status_revisao,
         alertas=_join_alertas(group.alertas),
+        cfop=_join_produto_cfops(group.produtos),
+        natureza_operacao=group.natureza_operacao,
+        tipo_operacao_especial=_join_operacao_values(
+            op.tipo for op in group.operacoes_especiais
+        ),
+        confianca_operacao_especial=_join_operacao_values(
+            op.confianca for op in group.operacoes_especiais
+        ),
+        tratamento_operacao_especial=_join_operacao_values(
+            op.destino_gerencial for op in group.operacoes_especiais
+        ),
         tipo_lancamento=group.tipo_lancamento,
     )
     lancamento.hash_registro = _hash_lancamento(lancamento)
@@ -215,6 +276,11 @@ def _build_adjustment_lancamento(
         chave_origem=nfe.chave,
         status_revisao="OK" if explained else "REVISAR",
         alertas="" if explained else ALERTA_VALOR_INCONSISTENTE,
+        cfop=_join_produto_cfops(nfe.produtos),
+        natureza_operacao=nfe.natureza_operacao,
+        tipo_operacao_especial=TIPO_COMPRA_NORMAL,
+        confianca_operacao_especial="NAO_APLICAVEL",
+        tratamento_operacao_especial="DRE",
         tipo_lancamento=tipo_lancamento,
     )
     lancamento.hash_registro = _hash_lancamento(lancamento)
@@ -225,6 +291,26 @@ def _describe_items(produtos: list[ProdutoNFE]) -> str:
     return "; ".join(
         f"{produto.descricao} ({_money(produto.valor_total)})" for produto in produtos
     )
+
+
+def _join_produto_cfops(produtos: list[ProdutoNFE]) -> str:
+    return ", ".join(_unique([produto.cfop.strip() for produto in produtos if produto.cfop]))
+
+
+def _join_operacao_values(values) -> str:
+    return ", ".join(_unique([str(value).strip() for value in values if str(value).strip()]))
+
+
+def _nfe_tem_cfop_especial(nfe: NFE) -> bool:
+    return any(
+        produto.cfop.strip() in COMODATO_CFOPS
+        or produto.cfop.strip() in BONIFICACAO_CFOPS
+        for produto in nfe.produtos
+    )
+
+
+def _tem_cobranca(nfe: NFE) -> bool:
+    return nfe.tem_duplicatas or nfe.tem_cobranca or nfe.valor_cobranca > 0
 
 
 def _allocate_duplicatas(
@@ -309,6 +395,7 @@ def _hash_lancamento(lancamento: Lancamento) -> str:
         lancamento.origem,
         lancamento.chave_origem,
         lancamento.conta_id,
+        lancamento.tipo_operacao_especial,
         f"{_money(lancamento.valor):.2f}",
     ]
     payload = "|".join(parts)

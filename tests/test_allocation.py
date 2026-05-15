@@ -166,6 +166,84 @@ def test_supplier_rule_classifies_unmatched_product(product_classifier):
     assert lancamentos[0].alertas == ""
 
 
+def test_comodato_cfop_goes_to_special_review_before_product_alias(product_classifier):
+    nfe = _synthetic_nfe(
+        chave="NFE-COMODATO-001",
+        valor_total=Decimal("100.00"),
+        duplicata_valor=Decimal("100.00"),
+        natureza_operacao="COMODATO",
+        produto_descricao="FREEZER METALFRIO",
+        produto_cfop="6908",
+    )
+
+    lancamentos = allocate_nfe_to_lancamentos(nfe, product_classifier)
+
+    assert len(lancamentos) == 1
+    assert lancamentos[0].conta_id == "13.01.001"
+    assert lancamentos[0].status_revisao == "REVISAR"
+    assert "OPERACAO_ESPECIAL_COMODATO" in lancamentos[0].alertas
+    assert lancamentos[0].tipo_operacao_especial == "COMODATO"
+    assert lancamentos[0].cfop == "6908"
+
+
+def test_bonificacao_cfop_goes_to_special_review_before_product_alias(product_classifier):
+    nfe = _synthetic_nfe(
+        chave="NFE-BONIFICACAO-001",
+        valor_total=Decimal("100.00"),
+        duplicata_valor=Decimal("100.00"),
+        natureza_operacao="BONIFICACAO",
+        produto_descricao="REFR GUARANA DA AMAZONIA FYS",
+        produto_cfop="5910",
+    )
+
+    lancamentos = allocate_nfe_to_lancamentos(nfe, product_classifier)
+
+    assert len(lancamentos) == 1
+    assert lancamentos[0].conta_id == "13.01.001"
+    assert lancamentos[0].status_revisao == "REVISAR"
+    assert "OPERACAO_ESPECIAL_BONIFICACAO" in lancamentos[0].alertas
+    assert lancamentos[0].tipo_operacao_especial == "BONIFICACAO_RECEBIDA"
+    assert lancamentos[0].tratamento_operacao_especial == "FORA_CUSTO_COMPRA"
+
+
+def test_normal_cfop_still_uses_product_classifier(product_classifier):
+    nfe = _synthetic_nfe(
+        chave="NFE-CFOP-NORMAL-001",
+        valor_total=Decimal("100.00"),
+        duplicata_valor=Decimal("100.00"),
+        produto_descricao="COCA-COLA KS 290ML",
+        produto_cfop="5405",
+    )
+
+    lancamentos = allocate_nfe_to_lancamentos(nfe, product_classifier)
+
+    assert len(lancamentos) == 1
+    assert lancamentos[0].conta_id == "2.01.004"
+    assert lancamentos[0].status_revisao == "OK"
+    assert lancamentos[0].tipo_operacao_especial == "COMPRA_NORMAL"
+
+
+def test_mixed_nfe_keeps_normal_item_and_routes_special_item(product_classifier):
+    nfe = _synthetic_nfe_with_products(
+        chave="NFE-MISTA-001",
+        natureza_operacao="VENDA DE MERCADORIAS",
+        produtos=[
+            _produto("COCA-COLA KS 290ML", "5405", Decimal("100.00")),
+            _produto("REFR GUARANA DA AMAZONIA FYS", "5910", Decimal("100.00")),
+        ],
+    )
+
+    lancamentos = allocate_nfe_to_lancamentos(nfe, product_classifier)
+    by_operacao = {lancamento.tipo_operacao_especial: lancamento for lancamento in lancamentos}
+
+    assert by_operacao["COMPRA_NORMAL"].conta_id == "2.01.004"
+    assert by_operacao["COMPRA_NORMAL"].status_revisao == "OK"
+    assert by_operacao["COMPRA_NORMAL"].cfop == "5405"
+    assert by_operacao["BONIFICACAO_RECEBIDA"].conta_id == "13.01.001"
+    assert by_operacao["BONIFICACAO_RECEBIDA"].status_revisao == "REVISAR"
+    assert by_operacao["BONIFICACAO_RECEBIDA"].cfop == "5910"
+
+
 def test_positive_accessory_cost_creates_separate_lancamento(product_classifier):
     nfe = _synthetic_nfe(
         chave="NFE-ACCESSORY-001",
@@ -218,6 +296,8 @@ def _synthetic_nfe(
     valor_desconto: Decimal = Decimal("0.00"),
     fornecedor: str = "FORNECEDOR TESTE",
     produto_descricao: str = "COCA-COLA KS 290ML",
+    produto_cfop: str = "5102",
+    natureza_operacao: str = "VENDA DE MERCADORIAS",
 ) -> NFE:
     return NFE(
         chave=chave,
@@ -229,6 +309,7 @@ def _synthetic_nfe(
         cnpj_destinatario="55746722000181",
         nome_destinatario="TRATTORIA DO SOSSEGO RESTAURANTE LTDA",
         valor_total=valor_total,
+        natureza_operacao=natureza_operacao,
         valor_produtos=Decimal("100.00"),
         valor_frete=valor_frete,
         valor_desconto=valor_desconto,
@@ -238,7 +319,7 @@ def _synthetic_nfe(
                 codigo="REFR",
                 descricao=produto_descricao,
                 ncm="22021000",
-                cfop="5102",
+                cfop=produto_cfop,
                 unidade="CX",
                 quantidade=Decimal("1"),
                 valor_unitario=Decimal("100.00"),
@@ -254,4 +335,50 @@ def _synthetic_nfe(
         ],
         tem_duplicatas=True,
         arquivo_origem=f"{chave}.xml",
+    )
+
+
+def _synthetic_nfe_with_products(
+    *,
+    chave: str,
+    natureza_operacao: str,
+    produtos: list[ProdutoNFE],
+) -> NFE:
+    total = sum((produto.valor_total for produto in produtos), Decimal("0"))
+    return NFE(
+        chave=chave,
+        numero="777",
+        serie="1",
+        data_emissao=date(2026, 5, 6),
+        cnpj_emitente="12345678000195",
+        nome_emitente="FORNECEDOR TESTE",
+        cnpj_destinatario="55746722000181",
+        nome_destinatario="TRATTORIA DO SOSSEGO RESTAURANTE LTDA",
+        valor_total=total,
+        natureza_operacao=natureza_operacao,
+        valor_produtos=total,
+        produtos=produtos,
+        duplicatas=[
+            Duplicata(
+                numero="001",
+                vencimento=date(2026, 5, 20),
+                valor=total,
+            )
+        ],
+        tem_duplicatas=True,
+        arquivo_origem=f"{chave}.xml",
+    )
+
+
+def _produto(descricao: str, cfop: str, valor: Decimal) -> ProdutoNFE:
+    return ProdutoNFE(
+        n_item=1,
+        codigo="P",
+        descricao=descricao,
+        ncm="22021000",
+        cfop=cfop,
+        unidade="UN",
+        quantidade=Decimal("1"),
+        valor_unitario=valor,
+        valor_total=valor,
     )

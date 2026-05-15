@@ -41,6 +41,11 @@ class CandidateSourceRow:
     alertas: str
     conta_id: str
     conta_nome: str
+    cfop: str
+    natureza_operacao: str
+    tipo_operacao_especial: str
+    confianca_operacao_especial: str
+    tratamento_operacao_especial: str
 
 
 @dataclass(frozen=True)
@@ -54,6 +59,11 @@ class ClassificationCandidate:
     statuses: tuple[str, ...]
     alerts: tuple[str, ...]
     accounts: tuple[str, ...]
+    cfops: tuple[str, ...]
+    naturezas_operacao: tuple[str, ...]
+    tipos_operacao_especial: tuple[str, ...]
+    confiancas_operacao_especial: tuple[str, ...]
+    tratamentos_operacao_especial: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -222,6 +232,15 @@ def _rows_from_sheet(
                 alertas=_text(_first_cell(row, headers, ("alertas", "alerta"))),
                 conta_id=_text(_cell(row, headers, "conta_id")),
                 conta_nome=_text(_cell(row, headers, "conta_nome")),
+                cfop=_text(_cell(row, headers, "cfop")),
+                natureza_operacao=_text(_cell(row, headers, "natureza_operacao")),
+                tipo_operacao_especial=_text(_cell(row, headers, "tipo_operacao_especial")),
+                confianca_operacao_especial=_text(
+                    _cell(row, headers, "confianca_operacao_especial")
+                ),
+                tratamento_operacao_especial=_text(
+                    _cell(row, headers, "tratamento_operacao_especial")
+                ),
             )
         )
 
@@ -253,6 +272,17 @@ def _aggregate_candidates(
                 accounts=_sorted_unique(
                     _join_code_name(row.conta_id, row.conta_nome) for row in group
                 ),
+                cfops=_sorted_unique(row.cfop for row in group),
+                naturezas_operacao=_sorted_unique(row.natureza_operacao for row in group),
+                tipos_operacao_especial=_sorted_unique(
+                    row.tipo_operacao_especial for row in group
+                ),
+                confiancas_operacao_especial=_sorted_unique(
+                    row.confianca_operacao_especial for row in group
+                ),
+                tratamentos_operacao_especial=_sorted_unique(
+                    row.tratamento_operacao_especial for row in group
+                ),
             )
         )
 
@@ -279,6 +309,11 @@ def _candidate_lines(index: int, candidate: ClassificationCandidate) -> list[str
         f"Status: {_join_values(candidate.statuses)}",
         f"Alerta: {_join_values(candidate.alerts)}",
         f"Contas atuais: {_join_values(candidate.accounts)}",
+        f"CFOP: {_join_values(candidate.cfops)}",
+        f"Natureza operacao: {_join_values(candidate.naturezas_operacao)}",
+        f"Tipo operacao especial: {_join_values(candidate.tipos_operacao_especial)}",
+        f"Confianca operacao especial: {_join_values(candidate.confiancas_operacao_especial)}",
+        f"Tratamento operacao especial: {_join_values(candidate.tratamentos_operacao_especial)}",
         "",
         "Texto normalizado:",
         candidate.normalized_description,

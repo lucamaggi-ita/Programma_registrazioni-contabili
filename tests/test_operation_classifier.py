@@ -8,6 +8,7 @@ from fantozzi.operation_classifier import (
     TIPO_COMPRA_NORMAL,
     TIPO_OUTRA_REVISAO,
     classificar_operacao_especial,
+    classificar_produto_operacao_especial,
     normalizar_texto_operacao,
 )
 
@@ -31,6 +32,15 @@ def test_cfop_6908_with_comodato_nature_is_strong_comodato():
 def test_cfop_5909_with_retorno_comodato_is_comodato():
     result = classificar_operacao_especial(
         _nfe("RETORNO DE BEM RECEBIDO POR COMODATO", ["5909"])
+    )
+
+    assert result.tipo == TIPO_COMODATO
+    assert result.confianca == "FORTE"
+
+
+def test_cfop_1909_with_retorno_comodato_is_comodato():
+    result = classificar_operacao_especial(
+        _nfe("RETORNO DE BEM RECEBIDO POR COMODATO", ["1909"])
     )
 
     assert result.tipo == TIPO_COMODATO
@@ -90,11 +100,36 @@ def test_absence_of_duplicata_without_special_cfop_or_nature_does_not_classify()
 
 
 def test_normal_purchase_is_compra_normal():
-    result = classificar_operacao_especial(_nfe("Venda de mercadorias", ["5102"]))
+    result = classificar_operacao_especial(_nfe("Venda de mercadorias", ["5405"]))
 
     assert result.tipo == TIPO_COMPRA_NORMAL
     assert result.confianca == "NAO_APLICAVEL"
     assert result.destino_gerencial == "DRE"
+
+
+def test_item_classifier_keeps_normal_cfop_in_mixed_nfe_normal():
+    produto = _produto("COCA-COLA KS 290ML", "5405")
+
+    result = classificar_produto_operacao_especial(
+        produto,
+        "Venda de mercadorias",
+        nfe_tem_cfop_especial=True,
+    )
+
+    assert result.tipo == TIPO_COMPRA_NORMAL
+
+
+def test_item_classifier_detects_bonificacao_cfop_in_mixed_nfe():
+    produto = _produto("REFR GUARANA DA AMAZONIA FYS", "5910")
+
+    result = classificar_produto_operacao_especial(
+        produto,
+        "Venda de mercadorias",
+        nfe_tem_cfop_especial=True,
+    )
+
+    assert result.tipo == TIPO_BONIFICACAO
+    assert result.destino_gerencial == "FORA_CUSTO_COMPRA"
 
 
 def test_conflict_between_comodato_and_bonificacao_requires_review():
@@ -146,4 +181,18 @@ def _nfe(
         produtos=produtos,
         duplicatas=duplicatas,
         tem_duplicatas=tem_duplicatas,
+    )
+
+
+def _produto(descricao: str, cfop: str) -> ProdutoNFE:
+    return ProdutoNFE(
+        n_item=1,
+        codigo="P1",
+        descricao=descricao,
+        ncm="00000000",
+        cfop=cfop,
+        unidade="UN",
+        quantidade=Decimal("1"),
+        valor_unitario=Decimal("10.00"),
+        valor_total=Decimal("10.00"),
     )
