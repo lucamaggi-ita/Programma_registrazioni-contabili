@@ -187,6 +187,83 @@ def test_product_especifico_prevalece_sobre_fornecedor_pataxo(product_clf):
     assert result.confianca == "OK"
 
 
+def test_product_shine_dry_prevalece_sobre_fornecedor_pataxo(product_clf):
+    result = product_clf.classify(
+        "SHINE & DRY 20 LITROS", fornecedor="PATAXO MATERIAIS DE CONSTRUCAO"
+    )
+    assert result.conta.id == "2.04.001"
+    assert result.confianca == "OK"
+
+
+@pytest.mark.parametrize(
+    ("fornecedor", "conta_id"),
+    [
+        ("CENTRAL DE ALIMENTOS DA BAHIA - CAB LTDA", "2.02.008"),
+        ("DATERRA DISTRIBUIDORA DE ALIMENTOS LTDA", "2.02.008"),
+        ("REI DAS BOMBAS MANUT E REPA DE MAQ LTDA", "8.01.001"),
+    ],
+)
+def test_product_fornecedores_recorrentes_pos_12g(product_clf, fornecedor, conta_id):
+    result = product_clf.classify("ITEM GENERICO SEM ALIAS", fornecedor=fornecedor)
+    assert result.conta.id == conta_id
+    assert result.confianca == "OK"
+
+
+@pytest.mark.parametrize(
+    ("descricao", "conta_id"),
+    [
+        ("PAPEL TOALHA BOBINA FS 20CM X 200M 30G 6 RLS", "2.03.001"),
+        (
+            "PALETA CX COM 24UN 120G MORANGO COM LEITE COND PALETITAS",
+            "2.02.015",
+        ),
+        (
+            "PICOLE CX COM 24UN 65G PALETITO ZERO AD DE ACUCAR PALETITAS",
+            "2.02.015",
+        ),
+        ("PICOLE CX COM 27UN 68G SPACE MONSTERS PALETITAS", "2.02.015"),
+        ("ATUM RAL C/OLEO E CALDO VEG POUCH 500 GR 88", "2.02.004"),
+        ("MONIN XAROPE PESSEGO 700ML", "2.01.007"),
+        ("AGUA TONICA FYS ZERO LT 350ML", "2.01.004"),
+        ("REFR FYS LIMAO ZERO 0,350LT DESC 12UN", "2.01.004"),
+        ("FYS GUARANA 350ML", "2.01.004"),
+        ("ADOCANTE ZERO-CAL 100ML", "2.02.010"),
+        ("SAL LEBRE SACHE 2000X0,8G", "2.02.012"),
+        ("CANETA PRETA 1.0 RETRO PROJETOR PILOT", "6.01.005"),
+        ("CANETA PRETA PILOT", "6.01.005"),
+        ("DESINF LIMPO 5LTS", "2.04.001"),
+    ],
+)
+def test_product_aliases_especificos_pos_12g(product_clf, descricao, conta_id):
+    result = product_clf.classify(descricao)
+    assert result.conta.id == conta_id
+    assert result.confianca == "OK"
+
+
+def test_product_checon_nao_vira_fornecedor_broad(product_clf):
+    result = product_clf.classify(
+        "ITEM GENERICO SEM ALIAS",
+        fornecedor="Checon Distribuidora e Transportadora Lt",
+    )
+    assert result.conta.id == "13.01.001"
+    assert result.confianca == "NAO_CLASSIFICADO"
+
+
+def test_product_refrigerante_checon_classifica_por_produto(product_clf):
+    result = product_clf.classify(
+        "FYS GUARANA 350ML",
+        fornecedor="Checon Distribuidora e Transportadora Lt",
+    )
+    assert result.conta.id == "2.01.004"
+    assert result.confianca == "OK"
+
+
+def test_product_valor_inconsistente_nao_e_resolvido_por_alias(product_clf):
+    result = product_clf.classify("Descontos obtidos identificados no total da NF-e")
+    assert result.conta.id == "13.01.001"
+    assert result.confianca == "NAO_CLASSIFICADO"
+
+
 def test_expense_energia_eletrica(expense_clf):
     result = expense_clf.classify("energia eletrica")
     assert result.conta.id == "4.01.011"

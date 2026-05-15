@@ -27,6 +27,21 @@ regras_por_fornecedor:
     conta_id: "8.01.001"
     conta_nome: "Manutencao Predial"
     observacao: "Fornecedor recorrente de materiais de manutencao predial."
+  - fornecedor_aliases:
+      - central de alimentos da bahia
+    conta_id: "2.02.008"
+    conta_nome: "Hortifruti"
+    observacao: "Fornecedor recorrente de hortifruti."
+  - fornecedor_aliases:
+      - daterra
+    conta_id: "2.02.008"
+    conta_nome: "Hortifruti"
+    observacao: "Fornecedor recorrente de hortifruti."
+  - fornecedor_aliases:
+      - rei das bombas
+    conta_id: "8.01.001"
+    conta_nome: "Manutencao Predial"
+    observacao: "Fornecedor recorrente de manutencao de bomba de pressao."
 
 # Regras gerais de classificacao
 regras:
@@ -155,6 +170,9 @@ regras:
       - schweppes
       - h2oh
       - fys
+      - agua tonica fys
+      - refr fys
+      - fys guarana
       - del valle
       - del val
       - fanta
@@ -185,6 +203,8 @@ regras:
       - monster
       - tnt ener
       - energetico
+    evitar_aliases:
+      - picole cx com 27un 68g space monsters paletitas
 
   - conta_id: "2.01.007"
     conta_nome: "Sucos, Polpas e Bebidas nao Alcoolicas"
@@ -196,6 +216,7 @@ regras:
       - agua de coco
       - sempre viva
       - monin
+      - monin xarope
       - xarope
       - polpa sempre viva
       - polpa acerola
@@ -291,6 +312,10 @@ regras:
       - picole
       - trident
       - halls
+      - monin xarope
+      - agua tonica fys
+      - refr fys
+      - fys guarana
 
   - conta_id: "2.02.009"
     conta_nome: "Paes e Padaria"
@@ -367,6 +392,7 @@ regras:
       - frescatto
       - manjuba
       - manjubinha
+      - atum ral c oleo e caldo veg pouch
 
   - conta_id: "2.02.005"
     conta_nome: "Frios e Embutidos"
@@ -424,6 +450,9 @@ regras:
       - natville
       - piracanjuba
       - creme leite italac
+    evitar_aliases:
+      - paletitas
+      - paleta cx
 
   - conta_id: "2.02.010"
     conta_nome: "Mercearia Seca"
@@ -462,10 +491,15 @@ regras:
       - arborio
       - farinha trigo
       - kicaldo
+      - adocante zero-cal
     evitar_aliases:
       - cc sem acucar
       - sem acucar
       - zero acucar
+      - paletitas
+      - paleta cx
+      - picole
+      - sal lebre sache
 
   - conta_id: "2.02.011"
     conta_nome: "Oleos, Azeites e Gorduras"
@@ -481,6 +515,8 @@ regras:
       - oliva ext vrg
       - oleo soja
       - dom gameiro
+    evitar_aliases:
+      - atum ral c oleo e caldo veg pouch
 
   - conta_id: "2.02.012"
     conta_nome: "Molhos, Temperos e Condimentos"
@@ -516,8 +552,10 @@ regras:
       - cravo
       - alecrim
       - louro
+      - sal lebre sache
     evitar_aliases:
       - essencia coala
+      - atum ral c oleo e caldo veg pouch
 
   - conta_id: "2.02.013"
     conta_nome: "Conservas e Enlatados"
@@ -540,6 +578,8 @@ regras:
       - la bella
       - tomate s pele
       - atum ral
+    evitar_aliases:
+      - atum ral c oleo e caldo veg pouch
 
   - conta_id: "2.02.014"
     conta_nome: "Batatas Congeladas e Pre-prontos"
@@ -571,6 +611,9 @@ regras:
       - paletitas
       - trento bites
       - mentos
+      - paleta cx com 24un 120g morango com leite cond paletitas
+      - picole cx com 24un 65g paletito zero ad de acucar paletitas
+      - picole cx com 27un 68g space monsters paletitas
 
   - conta_id: "2.02.016"
     conta_nome: "Cigarros e Tabacaria"
@@ -622,6 +665,7 @@ regras:
       - copo 500ml
       - colher sobremesa cristal
       - pote kit cristal
+      - papel toalha bobina
 
   # ---- EMBALAGENS PARA DELIVERY ----
   - conta_id: "2.03.003"
@@ -685,6 +729,9 @@ regras:
       - essencia coala
       - dispenser porta higienico
       - deter radiante
+      - desinf limpo 5lts
+    evitar_aliases:
+      - papel toalha bobina
 
   - conta_id: "2.04.002"
     conta_nome: "Utensilios de Cozinha e Salao"
@@ -804,6 +851,8 @@ regras:
       - fita crepe
       - prancheta duratex
       - caneta azul trilux
+      - caneta preta pilot
+      - caneta preta 1 0 retro projetor pilot
       - caneta preta retro projetor
       - pincel marc permanente
       - clips n 2 0
