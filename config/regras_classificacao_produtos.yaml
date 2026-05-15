@@ -42,6 +42,11 @@ regras_por_fornecedor:
     conta_id: "8.01.001"
     conta_nome: "Manutencao Predial"
     observacao: "Fornecedor recorrente de manutencao de bomba de pressao."
+  - fornecedor_aliases:
+      - delmax
+    conta_id: "2.02.015"
+    conta_nome: "Sobremesas, Sorvetes e Picoles"
+    observacao: "Fornecedor recorrente de doces, balas e sobremesas sem conta especifica propria."
 
 # Regras gerais de classificacao
 regras:

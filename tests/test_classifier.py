@@ -258,6 +258,41 @@ def test_product_refrigerante_checon_classifica_por_produto(product_clf):
     assert result.confianca == "OK"
 
 
+@pytest.mark.parametrize(
+    "descricao",
+    [
+        "PIRUL PEGADAS DO BANZE BRILHANTE 30UN DROPS HALLS CEREJA",
+        "CHIC TORTUG HUEVITOS 12UN DROPS HALLS CEREJA 1X21UN",
+        "CHOC BATON AO LEITE 30X16G",
+    ],
+)
+def test_product_delmax_classifica_fallback_sobremesas(product_clf, descricao):
+    result = product_clf.classify(
+        descricao,
+        fornecedor="DELMAX SUPERMERCADO COMERCIO DE ALIMENTOS LTDA",
+    )
+    assert result.conta.id == "2.02.015"
+    assert result.confianca == "OK"
+
+
+def test_product_especifico_prevalece_sobre_fornecedor_delmax(product_clf):
+    result = product_clf.classify(
+        "COPO COPOSCHIO 500ML",
+        fornecedor="DELMAX SUPERMERCADO COMERCIO DE ALIMENTOS LTDA",
+    )
+    assert result.conta.id == "2.03.001"
+    assert result.confianca == "OK"
+
+
+def test_product_item_generico_sem_fornecedor_delmax_nao_classifica(product_clf):
+    result = product_clf.classify(
+        "ITEM GENERICO SEM ALIAS",
+        fornecedor="OUTRO FORNECEDOR",
+    )
+    assert result.conta.id == "13.01.001"
+    assert result.confianca == "NAO_CLASSIFICADO"
+
+
 def test_product_valor_inconsistente_nao_e_resolvido_por_alias(product_clf):
     result = product_clf.classify("Descontos obtidos identificados no total da NF-e")
     assert result.conta.id == "13.01.001"
