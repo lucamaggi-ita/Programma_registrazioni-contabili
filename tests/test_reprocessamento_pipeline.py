@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import json
 from datetime import date
 from pathlib import Path
@@ -178,6 +179,23 @@ def _run_pipeline(tmp_path: Path, *, fail_at: str | None = None):
     return result, calls, saida_output, saida_reports
 
 
+def _run_pipeline_com_fase9(tmp_path: Path, fase9_csv_path: Path):
+    calls: list[tuple[str, Path]] = []
+    xml_base = _make_xml_base(tmp_path)
+    saida_output = tmp_path / "output" / "importacao_real"
+    saida_reports = tmp_path / "reports" / "importacao_real"
+    result = reprocessar_importacao_real_provisoria(
+        xml_base,
+        saida_output,
+        saida_reports,
+        project_root=tmp_path,
+        steps=_fake_steps(calls),
+        today=date(2026, 5, 15),
+        fase9_csv_path=fase9_csv_path,
+    )
+    return result, calls, saida_output, saida_reports
+
+
 def test_pipeline_provisoria_cria_run(tmp_path):
     result, _, saida_output, saida_reports = _run_pipeline(tmp_path)
 
@@ -239,6 +257,7 @@ def test_pipeline_provisoria_nao_executa_fase9(tmp_path):
 
     manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
     assert manifest["classificacao"]["fase9_executada"] is False
+    assert not (result.reports_run_dir / "lancamentos_aplicados_fase9.csv").exists()
 
 
 def test_pipeline_provisoria_nao_aplica_regras(tmp_path):
@@ -246,6 +265,105 @@ def test_pipeline_provisoria_nao_aplica_regras(tmp_path):
 
     manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
     assert manifest["classificacao"]["regras_aplicadas"] == 0
+
+
+def test_pipeline_com_fase9_explicita_gera_csv_separado_e_manifest(tmp_path):
+    _save_plano_contas_fase9(tmp_path)
+    fase9_csv = tmp_path / "revisao_classificacao_revisada.csv"
+    _save_fase9_csv(
+        fase9_csv,
+        [
+            _fase9_row(),
+            _fase9_row(documentos="200", acao_manual="MANTER_REVISAO"),
+            _fase9_row(
+                documentos="300",
+                tipo_operacao_especial="COMODATO",
+                tratamento_operacao_especial="FORA_DRE",
+            ),
+            _fase9_row(documentos="359680", numero_nota="359680"),
+            _fase9_row(documentos="400", cfop="1949"),
+        ],
+    )
+    original_csv = fase9_csv.read_bytes()
+
+    result, _, _, _ = _run_pipeline_com_fase9(tmp_path, fase9_csv)
+
+    output_csv = result.reports_run_dir / "lancamentos_aplicados_fase9.csv"
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    rows = _read_csv_rows(output_csv)
+    assert fase9_csv.read_bytes() == original_csv
+    assert output_csv.exists()
+    assert rows[0]["status_revisao"] == "OK"
+    assert rows[0]["fase9_status"] == "PROMOVIDO_OK"
+    assert [row["status_revisao"] for row in rows[1:]] == ["REVISAR"] * 4
+    assert [row["motivo_bloqueio_fase9"] for row in rows[2:]] == [
+        "COMODATO_FORA_DRE",
+        "NF_359680_CONTROLE_MANUAL",
+        "CFOP_1949_CONTROLE_MANUAL",
+    ]
+    classificacao = manifest["classificacao"]
+    assert classificacao["fase9_executada"] is True
+    assert classificacao["input_csv"] == str(fase9_csv)
+    assert classificacao["output_csv"] == str(output_csv)
+    assert classificacao["promovidos"] == 1
+    assert classificacao["bloqueados"] == 4
+    assert classificacao["fora_escopo"] == 0
+    assert str(output_csv) in manifest["relatorios_gerados"]
+
+
+def test_pipeline_com_fase9_registra_checkpoint_antes_dos_relatorios_ok(tmp_path):
+    _save_plano_contas_fase9(tmp_path)
+    fase9_csv = tmp_path / "revisao_classificacao_revisada.csv"
+    _save_fase9_csv(fase9_csv, [_fase9_row()])
+
+    result, calls, _, _ = _run_pipeline_com_fase9(tmp_path, fase9_csv)
+
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    checkpoints = [item["descricao"] for item in manifest["checkpoints"]]
+    assert checkpoints.index("PACOTE_REVISAO_CONTABIL_GERADO") < checkpoints.index(
+        "FASE9_APLICADA"
+    )
+    assert checkpoints.index("FASE9_APLICADA") < checkpoints.index(
+        "RELATORIOS_OK_GERADOS"
+    )
+    assert [name for name, _ in calls][-3:] == [
+        "gerar_relatorios_ok",
+        "auditar_relatorios_ok",
+        "gerar_dre_ok",
+    ]
+
+
+def test_pipeline_com_fase9_rejeita_input_igual_output_aplicado(tmp_path, monkeypatch):
+    _save_plano_contas_fase9(tmp_path)
+    xml_base = _make_xml_base(tmp_path)
+    saida_output = tmp_path / "output" / "importacao_real"
+    saida_reports = tmp_path / "reports" / "importacao_real"
+    from fantozzi import run_manager
+
+    monkeypatch.setattr(
+        run_manager,
+        "generate_run_id",
+        lambda saida_output, saida_reports, today=None: "2026-05-15_001",
+    )
+    fase9_csv = (
+        saida_reports
+        / "runs"
+        / "2026-05-15_001"
+        / "lancamentos_aplicados_fase9.csv"
+    )
+    fase9_csv.parent.mkdir(parents=True)
+    _save_fase9_csv(fase9_csv, [_fase9_row()])
+
+    with pytest.raises(ReprocessamentoPipelineError, match="deve ser diferente"):
+        reprocessar_importacao_real_provisoria(
+            xml_base,
+            saida_output,
+            saida_reports,
+            project_root=tmp_path,
+            steps=_fake_steps([]),
+            today=date(2026, 5, 15),
+            fase9_csv_path=fase9_csv,
+        )
 
 
 def test_pipeline_provisoria_bloqueia_modo_definitivo(tmp_path):
@@ -438,3 +556,80 @@ def test_gerar_pacote_revisao_falha_sem_csvs(tmp_path):
 
     with pytest.raises(ReprocessamentoPipelineError, match="Nenhum CSV"):
         _step_gerar_pacote_revisao(context)
+
+
+def _save_plano_contas_fase9(tmp_path: Path) -> Path:
+    config_dir = tmp_path / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    plano = config_dir / "plano_contas_gerencial.yaml"
+    plano.write_text(
+        """\
+contas:
+  - id: "2.01.004"
+    nome: "Refrigerantes"
+    grupo: "Custos de Mercadorias e Insumos"
+    tipo: "custo"
+  - id: "13.01.001"
+    nome: "Revisar - Produto Nao Classificado"
+    grupo: "Contas de Revisao"
+    tipo: "revisao"
+  - id: "13.01.002"
+    nome: "Revisar - Classificacao Ambigua"
+    grupo: "Contas de Revisao"
+    tipo: "revisao"
+  - id: "13.01.006"
+    nome: "Revisar - Valor Inconsistente"
+    grupo: "Contas de Revisao"
+    tipo: "revisao"
+  - id: "13.01.009"
+    nome: "Revisar - Possivel Investimento"
+    grupo: "Contas de Revisao"
+    tipo: "revisao"
+  - id: "13.01.010"
+    nome: "Revisar - Pagamento de Pessoal a Regularizar"
+    grupo: "Contas de Revisao"
+    tipo: "revisao"
+  - id: "13.01.999"
+    nome: "Revisar - Outros Casos"
+    grupo: "Contas de Revisao"
+    tipo: "revisao"
+""",
+        encoding="utf-8",
+    )
+    return plano
+
+
+def _fase9_row(**overrides: str) -> dict[str, str]:
+    row = {
+        "descricao_normalizada": "refrigerante cola 350ml",
+        "descricao_exemplo": "REFRIGERANTE COLA 350ML",
+        "fornecedores": "Fornecedor A",
+        "documentos": "123",
+        "numero_nota": "123",
+        "status_revisao": "REVISAR",
+        "alertas": "",
+        "acao_manual": "CLASSIFICAR",
+        "conta_atual_id": "13.01.001",
+        "conta_atual_nome": "Revisar - Produto Nao Classificado",
+        "conta_id_sugerida": "2.01.004",
+        "conta_nome_sugerida": "Refrigerantes",
+        "palavras_chave_sugeridas": "",
+        "tipo_operacao_especial": "COMPRA_NORMAL",
+        "tratamento_operacao_especial": "DRE",
+        "cfop": "5102",
+        "valor_total": "R$ 10,00",
+    }
+    row.update(overrides)
+    return row
+
+
+def _save_fase9_csv(path: Path, rows: list[dict[str, str]]) -> None:
+    with path.open("w", encoding="utf-8-sig", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=tuple(rows[0].keys()), delimiter=";")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def _read_csv_rows(path: Path) -> list[dict[str, str]]:
+    with path.open("r", encoding="utf-8-sig", newline="") as file:
+        return list(csv.DictReader(file, delimiter=";"))

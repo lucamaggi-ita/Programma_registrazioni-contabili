@@ -757,6 +757,13 @@ def build_parser() -> argparse.ArgumentParser:
         default=False,
         help="Calcula run e etapas sem escrever arquivos nem importar XML.",
     )
+    reprocessar_real.add_argument(
+        "--fase9-csv",
+        help=(
+            "CSV revisionado para aplicar Fase 9 em output separado dentro da run. "
+            "Se omitido, a Fase 9 nao e executada."
+        ),
+    )
     reprocessar_real.set_defaults(func=reprocessar_importacao_real_command)
 
     return parser
@@ -1336,6 +1343,7 @@ def reprocessar_importacao_real_command(args: argparse.Namespace) -> int:
             saida_reports=Path(args.saida_reports),
             modo=args.modo,
             dry_run=args.dry_run,
+            fase9_csv_path=Path(args.fase9_csv) if args.fase9_csv else None,
         )
     except reprocessamento_pipeline.ReprocessamentoPipelineError as exc:
         print(f"[ERRO] {exc}")

@@ -23,6 +23,11 @@ from fantozzi.excel_diagnostics import diagnose_excel
 from fantozzi.excel_diagnostics import report_text as diagnostic_report_text
 from fantozzi.excel_diagnostics import save_report as save_diagnostic_report
 from fantozzi.excel_writer import write_lancamentos_to_excel
+from fantozzi.fase9_decision_engine import (
+    evaluate_fase9_decisions,
+    load_fase9_decisions_from_csv,
+)
+from fantozzi.fase9_writeback import write_fase9_applied_csv
 from fantozzi.nfe_importer import parse_nfe
 from fantozzi.operation_classifier import (
     auditar_operacoes_especiais,
@@ -92,6 +97,7 @@ class PipelineContext:
     reports_run_dir: Path
     manifest_path: Path
     fontes_xml: tuple[XmlSource, ...]
+    fase9_csv_path: Path | None = None
     lancamentos_xlsx: tuple[Path, ...] = ()
 
 
@@ -131,11 +137,13 @@ def reprocessar_importacao_real_provisoria(
     project_root: Path | None = None,
     steps: PipelineSteps | None = None,
     today: date | None = None,
+    fase9_csv_path: Path | None = None,
 ) -> ReprocessamentoResultado:
     xml_base = Path(xml_base)
     saida_output = Path(saida_output)
     saida_reports = Path(saida_reports)
     project_root = Path(project_root or run_manager.PROJECT_ROOT)
+    fase9_csv_path = Path(fase9_csv_path) if fase9_csv_path is not None else None
 
     if modo == "definitivo":
         raise ReprocessamentoPipelineError(MODO_DEFINITIVO_BLOQUEADO)
@@ -193,6 +201,7 @@ def reprocessar_importacao_real_provisoria(
         reports_run_dir=run_result.reports_run_dir,
         manifest_path=run_result.manifest_path,
         fontes_xml=fontes_xml,
+        fase9_csv_path=fase9_csv_path,
     )
     steps = steps or default_pipeline_steps()
     arquivos_gerados: list[Path] = []
@@ -246,6 +255,15 @@ def reprocessar_importacao_real_provisoria(
             avisos,
             etapas_executadas,
         )
+        if context.fase9_csv_path is not None:
+            _executar_step(
+                context,
+                "FASE9_APLICADA",
+                _step_aplicar_fase9,
+                arquivos_gerados,
+                avisos,
+                etapas_executadas,
+            )
         _executar_step(
             context,
             "RELATORIOS_OK_GERADOS",
@@ -277,16 +295,17 @@ def reprocessar_importacao_real_provisoria(
 
     manifest = run_manager.load_manifest(context.manifest_path)
     manifest.setdefault("avisos", [])
-    if AVISO_FASE9_BLOQUEADA not in manifest["avisos"]:
+    if context.fase9_csv_path is None and AVISO_FASE9_BLOQUEADA not in manifest["avisos"]:
         manifest["avisos"].append(AVISO_FASE9_BLOQUEADA)
     manifest.setdefault("classificacao", {})
-    manifest["classificacao"].update(
-        {
-            "fase9_executada": False,
-            "regras_aplicadas": 0,
-            "nota": "Revisao contabil pendente. Nenhuma regra aprovada aplicada.",
-        }
-    )
+    if context.fase9_csv_path is None:
+        manifest["classificacao"].update(
+            {
+                "fase9_executada": False,
+                "regras_aplicadas": 0,
+                "nota": "Revisao contabil pendente. Nenhuma regra aprovada aplicada.",
+            }
+        )
     run_manager.save_manifest(context.manifest_path, _json_ready(manifest))
     run_manager.add_checkpoint(context.manifest_path, "FINALIZACAO_PROVISORIA")
     run_manager.update_manifest_status(
@@ -547,6 +566,59 @@ def _step_gerar_pacote_revisao(context: PipelineContext) -> StepResult:
     )
 
 
+def _step_aplicar_fase9(context: PipelineContext) -> StepResult:
+    if context.fase9_csv_path is None:
+        return StepResult()
+
+    input_csv = context.fase9_csv_path
+    output_csv = context.reports_run_dir / "lancamentos_aplicados_fase9.csv"
+    if input_csv.resolve() == output_csv.resolve():
+        raise ReprocessamentoPipelineError(
+            "CSV de entrada da Fase 9 deve ser diferente do output aplicado."
+        )
+    if not input_csv.exists() or not input_csv.is_file():
+        raise ReprocessamentoPipelineError(
+            f"CSV revisionado Fase 9 nao encontrado: {input_csv}"
+        )
+
+    chart = ChartOfAccounts.load(
+        context.project_root / "config" / "plano_contas_gerencial.yaml"
+    )
+    validation_errors = chart.validate()
+    if validation_errors:
+        raise ReprocessamentoPipelineError(
+            "Plano de contas invalido: " + "; ".join(validation_errors)
+        )
+    valid_account_ids, account_names_by_id = _fase9_account_maps(chart)
+    decisions = load_fase9_decisions_from_csv(input_csv)
+    decision_result = evaluate_fase9_decisions(
+        decisions,
+        valid_account_ids=valid_account_ids,
+        account_names_by_id=account_names_by_id,
+    )
+    writeback_result = write_fase9_applied_csv(
+        input_csv,
+        output_csv,
+        decision_result,
+    )
+    return StepResult(
+        arquivos_gerados=(output_csv,),
+        classificacao={
+            "fase9_executada": True,
+            "input_csv": str(input_csv),
+            "output_csv": str(output_csv),
+            "promovidos": writeback_result.promoted_rows,
+            "bloqueados": writeback_result.blocked_rows,
+            "fora_escopo": writeback_result.out_of_scope_rows,
+            "regras_aplicadas": writeback_result.promoted_rows,
+            "nota": (
+                "Fase 9 aplicada em CSV separado. "
+                "Relatorios gerados permanecem provisorios."
+            ),
+        },
+    )
+
+
 def _step_gerar_relatorios_ok(context: PipelineContext) -> StepResult:
     output_path = (
         context.reports_run_dir / "relatorios_gerenciais_ok_provisorios.xlsx"
@@ -610,6 +682,14 @@ def _load_product_classifier(
     if validation_errors:
         raise ValueError("; ".join(validation_errors))
     return ProductClassifier(chart).load(regras_produtos_path)
+
+
+def _fase9_account_maps(chart: ChartOfAccounts) -> tuple[frozenset[str], dict[str, str]]:
+    accounts = tuple(chart._ordered)
+    return (
+        frozenset(account.id for account in accounts),
+        {account.id: account.nome for account in accounts},
+    )
 
 
 def _find_xml_files(pasta_path: Path) -> list[Path]:
