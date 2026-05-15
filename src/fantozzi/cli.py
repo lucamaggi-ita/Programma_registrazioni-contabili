@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 from pathlib import Path
 
 from fantozzi.allocation import allocate_nfe_to_lancamentos
@@ -66,6 +67,11 @@ from fantozzi.excel_diagnostics import (
     save_report,
 )
 from fantozzi.excel_writer import write_lancamentos_to_excel
+from fantozzi.fase9_decision_engine import (
+    evaluate_fase9_decisions,
+    load_fase9_decisions_from_csv,
+)
+from fantozzi.fase9_writeback import apply_fase9_writeback, write_fase9_applied_csv
 from fantozzi.logging_utils import error, info, warning
 from fantozzi.nfe_importer import parse_nfe
 from fantozzi.operation_classifier import (
@@ -174,7 +180,11 @@ def build_parser() -> argparse.ArgumentParser:
             "gerar-dre-gerencial-ok-provisoria "
             "--entrada output\\importacao_real "
             "--saida-xlsx reports\\dre_gerencial_ok_provisoria.xlsx "
-            "--relatorio reports\\dre_gerencial_ok_provisoria.txt"
+            "--relatorio reports\\dre_gerencial_ok_provisoria.txt\n"
+            "  .\\.venv\\Scripts\\python.exe -m fantozzi.cli "
+            "aplicar-fase9-revisao "
+            "--csv reports\\revisao_classificacao_revisada.csv "
+            "--saida output\\lancamentos_aplicados_fase9.csv --dry-run"
         ),
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -336,6 +346,40 @@ def build_parser() -> argparse.ArgumentParser:
         help="Arquivo YAML de regras de produtos consultado em modo leitura.",
     )
     gerar_proposta.set_defaults(func=gerar_proposta_classificacao_command)
+
+    aplicar_fase9 = subparsers.add_parser(
+        "aplicar-fase9-revisao",
+        help="Aplica decisoes revisadas da Fase 9 em CSV separado.",
+        description=(
+            "Le um CSV revisionado, avalia as decisoes aprovadas da Fase 9 "
+            "e gera somente um CSV separado. Nao altera o CSV original, "
+            "config YAML, pipeline, manifest ou modo definitivo. Com --dry-run, "
+            "calcula o resumo sem escrever o CSV de saida."
+        ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    aplicar_fase9.add_argument(
+        "--csv",
+        required=True,
+        help="CSV revisionado de entrada. O arquivo nao sera modificado.",
+    )
+    aplicar_fase9.add_argument(
+        "--saida",
+        required=True,
+        help="CSV separado de saida para os lancamentos aplicados da Fase 9.",
+    )
+    aplicar_fase9.add_argument(
+        "--plano-contas",
+        default=str(DEFAULT_PLANO_CONTAS),
+        help="Plano de contas consultado em modo somente leitura.",
+    )
+    aplicar_fase9.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        help="Calcula promocoes e bloqueios sem escrever o CSV de saida.",
+    )
+    aplicar_fase9.set_defaults(func=aplicar_fase9_revisao_command)
 
     gerar_proposta_real = subparsers.add_parser(
         "gerar-proposta-regras-classificacao-real",
@@ -961,6 +1005,87 @@ def gerar_proposta_classificacao_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def aplicar_fase9_revisao_command(args: argparse.Namespace) -> int:
+    csv_path = Path(args.csv)
+    output_path = Path(args.saida)
+    plano_contas_path = Path(args.plano_contas)
+
+    try:
+        _validate_file_exists(csv_path, "CSV revisionado")
+        _validate_file_exists(plano_contas_path, "Plano de contas")
+        if csv_path.resolve() == output_path.resolve():
+            print("[ERRO] --saida deve ser diferente do CSV original.")
+            return 1
+
+        chart = ChartOfAccounts.load(plano_contas_path)
+        validation_errors = chart.validate()
+        if validation_errors:
+            print("[ERRO] Plano de contas invalido: " + "; ".join(validation_errors))
+            return 1
+        valid_account_ids, account_names_by_id = _fase9_account_maps(chart)
+
+        decisions = load_fase9_decisions_from_csv(csv_path)
+        decision_result = evaluate_fase9_decisions(
+            decisions,
+            valid_account_ids=valid_account_ids,
+            account_names_by_id=account_names_by_id,
+        )
+
+        if args.dry_run:
+            headers, rows = _read_csv_rows_for_fase9(csv_path)
+            result = apply_fase9_writeback(
+                rows,
+                decision_result,
+                headers=headers,
+            )
+            _print_fase9_summary(result, output_path=output_path, dry_run=True)
+            print("[DRY-RUN] Nenhum arquivo foi escrito.")
+            return 0
+
+        result = write_fase9_applied_csv(csv_path, output_path, decision_result)
+    except ValueError as exc:
+        print(f"[ERRO] {exc}")
+        return 1
+    except Exception as exc:
+        print(f"[ERRO] Nao foi possivel aplicar Fase 9: {exc}")
+        return 1
+
+    _print_fase9_summary(result, output_path=output_path, dry_run=False)
+    print(f"[OK] CSV Fase 9 gerado: {output_path}")
+    return 0
+
+
+def _fase9_account_maps(chart: ChartOfAccounts) -> tuple[frozenset[str], dict[str, str]]:
+    accounts = tuple(chart._ordered)
+    return (
+        frozenset(account.id for account in accounts),
+        {account.id: account.nome for account in accounts},
+    )
+
+
+def _read_csv_rows_for_fase9(csv_path: Path) -> tuple[tuple[str, ...], tuple[dict[str, str], ...]]:
+    with csv_path.open("r", encoding="utf-8-sig", newline="") as file:
+        sample = file.read(4096)
+        file.seek(0)
+        dialect = csv.Sniffer().sniff(sample, delimiters=";,") if sample else csv.excel
+        reader = csv.DictReader(file, dialect=dialect)
+        headers = tuple(reader.fieldnames or ())
+        rows = tuple(
+            {header: _text(value) for header, value in row.items()}
+            for row in reader
+        )
+    return headers, rows
+
+
+def _print_fase9_summary(result, *, output_path: Path, dry_run: bool) -> None:
+    prefix = "[DRY-RUN]" if dry_run else "[OK]"
+    print(f"{prefix} Fase 9 revisao calculada.")
+    print(f"Promovidos: {result.promoted_rows}")
+    print(f"Bloqueados: {result.blocked_rows}")
+    print(f"Fora escopo: {result.out_of_scope_rows}")
+    print(f"Saida: {output_path}")
+
+
 def gerar_proposta_regras_classificacao_real_command(args: argparse.Namespace) -> int:
     csv_paths = [Path(csv_path) for csv_path in args.csv]
     yaml_path = Path(args.saida)
@@ -1280,6 +1405,12 @@ def _validate_file_exists(path: Path, label: str) -> None:
         raise FileNotFoundError(f"{label} nao encontrado: {path}")
     if not path.is_file():
         raise ValueError(f"{label} nao e um arquivo: {path}")
+
+
+def _text(value: object) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
 
 
 def _validate_directory_exists(path: Path, label: str) -> None:
