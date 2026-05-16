@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from dataclasses import dataclass, field
+from dataclasses import replace
 from decimal import Decimal, ROUND_HALF_UP
 import hashlib
-from typing import List
+from typing import List, Mapping
 
 from fantozzi.models import ClassificationResult, Duplicata, Lancamento, NFE, ProdutoNFE
 from fantozzi.operation_classifier import (
@@ -20,12 +21,17 @@ from fantozzi.product_classifier import ProductClassifier
 
 
 CENT = Decimal("0.01")
+QUANTITY_TOLERANCE = Decimal("0.000001")
 ORIGEM_XML_NFE = "XML_NFE"
 ACCESSORY_ACCOUNT_ID = "2.05.001"
 DISCOUNT_ACCOUNT_ID = "2.05.002"
 COMODATO_REVIEW_ACCOUNT_ID = "13.01.001"
 BONIFICACAO_RECEBIDA_ACCOUNT_ID = "2.05.003"
 ALERTA_VALOR_INCONSISTENTE = "VALOR_INCONSISTENTE"
+ALERTA_CFOP_1949_SEM_VINCULO = "CFOP_1949_SEM_VINCULO_SEGURO"
+ALERTA_CFOP_1949_QUADRATURA_INSEGURA = "CFOP_1949_QUADRATURA_INSEGURA"
+CFOP_ESTORNO_NF_REFERENCIADA = "1949"
+TIPO_ESTORNO_NF_REFERENCIADA = "ESTORNO_NF_REFERENCIADA"
 TRATAMENTO_BONIFICACAO_RECEBIDA = "REDUCAO_CUSTO"
 
 
@@ -44,7 +50,10 @@ class _AllocationGroup:
 
 
 def allocate_nfe_to_lancamentos(
-    nfe: NFE, product_classifier: ProductClassifier
+    nfe: NFE,
+    product_classifier: ProductClassifier,
+    *,
+    nfe_index: Mapping[str, NFE] | None = None,
 ) -> list[Lancamento]:
     """Create grouped managerial accounting entries from an imported NF-e.
 
@@ -52,6 +61,14 @@ def allocate_nfe_to_lancamentos(
     grouped by account. Duplicatas are allocated proportionally across those
     grouped entries, preserving both due-date totals and entry totals.
     """
+    if _nfe_tem_cfop_1949(nfe):
+        estorno = _try_allocate_cfop_1949_estorno(
+            nfe, product_classifier, nfe_index or {}
+        )
+        if estorno is not None:
+            return estorno
+        return _build_cfop_1949_review_lancamentos(nfe, product_classifier)
+
     groups = _group_products_by_account(nfe, product_classifier)
     if not groups:
         return []
@@ -121,6 +138,248 @@ def _group_products_by_account(
         group.alertas.extend(_classification_alertas(classification))
 
     return list(groups.values())
+
+
+def _try_allocate_cfop_1949_estorno(
+    nfe: NFE,
+    product_classifier: ProductClassifier,
+    nfe_index: Mapping[str, NFE],
+) -> list[Lancamento] | None:
+    if not _is_safe_cfop_1949_reference_candidate(nfe):
+        return None
+
+    origem = nfe_index.get(nfe.referenced_nfe_chaves[0])
+    if origem is None or not _nfref_context_is_safe(nfe, origem):
+        return None
+
+    product_pairs = list(zip(nfe.produtos, origem.produtos, strict=True))
+    if not all(
+        _produtos_vinculados_com_seguranca(atual, original)
+        for atual, original in product_pairs
+    ):
+        return None
+    if not _cfop_1949_quadrature_is_safe(nfe):
+        return _build_cfop_1949_review_lancamentos(
+            nfe,
+            product_classifier,
+            alerta=ALERTA_CFOP_1949_QUADRATURA_INSEGURA,
+        )
+
+    groups: OrderedDict[str, _AllocationGroup] = OrderedDict()
+    origem_tem_cfop_especial = _nfe_tem_cfop_especial(origem)
+    estorno_operacao = ClassificacaoOperacaoEspecial(
+        tipo=TIPO_ESTORNO_NF_REFERENCIADA,
+        confianca="FORTE",
+        destino_gerencial=TRATAMENTO_BONIFICACAO_RECEBIDA,
+        status_revisao="OK",
+        motivos=("CFOP_1949_NFREF_VINCULO_SEGURO",),
+        alertas=(),
+    )
+
+    for produto_atual, produto_original in product_pairs:
+        classification = _classify_origin_product_for_estorno(
+            produto_original,
+            origem,
+            origem_tem_cfop_especial,
+            product_classifier,
+        )
+        if classification.confianca != "OK" or classification.alertas:
+            return None
+
+        conta = classification.conta
+        group_key = _group_key(conta.id, estorno_operacao.tipo)
+        if group_key not in groups:
+            groups[group_key] = _AllocationGroup(
+                conta_id=conta.id,
+                conta_nome=conta.nome,
+                grupo_conta=conta.grupo,
+                tipo_lancamento=conta.tipo,
+                natureza_operacao=nfe.natureza_operacao,
+            )
+
+        group = groups[group_key]
+        group.produtos.append(
+            replace(
+                produto_atual,
+                valor_total=-_money(produto_atual.valor_total),
+                valor_desconto=_money(produto_atual.valor_desconto),
+            )
+        )
+        group.classificacoes.append(classification)
+        group.operacoes_especiais.append(estorno_operacao)
+        group.valor -= _money(produto_atual.valor_total)
+
+    lancamentos = [_build_lancamento(nfe, group) for group in groups.values()]
+    _append_cfop_1949_estorno_adjustments(nfe, product_classifier, lancamentos)
+    return lancamentos
+
+
+def _classify_origin_product_for_estorno(
+    produto_original: ProdutoNFE,
+    origem: NFE,
+    origem_tem_cfop_especial: bool,
+    product_classifier: ProductClassifier,
+) -> ClassificationResult:
+    operacao_original = classificar_produto_operacao_especial(
+        produto_original,
+        origem.natureza_operacao,
+        tem_cobranca=_tem_cobranca(origem),
+        nfe_tem_cfop_especial=origem_tem_cfop_especial,
+    )
+    if operacao_original.tipo == TIPO_BONIFICACAO:
+        conta_revisao = _get_classifier_account(
+            product_classifier, BONIFICACAO_RECEBIDA_ACCOUNT_ID
+        )
+        return ClassificationResult(
+            conta=conta_revisao,
+            confianca="OK",
+            alertas=[],
+            matches=["CFOP_ORIGEM_BONIFICACAO"],
+        )
+    if operacao_original.tipo != TIPO_COMPRA_NORMAL:
+        return ClassificationResult(
+            conta=_get_classifier_account(product_classifier, COMODATO_REVIEW_ACCOUNT_ID),
+            confianca="NAO_CLASSIFICADO",
+            alertas=[ALERTA_CFOP_1949_SEM_VINCULO],
+            matches=list(operacao_original.motivos),
+        )
+    return product_classifier.classify(
+        produto_original.descricao, fornecedor=origem.nome_emitente
+    )
+
+
+def _append_cfop_1949_estorno_adjustments(
+    nfe: NFE, product_classifier: ProductClassifier, lancamentos: list[Lancamento]
+) -> None:
+    positive_adjustments = _money(_identified_positive_adjustments(nfe))
+    descontos = _money(_identified_discounts(nfe))
+    if positive_adjustments > 0:
+        conta = _get_classifier_account(product_classifier, ACCESSORY_ACCOUNT_ID)
+        adjustment = _build_adjustment_lancamento(
+            nfe=nfe,
+            conta_id=conta.id,
+            conta_nome=conta.nome,
+            grupo_conta=conta.grupo,
+            tipo_lancamento=conta.tipo,
+            descricao_itens="Estorno de custos acessorios da NF-e referenciada",
+            valor=-positive_adjustments,
+            explained=True,
+        )
+        _mark_lancamento_as_estorno_nfref(adjustment)
+        lancamentos.append(adjustment)
+    if descontos > 0:
+        conta = _get_classifier_account(product_classifier, DISCOUNT_ACCOUNT_ID)
+        adjustment = _build_adjustment_lancamento(
+            nfe=nfe,
+            conta_id=conta.id,
+            conta_nome=conta.nome,
+            grupo_conta=conta.grupo,
+            tipo_lancamento=conta.tipo,
+            descricao_itens="Estorno de descontos da NF-e referenciada",
+            valor=descontos,
+            explained=True,
+        )
+        _mark_lancamento_as_estorno_nfref(adjustment)
+        lancamentos.append(adjustment)
+
+
+def _mark_lancamento_as_estorno_nfref(lancamento: Lancamento) -> None:
+    lancamento.tipo_operacao_especial = TIPO_ESTORNO_NF_REFERENCIADA
+    lancamento.confianca_operacao_especial = "FORTE"
+    lancamento.tratamento_operacao_especial = TRATAMENTO_BONIFICACAO_RECEBIDA
+    lancamento.hash_registro = _hash_lancamento(lancamento)
+
+
+def _build_cfop_1949_review_lancamentos(
+    nfe: NFE,
+    product_classifier: ProductClassifier,
+    *,
+    alerta: str = ALERTA_CFOP_1949_SEM_VINCULO,
+) -> list[Lancamento]:
+    conta = _get_classifier_account(product_classifier, COMODATO_REVIEW_ACCOUNT_ID)
+    lancamento = Lancamento(
+        data_documento=nfe.data_emissao,
+        competencia=nfe.data_emissao.strftime("%Y-%m"),
+        cnpj_empresa=nfe.cnpj_destinatario,
+        nome_empresa=nfe.nome_destinatario,
+        fornecedor_ou_favorecido=nfe.nome_emitente,
+        cnpj_cpf_favorecido=nfe.cnpj_emitente,
+        documento=nfe.numero,
+        tipo_documento=ORIGEM_XML_NFE,
+        conta_id=conta.id,
+        conta_nome=conta.nome,
+        grupo_conta=conta.grupo,
+        descricao_itens=_describe_items(nfe.produtos),
+        valor=_money(nfe.valor_total),
+        duplicatas=[],
+        origem=ORIGEM_XML_NFE,
+        arquivo_origem=nfe.arquivo_origem,
+        chave_origem=nfe.chave,
+        status_revisao="REVISAR",
+        alertas=alerta,
+        cfop=_join_produto_cfops(nfe.produtos),
+        natureza_operacao=nfe.natureza_operacao,
+        tipo_operacao_especial=TIPO_ESTORNO_NF_REFERENCIADA,
+        confianca_operacao_especial="REVISAR",
+        tratamento_operacao_especial="REVISAR",
+        tipo_lancamento=conta.tipo,
+    )
+    lancamento.hash_registro = _hash_lancamento(lancamento)
+    return [lancamento]
+
+
+def _is_safe_cfop_1949_reference_candidate(nfe: NFE) -> bool:
+    return (
+        len(nfe.referenced_nfe_chaves) == 1
+        and bool(nfe.produtos)
+        and all(
+            produto.cfop.strip() == CFOP_ESTORNO_NF_REFERENCIADA
+            for produto in nfe.produtos
+        )
+    )
+
+
+def _nfref_context_is_safe(nfe: NFE, origem: NFE) -> bool:
+    return (
+        origem.chave == nfe.referenced_nfe_chaves[0]
+        and origem.cnpj_emitente == nfe.cnpj_emitente
+        and origem.cnpj_destinatario == nfe.cnpj_destinatario
+        and origem.data_emissao <= nfe.data_emissao
+        and len(origem.produtos) == len(nfe.produtos)
+        and _money(origem.valor_produtos) == _money(nfe.valor_produtos)
+        and _money(origem.valor_total) == _money(nfe.valor_total)
+    )
+
+
+def _produtos_vinculados_com_seguranca(
+    produto_atual: ProdutoNFE, produto_original: ProdutoNFE
+) -> bool:
+    return (
+        produto_atual.codigo == produto_original.codigo
+        and _normalized_product_text(produto_atual.descricao)
+        == _normalized_product_text(produto_original.descricao)
+        and _quantidade_segura_igual(
+            produto_atual.quantidade, produto_original.quantidade
+        )
+        and _money(produto_atual.valor_total) == _money(produto_original.valor_total)
+    )
+
+
+def _quantidade_segura_igual(atual: Decimal, original: Decimal) -> bool:
+    return abs(atual - original) <= QUANTITY_TOLERANCE
+
+
+def _cfop_1949_quadrature_is_safe(nfe: NFE) -> bool:
+    produtos = sum((produto.valor_total for produto in nfe.produtos), Decimal("0"))
+    positive_adjustments = _identified_positive_adjustments(nfe)
+    descontos = _identified_discounts(nfe)
+    return _money(produtos + positive_adjustments - descontos) == _money(
+        nfe.valor_total
+    )
+
+
+def _normalized_product_text(value: str) -> str:
+    return " ".join((value or "").upper().split())
 
 
 def _classification_alertas(classification: ClassificationResult) -> list[str]:
@@ -213,8 +472,41 @@ def _append_total_difference_lancamento(
     if diferenca == 0:
         return
 
+    positive_adjustments = _money(_identified_positive_adjustments(nfe))
+    descontos = _money(_identified_discounts(nfe))
+    if diferenca == _money(positive_adjustments - descontos):
+        if positive_adjustments > 0:
+            conta = _get_classifier_account(product_classifier, ACCESSORY_ACCOUNT_ID)
+            lancamentos.append(
+                _build_adjustment_lancamento(
+                    nfe=nfe,
+                    conta_id=conta.id,
+                    conta_nome=conta.nome,
+                    grupo_conta=conta.grupo,
+                    tipo_lancamento=conta.tipo,
+                    descricao_itens="Custos acessorios identificados no total da NF-e",
+                    valor=positive_adjustments,
+                    explained=True,
+                )
+            )
+        if descontos > 0:
+            conta = _get_classifier_account(product_classifier, DISCOUNT_ACCOUNT_ID)
+            lancamentos.append(
+                _build_adjustment_lancamento(
+                    nfe=nfe,
+                    conta_id=conta.id,
+                    conta_nome=conta.nome,
+                    grupo_conta=conta.grupo,
+                    tipo_lancamento=conta.tipo,
+                    descricao_itens="Descontos obtidos identificados no total da NF-e",
+                    valor=-descontos,
+                    explained=True,
+                )
+            )
+        return
+
     if diferenca > 0:
-        explained = diferenca == _money(_identified_positive_adjustments(nfe))
+        explained = diferenca == positive_adjustments
         conta = _get_classifier_account(product_classifier, ACCESSORY_ACCOUNT_ID)
         lancamentos.append(
             _build_adjustment_lancamento(
@@ -230,7 +522,7 @@ def _append_total_difference_lancamento(
         )
         return
 
-    explained = abs(diferenca) == _money(nfe.valor_desconto)
+    explained = abs(diferenca) == descontos
     conta = _get_classifier_account(product_classifier, DISCOUNT_ACCOUNT_ID)
     lancamentos.append(
         _build_adjustment_lancamento(
@@ -253,6 +545,13 @@ def _identified_positive_adjustments(nfe: NFE) -> Decimal:
         + nfe.valor_outras_despesas
         + nfe.valor_tributos_inclusos
     )
+
+
+def _identified_discounts(nfe: NFE) -> Decimal:
+    item_discounts = sum(
+        (produto.valor_desconto for produto in nfe.produtos), Decimal("0")
+    )
+    return item_discounts if item_discounts > 0 else nfe.valor_desconto
 
 
 def _get_classifier_account(product_classifier: ProductClassifier, account_id: str):
@@ -323,6 +622,13 @@ def _nfe_tem_cfop_especial(nfe: NFE) -> bool:
     )
 
 
+def _nfe_tem_cfop_1949(nfe: NFE) -> bool:
+    return any(
+        produto.cfop.strip() == CFOP_ESTORNO_NF_REFERENCIADA
+        for produto in nfe.produtos
+    )
+
+
 def _tem_cobranca(nfe: NFE) -> bool:
     return nfe.tem_duplicatas or nfe.tem_cobranca or nfe.valor_cobranca > 0
 
@@ -332,12 +638,15 @@ def _allocate_duplicatas(
     duplicatas: list[Duplicata],
     nfe_total: Decimal,
 ) -> list[str]:
-    expected_total = _money(nfe_total)
+    expected_total = _expected_duplicata_total(lancamentos, duplicatas, nfe_total)
     duplicata_total = sum((_money(d.valor) for d in duplicatas), Decimal("0"))
     alertas = [] if duplicata_total == expected_total else ["VALOR_INCONSISTENTE"]
+    allocation_lancamentos = _duplicata_allocation_lancamentos(
+        lancamentos, expected_total, nfe_total
+    )
 
     if expected_total == 0:
-        for lancamento in lancamentos:
+        for lancamento in allocation_lancamentos:
             lancamento.duplicatas = [
                 Duplicata(numero=d.numero, vencimento=d.vencimento, valor=Decimal("0.00"))
                 for d in duplicatas
@@ -346,11 +655,11 @@ def _allocate_duplicatas(
 
     matrix = _build_allocation_matrix(
         row_totals=[_money(d.valor) for d in duplicatas],
-        column_totals=[l.valor for l in lancamentos],
+        column_totals=[l.valor for l in allocation_lancamentos],
         total=expected_total,
     )
 
-    for column_index, lancamento in enumerate(lancamentos):
+    for column_index, lancamento in enumerate(allocation_lancamentos):
         lancamento.duplicatas = [
             Duplicata(
                 numero=duplicata.numero,
@@ -370,6 +679,55 @@ def _allocate_duplicatas(
             alertas.append("VALOR_INCONSISTENTE")
 
     return _unique(alertas)
+
+
+def _duplicata_allocation_lancamentos(
+    lancamentos: list[Lancamento], expected_total: Decimal, nfe_total: Decimal
+) -> list[Lancamento]:
+    if expected_total == _money(nfe_total):
+        return lancamentos
+    return [
+        lancamento
+        for lancamento in lancamentos
+        if lancamento.tipo_operacao_especial != TIPO_BONIFICACAO
+    ]
+
+
+def _expected_duplicata_total(
+    lancamentos: list[Lancamento],
+    duplicatas: list[Duplicata],
+    nfe_total: Decimal,
+) -> Decimal:
+    nfe_total = _money(nfe_total)
+    duplicata_total = sum((_money(d.valor) for d in duplicatas), Decimal("0"))
+    if duplicata_total == nfe_total:
+        return nfe_total
+
+    if any(
+        lancamento.tipo_operacao_especial not in {TIPO_COMPRA_NORMAL, TIPO_BONIFICACAO}
+        for lancamento in lancamentos
+    ):
+        return nfe_total
+
+    has_bonificacao = any(
+        lancamento.tipo_operacao_especial == TIPO_BONIFICACAO
+        for lancamento in lancamentos
+    )
+    if not has_bonificacao:
+        return nfe_total
+
+    payable_total = sum(
+        (
+            lancamento.valor
+            for lancamento in lancamentos
+            if lancamento.tipo_operacao_especial != TIPO_BONIFICACAO
+        ),
+        Decimal("0"),
+    )
+    if duplicata_total == _money(payable_total):
+        return _money(payable_total)
+
+    return nfe_total
 
 
 def _build_allocation_matrix(

@@ -80,3 +80,17 @@ def test_cobranca_fields(nfe):
 
 def test_arquivo_origem_populated(nfe):
     assert nfe.arquivo_origem != ""
+
+
+def test_referenced_nfe_chaves_from_nfref(tmp_path):
+    xml_path = tmp_path / "nfe_ref.xml"
+    xml_path.write_text(
+        """<nfeProc xmlns="http://www.portalfiscal.inf.br/nfe"><NFe><infNFe Id="NFe123" versao="4.00"><ide><natOp>ESTORNO</natOp><serie>1</serie><nNF>10</nNF><dhEmi>2026-01-02T10:00:00-03:00</dhEmi><NFref><refNFe>99988877766655544433322211100099988877766655</refNFe></NFref></ide><emit><CNPJ>11111111000191</CNPJ><xNome>Fornecedor</xNome></emit><dest><CNPJ>22222222000192</CNPJ><xNome>Empresa</xNome></dest><det nItem="1"><prod><cProd>P1</cProd><xProd>Produto</xProd><NCM>22030000</NCM><CFOP>1949</CFOP><uCom>UN</uCom><qCom>1</qCom><vUnCom>10.00</vUnCom><vProd>10.00</vProd></prod></det><total><ICMSTot><vProd>10.00</vProd><vNF>10.00</vNF></ICMSTot></total></infNFe></NFe></nfeProc>""",
+        encoding="utf-8",
+    )
+
+    parsed = parse_nfe(xml_path)
+
+    assert parsed.referenced_nfe_chaves == (
+        "99988877766655544433322211100099988877766655",
+    )

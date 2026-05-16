@@ -55,6 +55,11 @@ def parse_nfe(xml_path: Path | str) -> NFE:
     serie = _text(ide, "serie")
     natureza_operacao = _text(ide, "natOp")
     data_emissao = _parse_date(_text(ide, "dhEmi"))
+    referenced_nfe_chaves = tuple(
+        ref
+        for ref in (_text(nfref, "refNFe") for nfref in ide.findall(_t("NFref")))
+        if ref
+    )
 
     cnpj_emitente = _text(emit, "CNPJ")
     nome_emitente = _text(emit, "xNome")
@@ -99,6 +104,7 @@ def parse_nfe(xml_path: Path | str) -> NFE:
                 quantidade=_decimal(prod, "qCom"),
                 valor_unitario=_decimal(prod, "vUnCom"),
                 valor_total=_decimal(prod, "vProd"),
+                valor_desconto=_decimal(prod, "vDesc"),
             )
         )
 
@@ -137,6 +143,7 @@ def parse_nfe(xml_path: Path | str) -> NFE:
         valor_tributos_inclusos=valor_tributos_inclusos,
         produtos=produtos,
         duplicatas=duplicatas,
+        referenced_nfe_chaves=referenced_nfe_chaves,
         tem_duplicatas=len(duplicatas) > 0,
         tem_cobranca=cobr is not None,
         valor_cobranca=valor_cobranca,

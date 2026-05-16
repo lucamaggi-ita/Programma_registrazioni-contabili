@@ -316,6 +316,346 @@ def test_discount_creates_negative_lancamento_without_positive_accessory_cost(
     )
 
 
+def test_mixed_cfop_nfe_with_item_discounts_uses_payable_duplicata_total(
+    product_classifier,
+):
+    nfe = NFE(
+        chave="NFE-CHECON-2052542",
+        numero="2052542",
+        serie="2",
+        data_emissao=date(2026, 1, 19),
+        cnpj_emitente="40463846000182",
+        nome_emitente="Checon Distribuidora e Transportadora Lt",
+        cnpj_destinatario="08884180000123",
+        nome_destinatario="AMAMI RESTAURANTE LTDA",
+        valor_total=Decimal("4116.41"),
+        natureza_operacao="Venda / Bonificacao",
+        valor_produtos=Decimal("4308.61"),
+        valor_desconto=Decimal("192.20"),
+        produtos=[
+            _produto("CERV DEVASSA LAGER 06LGFA RT 24UN", "5405", Decimal("127.75")),
+            _produto(
+                "CERV HEINEKEN PIL 0,60GFA RT 24UN",
+                "5405",
+                Decimal("2491.30"),
+                valor_desconto=Decimal("115.10"),
+            ),
+            _produto(
+                "CERV AMSTEL LAGER 0,60L GFA RT 24UN",
+                "5405",
+                Decimal("1512.50"),
+                valor_desconto=Decimal("77.10"),
+            ),
+            _produto("FYS GUARANA 350ML", "5910", Decimal("28.14")),
+            _produto(
+                "CERV HEINEKEN PIL 0,330GFA DESC 4X6UNPBR",
+                "5405",
+                Decimal("148.92"),
+            ),
+        ],
+        duplicatas=[
+            Duplicata(numero="001", vencimento=date(2026, 1, 26), valor=Decimal("2044.13")),
+            Duplicata(numero="002", vencimento=date(2026, 2, 2), valor=Decimal("2044.14")),
+        ],
+        tem_duplicatas=True,
+        tem_cobranca=True,
+        valor_cobranca=Decimal("4088.27"),
+        arquivo_origem="checon_2052542.xml",
+    )
+
+    lancamentos = allocate_nfe_to_lancamentos(nfe, product_classifier)
+    by_conta = {lancamento.conta_id: lancamento for lancamento in lancamentos}
+
+    assert by_conta["2.01.001"].valor == Decimal("4280.47")
+    assert by_conta["2.05.003"].valor == Decimal("28.14")
+    assert by_conta["2.05.002"].valor == Decimal("-192.20")
+    assert all("VALOR_INCONSISTENTE" not in l.alertas for l in lancamentos)
+    assert sum((d.valor for d in by_conta["2.01.001"].duplicatas), Decimal("0")) == (
+        Decimal("4280.47")
+    )
+    assert sum((d.valor for d in by_conta["2.05.002"].duplicatas), Decimal("0")) == (
+        Decimal("-192.20")
+    )
+    assert by_conta["2.05.003"].duplicatas == []
+
+
+def test_wide_remessa_nature_does_not_create_valor_inconsistente_when_cfops_close(
+    product_classifier,
+):
+    nfe = NFE(
+        chave="NFE-PETROPOLIS-331181",
+        numero="331181",
+        serie="2",
+        data_emissao=date(2026, 1, 24),
+        cnpj_emitente="73410326018884",
+        nome_emitente="CERVEJARIA PETROPOLIS S/A EM REC. JUDICIAL",
+        cnpj_destinatario="08884180000123",
+        nome_destinatario="AMAMI RESTAURANTE LTDA",
+        valor_total=Decimal("676.59"),
+        natureza_operacao="VENDA MERC RECEBTERC C/ STRIBUT CONT SUBSTITUIDO / REMESSA",
+        valor_produtos=Decimal("659.94"),
+        valor_tributos_inclusos=Decimal("16.65"),
+        produtos=[
+            _produto("CERV ITA PILS GRF RET 600ML", "5405", Decimal("290.29")),
+            _produto("CERV ITA PILS GRF RET 600ML", "5910", Decimal("58.06")),
+            _produto("CERV ITA PREM GRF RET 600ML", "5405", Decimal("141.54")),
+            _produto("CERV PETRA PM GRF RET 600ML", "5405", Decimal("114.25")),
+            _produto("CERV PETRA PM GRF RET 600ML", "5910", Decimal("22.85")),
+            _produto("ENERG TNT ORG LT 269ML PACK 6", "5405", Decimal("32.95")),
+        ],
+        duplicatas=[
+            Duplicata(numero="001", vencimento=date(2026, 2, 1), valor=Decimal("595.68")),
+        ],
+        tem_duplicatas=True,
+        tem_cobranca=True,
+        valor_cobranca=Decimal("595.68"),
+        arquivo_origem="petropolis_331181.xml",
+    )
+
+    lancamentos = allocate_nfe_to_lancamentos(nfe, product_classifier)
+    by_conta = {lancamento.conta_id: lancamento for lancamento in lancamentos}
+
+    assert by_conta["2.01.001"].valor == Decimal("546.08")
+    assert by_conta["2.05.003"].valor == Decimal("80.91")
+    assert by_conta["2.05.001"].valor == Decimal("16.65")
+    assert all("VALOR_INCONSISTENTE" not in l.alertas for l in lancamentos)
+    assert by_conta["2.05.003"].duplicatas == []
+
+
+def test_cfop_1949_with_safe_nfref_reduces_origin_account(product_classifier):
+    origem = _synthetic_nfe_with_products(
+        chave="NFE-ORIGEM-CERVEJA",
+        natureza_operacao="VENDA DE MERCADORIAS",
+        produtos=[
+            _produto(
+                "CERV HEINEKEN PIL 0,60GFA RT 24UN",
+                "5405",
+                Decimal("249.13"),
+                codigo="CERV1",
+            )
+        ],
+    )
+    estorno = _synthetic_nfe_with_products(
+        chave="NFE-ESTORNO-CERVEJA",
+        natureza_operacao="Merc nao entregue ou recusada",
+        produtos=[
+            _produto(
+                "CERV HEINEKEN PIL 0,60GFA RT 24UN",
+                "1949",
+                Decimal("249.13"),
+                codigo="CERV1",
+            )
+        ],
+    )
+    estorno.numero = "359680"
+    estorno.referenced_nfe_chaves = (origem.chave,)
+
+    lancamentos = allocate_nfe_to_lancamentos(
+        estorno, product_classifier, nfe_index={origem.chave: origem}
+    )
+
+    assert len(lancamentos) == 1
+    assert lancamentos[0].conta_id == "2.01.001"
+    assert lancamentos[0].valor == Decimal("-249.13")
+    assert lancamentos[0].status_revisao == "OK"
+    assert lancamentos[0].cfop == "1949"
+    assert lancamentos[0].tipo_operacao_especial == "ESTORNO_NF_REFERENCIADA"
+
+
+def test_cfop_1949_with_multiple_origin_accounts_reduces_each_account(
+    product_classifier,
+):
+    origem = _synthetic_nfe_with_products(
+        chave="NFE-ORIGEM-MULTI",
+        natureza_operacao="VENDA DE MERCADORIAS",
+        produtos=[
+            _produto("CERV LOK PILS LT 350ML", "5405", Decimal("54.58"), codigo="CERV"),
+            _produto(
+                "CACHACA CABARE PRATA GRF 700ML",
+                "5102",
+                Decimal("27.46"),
+                codigo="DEST",
+            ),
+        ],
+    )
+    estorno = _synthetic_nfe_with_products(
+        chave="NFE-ESTORNO-MULTI",
+        natureza_operacao="Merc nao entregue ou recusada",
+        produtos=[
+            _produto("CERV LOK PILS LT 350ML", "1949", Decimal("54.58"), codigo="CERV"),
+            _produto(
+                "CACHACA CABARE PRATA GRF 700ML",
+                "1949",
+                Decimal("27.46"),
+                codigo="DEST",
+            ),
+        ],
+    )
+    estorno.referenced_nfe_chaves = (origem.chave,)
+
+    lancamentos = allocate_nfe_to_lancamentos(
+        estorno, product_classifier, nfe_index={origem.chave: origem}
+    )
+    by_conta = {lancamento.conta_id: lancamento for lancamento in lancamentos}
+
+    assert by_conta["2.01.001"].valor == Decimal("-54.58")
+    assert by_conta["2.01.003"].valor == Decimal("-27.46")
+    assert {lancamento.status_revisao for lancamento in lancamentos} == {"OK"}
+
+
+def test_cfop_1949_without_safe_nfref_stays_revisar(product_classifier):
+    estorno = _synthetic_nfe_with_products(
+        chave="NFE-ESTORNO-SEM-REF",
+        natureza_operacao="Merc nao entregue ou recusada",
+        produtos=[
+            _produto("CERV HEINEKEN PIL 0,60GFA RT 24UN", "1949", Decimal("249.13"))
+        ],
+    )
+
+    lancamentos = allocate_nfe_to_lancamentos(estorno, product_classifier)
+
+    assert len(lancamentos) == 1
+    assert lancamentos[0].conta_id == "13.01.001"
+    assert lancamentos[0].status_revisao == "REVISAR"
+    assert "CFOP_1949_SEM_VINCULO_SEGURO" in lancamentos[0].alertas
+
+
+def test_cfop_1949_with_missing_origin_stays_revisar(product_classifier):
+    estorno = _synthetic_nfe_with_products(
+        chave="NFE-ESTORNO-ORIGEM-AUSENTE",
+        natureza_operacao="Merc nao entregue ou recusada",
+        produtos=[
+            _produto("CERV HEINEKEN PIL 0,60GFA RT 24UN", "1949", Decimal("249.13"))
+        ],
+    )
+    estorno.referenced_nfe_chaves = ("NFE-ORIGEM-INEXISTENTE",)
+
+    lancamentos = allocate_nfe_to_lancamentos(
+        estorno, product_classifier, nfe_index={}
+    )
+
+    assert len(lancamentos) == 1
+    assert lancamentos[0].status_revisao == "REVISAR"
+    assert "CFOP_1949_SEM_VINCULO_SEGURO" in lancamentos[0].alertas
+
+
+def test_cfop_1949_with_unmatched_origin_product_stays_revisar(product_classifier):
+    origem = _synthetic_nfe_with_products(
+        chave="NFE-ORIGEM-DIVERGENTE",
+        natureza_operacao="VENDA DE MERCADORIAS",
+        produtos=[
+            _produto(
+                "CERV HEINEKEN PIL 0,60GFA RT 24UN",
+                "5405",
+                Decimal("249.13"),
+                codigo="CERV1",
+            )
+        ],
+    )
+    estorno = _synthetic_nfe_with_products(
+        chave="NFE-ESTORNO-DIVERGENTE",
+        natureza_operacao="Merc nao entregue ou recusada",
+        produtos=[
+            _produto(
+                "CERV AMSTEL LAGER 0,60L GFA RT 24UN",
+                "1949",
+                Decimal("249.13"),
+                codigo="CERV1",
+            )
+        ],
+    )
+    estorno.referenced_nfe_chaves = (origem.chave,)
+
+    lancamentos = allocate_nfe_to_lancamentos(
+        estorno, product_classifier, nfe_index={origem.chave: origem}
+    )
+
+    assert len(lancamentos) == 1
+    assert lancamentos[0].status_revisao == "REVISAR"
+    assert "CFOP_1949_SEM_VINCULO_SEGURO" in lancamentos[0].alertas
+
+
+def test_cfop_1949_quantity_difference_hidden_by_money_rounding_stays_revisar(
+    product_classifier,
+):
+    origem = _synthetic_nfe_with_products(
+        chave="NFE-ORIGEM-QTD-PRECISA",
+        natureza_operacao="VENDA DE MERCADORIAS",
+        produtos=[
+            _produto(
+                "CERV HEINEKEN PIL 0,60GFA RT 24UN",
+                "5405",
+                Decimal("249.13"),
+                codigo="CERV1",
+                quantidade=Decimal("1.001"),
+            )
+        ],
+    )
+    estorno = _synthetic_nfe_with_products(
+        chave="NFE-ESTORNO-QTD-PRECISA",
+        natureza_operacao="Merc nao entregue ou recusada",
+        produtos=[
+            _produto(
+                "CERV HEINEKEN PIL 0,60GFA RT 24UN",
+                "1949",
+                Decimal("249.13"),
+                codigo="CERV1",
+                quantidade=Decimal("1.002"),
+            )
+        ],
+    )
+    estorno.referenced_nfe_chaves = (origem.chave,)
+
+    lancamentos = allocate_nfe_to_lancamentos(
+        estorno, product_classifier, nfe_index={origem.chave: origem}
+    )
+
+    assert len(lancamentos) == 1
+    assert lancamentos[0].status_revisao == "REVISAR"
+    assert lancamentos[0].valor == Decimal("249.13")
+    assert "CFOP_1949_SEM_VINCULO_SEGURO" in lancamentos[0].alertas
+
+
+def test_cfop_1949_with_unsafe_quadrature_stays_revisar(product_classifier):
+    origem = _synthetic_nfe_with_products(
+        chave="NFE-ORIGEM-QUADRATURA",
+        natureza_operacao="VENDA DE MERCADORIAS",
+        produtos=[
+            _produto(
+                "CERV HEINEKEN PIL 0,60GFA RT 24UN",
+                "5405",
+                Decimal("100.00"),
+                codigo="CERV1",
+            )
+        ],
+    )
+    origem.valor_total = Decimal("110.00")
+    estorno = _synthetic_nfe_with_products(
+        chave="NFE-ESTORNO-QUADRATURA",
+        natureza_operacao="Merc nao entregue ou recusada",
+        produtos=[
+            _produto(
+                "CERV HEINEKEN PIL 0,60GFA RT 24UN",
+                "1949",
+                Decimal("100.00"),
+                codigo="CERV1",
+            )
+        ],
+    )
+    estorno.valor_total = Decimal("110.00")
+    estorno.valor_frete = Decimal("5.00")
+    estorno.referenced_nfe_chaves = (origem.chave,)
+
+    lancamentos = allocate_nfe_to_lancamentos(
+        estorno, product_classifier, nfe_index={origem.chave: origem}
+    )
+
+    assert len(lancamentos) == 1
+    assert lancamentos[0].status_revisao == "REVISAR"
+    assert lancamentos[0].valor == Decimal("110.00")
+    assert "CFOP_1949_QUADRATURA_INSEGURA" in lancamentos[0].alertas
+
+
 def _synthetic_nfe(
     *,
     chave: str,
@@ -399,15 +739,24 @@ def _synthetic_nfe_with_products(
     )
 
 
-def _produto(descricao: str, cfop: str, valor: Decimal) -> ProdutoNFE:
+def _produto(
+    descricao: str,
+    cfop: str,
+    valor: Decimal,
+    *,
+    codigo: str = "P",
+    quantidade: Decimal = Decimal("1"),
+    valor_desconto: Decimal = Decimal("0.00"),
+) -> ProdutoNFE:
     return ProdutoNFE(
         n_item=1,
-        codigo="P",
+        codigo=codigo,
         descricao=descricao,
         ncm="22021000",
         cfop=cfop,
         unidade="UN",
-        quantidade=Decimal("1"),
+        quantidade=quantidade,
         valor_unitario=valor,
         valor_total=valor,
+        valor_desconto=valor_desconto,
     )

@@ -33,6 +33,7 @@ class ProdutoNFE:
     quantidade: Decimal
     valor_unitario: Decimal
     valor_total: Decimal
+    valor_desconto: Decimal = Decimal("0")
 
 
 @dataclass
@@ -55,6 +56,7 @@ class NFE:
     valor_tributos_inclusos: Decimal = Decimal("0")
     produtos: List[ProdutoNFE] = field(default_factory=list)
     duplicatas: List[Duplicata] = field(default_factory=list)
+    referenced_nfe_chaves: tuple[str, ...] = ()
     tem_duplicatas: bool = False
     tem_cobranca: bool = False
     valor_cobranca: Decimal = Decimal("0")

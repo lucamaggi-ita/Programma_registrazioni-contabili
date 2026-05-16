@@ -431,13 +431,25 @@ def _step_importar_xml(context: PipelineContext) -> StepResult:
 
     for fonte in context.fontes_xml:
         xml_files = _find_xml_files(fonte.xml_dir)
+        nfes = []
         lancamentos = []
         for xml_path in xml_files:
             try:
                 nfe = parse_nfe(xml_path)
-                file_lancamentos = allocate_nfe_to_lancamentos(nfe, classifier)
             except Exception as exc:
                 avisos.append(f"XML ignorado: {xml_path} - {exc}")
+                continue
+
+            nfes.append(nfe)
+
+        nfe_index = {nfe.chave: nfe for nfe in nfes if nfe.chave}
+        for nfe in nfes:
+            try:
+                file_lancamentos = allocate_nfe_to_lancamentos(
+                    nfe, classifier, nfe_index=nfe_index
+                )
+            except Exception as exc:
+                avisos.append(f"XML ignorado: {nfe.arquivo_origem} - {exc}")
                 continue
             xml_processados += 1
             valor_total += nfe.valor_total

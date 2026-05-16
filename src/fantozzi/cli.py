@@ -835,17 +835,28 @@ def importar_pasta_nfe_command(args: argparse.Namespace) -> int:
         lancamentos = []
         imported_count = 0
         ignored_count = 0
+        nfes = []
 
         for xml_path in xml_files:
             info(f"Importando NF-e: {xml_path}")
             try:
                 nfe = parse_nfe(xml_path)
-                file_lancamentos = allocate_nfe_to_lancamentos(nfe, classifier)
+                nfes.append(nfe)
+            except Exception as exc:
+                ignored_count += 1
+                warning(f"XML ignorado: {xml_path} - {exc}")
+
+        nfe_index = {nfe.chave: nfe for nfe in nfes if nfe.chave}
+        for nfe in nfes:
+            try:
+                file_lancamentos = allocate_nfe_to_lancamentos(
+                    nfe, classifier, nfe_index=nfe_index
+                )
                 lancamentos.extend(file_lancamentos)
                 imported_count += 1
             except Exception as exc:
                 ignored_count += 1
-                warning(f"XML ignorado: {xml_path} - {exc}")
+                warning(f"XML ignorado: {nfe.arquivo_origem} - {exc}")
 
         info(f"XML importados com sucesso: {imported_count}")
         if ignored_count:
