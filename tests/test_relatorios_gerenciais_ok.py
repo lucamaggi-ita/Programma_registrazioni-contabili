@@ -88,22 +88,42 @@ def test_exclui_comodato_mesmo_com_status_ok(tmp_path):
     assert operacoes[0]["lancamentos_ok_excluidos"] == 1
 
 
-def test_exclui_bonificacao_mesmo_com_status_ok(tmp_path):
+def test_inclui_bonificacao_decidida_mesmo_em_revisao(tmp_path):
     xml_dir = _xml_dir_with_special_operation(
         tmp_path, natureza="Bonificacao recebida", cfop="5910"
     )
     nfe = parse_nfe(next(xml_dir.glob("*.xml")))
     excel_path = tmp_path / "empresa" / "lancamentos.xlsx"
-    write_lancamentos_to_excel(excel_path, [_lancamento("ok-bonif", chave_origem=nfe.chave)])
+    write_lancamentos_to_excel(
+        excel_path,
+        [
+            _lancamento(
+                "bonif-decidida",
+                status_revisao="REVISAR",
+                conta_id="2.05.003",
+                conta_nome="Reducao de Custos - Bonificacoes Recebidas",
+                chave_origem=nfe.chave,
+                tipo_operacao_especial="BONIFICACAO_RECEBIDA",
+                tratamento_operacao_especial="REDUCAO_CUSTO",
+            )
+        ],
+    )
     output_path = tmp_path / "reports" / "relatorios_ok.xlsx"
 
     result = gerar_relatorios_gerenciais_ok_provisorios(
         [excel_path], output_path, pastas_operacoes_especiais=[xml_dir]
     )
 
-    operacoes = _sheet_rows(load_workbook(output_path, data_only=True), EXCLUIDOS_OPERACOES_SHEET)
-    assert result.lancamentos_ok_incluidos == 0
+    workbook = load_workbook(output_path, data_only=True)
+    ok_rows = _sheet_rows(workbook, LANCAMENTOS_OK_BASE_SHEET)
+    revisar_rows = _sheet_rows(workbook, EXCLUIDOS_REVISAR_SHEET)
+    operacoes = _sheet_rows(workbook, EXCLUIDOS_OPERACOES_SHEET)
+    assert result.lancamentos_ok_incluidos == 1
+    assert result.lancamentos_revisar_excluidos == 0
+    assert ok_rows[0]["conta_id"] == "2.05.003"
+    assert revisar_rows == []
     assert operacoes[0]["tipo_operacao_especial"] == "BONIFICACAO_RECEBIDA"
+    assert operacoes[0]["lancamentos_ok_excluidos"] == 0
 
 
 def test_gera_txt_com_resumo_e_alertas(tmp_path):
@@ -183,7 +203,11 @@ def _lancamento(
     valor: Decimal = Decimal("10.00"),
     status_revisao: str = "OK",
     fornecedor: str = "Fornecedor teste",
+    conta_id: str = "2.01.004",
+    conta_nome: str = "Refrigerantes",
     chave_origem: str = "NFE123",
+    tipo_operacao_especial: str = "",
+    tratamento_operacao_especial: str = "",
 ) -> Lancamento:
     return Lancamento(
         data_documento=date(2026, 5, 5),
@@ -194,8 +218,8 @@ def _lancamento(
         cnpj_cpf_favorecido="12345678000195",
         documento="12566",
         tipo_documento="XML_NFE",
-        conta_id="2.01.004",
-        conta_nome="Refrigerantes",
+        conta_id=conta_id,
+        conta_nome=conta_nome,
         grupo_conta="Custos de Mercadorias e Insumos",
         descricao_itens="COCA-COLA KS 290ML",
         valor=valor,
@@ -208,5 +232,7 @@ def _lancamento(
         hash_registro=hash_registro,
         status_revisao=status_revisao,
         alertas="" if status_revisao == "OK" else "CLASSIFICACAO_NAO_ENCONTRADA",
+        tipo_operacao_especial=tipo_operacao_especial,
+        tratamento_operacao_especial=tratamento_operacao_especial,
         tipo_lancamento="custo",
     )

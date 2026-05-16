@@ -16,6 +16,7 @@ from fantozzi.relatorios_gerenciais_ok import (
     SOURCE_HEADER,
     _derive_identifier,
     _format_currency,
+    _is_bonificacao_recebida_decidida,
     _lancamento_matches_special,
     _read_lancamentos,
     _read_operacoes_especiais,
@@ -50,6 +51,8 @@ BASE_HEADERS = [
     "linha_dre",
     "valor",
     "status_revisao",
+    "tipo_operacao_especial",
+    "tratamento_operacao_especial",
     "origem_arquivo",
 ]
 CONTAS_SEM_MAPEAMENTO_HEADERS = [
@@ -111,12 +114,17 @@ def gerar_dre_gerencial_ok_provisoria(
 
     operacoes = _read_operacoes_especiais(pastas_operacoes)
     special_keys = _special_keys(operacoes)
-    base_ok = [
-        row
-        for row in all_rows
-        if _status(row) == "OK" and not _lancamento_matches_special(row, special_keys)
-    ]
-    excluded_revisar = [row for row in all_rows if _status(row) != "OK"]
+    base_ok: list[dict[str, object]] = []
+    excluded_revisar: list[dict[str, object]] = []
+    for row in all_rows:
+        if _is_bonificacao_recebida_decidida(row):
+            base_ok.append(row)
+            continue
+        if _status(row) == "OK" and not _lancamento_matches_special(row, special_keys):
+            base_ok.append(row)
+            continue
+        if _status(row) != "OK":
+            excluded_revisar.append(row)
     base_rows = [_dre_base_row(row, mapping) for row in base_ok]
     sem_mapeamento = [row for row in base_rows if not row["linha_dre_id"]]
     mapped = [row for row in base_rows if row["linha_dre_id"] and row["entra_dre"]]
@@ -164,7 +172,7 @@ def console_lines(result: DreGerencialProvisoriaResult) -> list[str]:
     lines = [
         "[OK] DRE gerencial OK provisoria gerada.",
         f"     Total origem: {result.total_lancamentos_origem}",
-        f"     Lancamentos OK nao especiais usados: {result.lancamentos_base_ok}",
+        f"     Lancamentos gerenciais usados: {result.lancamentos_base_ok}",
         f"     Valor total base OK: {_format_currency(result.valor_total_base_ok)}",
         f"     Contas sem mapeamento: {result.quantidade_contas_sem_mapeamento}",
         f"     Status DRE: {result.status_dre}",
@@ -181,14 +189,14 @@ def relatorio_texto(
     dre_mensal: list[dict[str, object]],
 ) -> str:
     lines = [
-        "DRE GERENCIAL PROVISORIA - SOMENTE LANCAMENTOS OK",
+        "DRE GERENCIAL PROVISORIA - LANCAMENTOS GERENCIAIS OK",
         "=================================================",
         "",
         "Status: PROVISORIO",
         "",
         "Base:",
         f"- Total lancamentos origem: {result.total_lancamentos_origem}",
-        f"- Lancamentos OK nao especiais usados: {result.lancamentos_base_ok}",
+        f"- Lancamentos gerenciais usados: {result.lancamentos_base_ok}",
         f"- Lancamentos REVISAR excluidos: {result.lancamentos_revisar_excluidos}",
         f"- Operacoes especiais excluidas: {result.operacoes_especiais_excluidas}",
         f"- Valor total base OK: {_format_currency(result.valor_total_base_ok)}",
@@ -266,6 +274,8 @@ def _dre_base_row(row: dict[str, object], mapping: dict[str, object]) -> dict[st
         "valor": valor_signed,
         "valor_original": valor_original,
         "status_revisao": row.get("status_revisao"),
+        "tipo_operacao_especial": row.get("tipo_operacao_especial"),
+        "tratamento_operacao_especial": row.get("tratamento_operacao_especial"),
         "origem_arquivo": row.get(SOURCE_HEADER),
     }
 
@@ -273,7 +283,7 @@ def _dre_base_row(row: dict[str, object], mapping: dict[str, object]) -> dict[st
 def _dre_geral_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
     grouped = _group_dre(rows, ("ordem", "grupo_dre", "linha_dre"))
     return [
-        {"ordem": key[0], "grupo_dre": key[1], "linha_dre": key[2], "valor": value, "observacao": "PROVISORIO - somente OK nao especiais"}
+        {"ordem": key[0], "grupo_dre": key[1], "linha_dre": key[2], "valor": value, "observacao": "PROVISORIO - OK + bonificacao decidida"}
         for key, value in sorted(grouped.items(), key=lambda item: item[0])
     ]
 
@@ -312,7 +322,7 @@ def _contas_sem_mapeamento_rows(rows: list[dict[str, object]]) -> list[dict[str,
                 "conta_nome": key[1],
                 "quantidade_lancamentos": 0,
                 "valor_total": Decimal("0.00"),
-                "observacao": "Conta OK nao especial sem mapeamento DRE.",
+                "observacao": "Conta gerencial sem mapeamento DRE.",
             },
         )
         bucket["quantidade_lancamentos"] = int(bucket["quantidade_lancamentos"]) + 1
@@ -322,8 +332,8 @@ def _contas_sem_mapeamento_rows(rows: list[dict[str, object]]) -> list[dict[str,
 
 def _auditoria_rows(result: DreGerencialProvisoriaResult) -> list[dict[str, object]]:
     return [
-        {"indicador": "total_lancamentos_base_ok", "valor": result.lancamentos_base_ok, "status": "OK", "observacao": "Somente OK nao especiais."},
-        {"indicador": "valor_total_base_ok", "valor": result.valor_total_base_ok, "status": "OK", "observacao": "Valor da base OK."},
+        {"indicador": "total_lancamentos_base_ok", "valor": result.lancamentos_base_ok, "status": "OK", "observacao": "Status OK mais BONIFICACAO_RECEBIDA decidida em 2.05.003."},
+        {"indicador": "valor_total_base_ok", "valor": result.valor_total_base_ok, "status": "OK", "observacao": "Valor da base gerencial."},
         {"indicador": "valor_total_mapeado", "valor": result.valor_total_mapeado, "status": "OK", "observacao": "Valor bruto das contas mapeadas."},
         {"indicador": "valor_total_sem_mapeamento", "valor": result.valor_total_sem_mapeamento, "status": "ATENCAO" if result.valor_total_sem_mapeamento else "OK", "observacao": "Contas sem mapeamento devem ser revisadas."},
         {"indicador": "quantidade_contas_sem_mapeamento", "valor": result.quantidade_contas_sem_mapeamento, "status": "ATENCAO" if result.quantidade_contas_sem_mapeamento else "OK", "observacao": "Quantidade de contas sem linha DRE."},
@@ -342,12 +352,13 @@ def _write_table(sheet, title: str, headers: list[str], rows: list[dict[str, obj
 
 def _write_instrucoes(sheet) -> None:
     lines = [
-        "DRE GERENCIAL PROVISORIA - SOMENTE LANCAMENTOS OK",
+        "DRE GERENCIAL PROVISORIA - LANCAMENTOS GERENCIAIS OK",
         "",
         "Esta DRE e gerencial, provisoria e parcial.",
-        "Inclui somente lancamentos OK nao especiais.",
-        "Nao inclui lancamentos em revisao.",
-        "Nao inclui comodato, bonificacao recebida ou outras operacoes especiais.",
+        "Inclui lancamentos com status OK.",
+        "Inclui BONIFICACAO_RECEBIDA decidida em 2.05.003 como reducao de custo.",
+        "Nao promove genericamente lancamentos REVISAR.",
+        "Nao inclui COMODATO nem operacoes especiais sem decisao contabil segura.",
         "Nao substitui DRE contabil definitiva.",
         "Nao substitui revisao do contador.",
         "Contas sem mapeamento devem ser revisadas antes de uma DRE final.",

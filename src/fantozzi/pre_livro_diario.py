@@ -15,6 +15,7 @@ from fantozzi.operation_classifier import (
     OperacaoEspecialAuditItem,
     auditar_operacoes_especiais,
 )
+from fantozzi.relatorios_gerenciais_ok import _is_bonificacao_recebida_decidida
 
 
 LANCAMENTOS_OK_SHEET = "Lancamentos_OK"
@@ -129,13 +130,18 @@ def gerar_pre_livro_diario_teste(
     for excel_path in excel_paths:
         for row in _read_lancamentos(excel_path):
             status = _text(row.get("status_revisao")).upper()
+            is_bonificacao_decidida = _is_bonificacao_recebida_decidida(row)
             enriched = {SOURCE_HEADER: str(excel_path), **row}
-            if status == "OK":
+            if status == "OK" or is_bonificacao_decidida:
                 lancamentos_ok.append(enriched)
             else:
                 lancamentos_revisar.append(enriched)
-            _accumulate_resumo_por_conta(resumo_por_conta, row)
-            _accumulate_resumo_mensal(resumo_mensal, row)
+            _accumulate_resumo_por_conta(
+                resumo_por_conta, row, force_ok=is_bonificacao_decidida
+            )
+            _accumulate_resumo_mensal(
+                resumo_mensal, row, force_ok=is_bonificacao_decidida
+            )
 
     operacoes_especiais = _read_operacoes_especiais(pastas_operacoes)
     resumo_conta_rows = _resumo_conta_rows(resumo_por_conta)
@@ -332,6 +338,8 @@ def _operacao_row(pasta: Path, item: OperacaoEspecialAuditItem) -> dict[str, obj
 def _accumulate_resumo_por_conta(
     resumo: dict[tuple[str, str, str], dict[str, object]],
     row: dict[str, object],
+    *,
+    force_ok: bool = False,
 ) -> None:
     key = (
         _text(row.get("conta_id")),
@@ -350,12 +358,14 @@ def _accumulate_resumo_por_conta(
             "valor_revisar": Decimal("0.00"),
         },
     )
-    _accumulate_status_bucket(bucket, row)
+    _accumulate_status_bucket(bucket, row, force_ok=force_ok)
 
 
 def _accumulate_resumo_mensal(
     resumo: dict[str, dict[str, object]],
     row: dict[str, object],
+    *,
+    force_ok: bool = False,
 ) -> None:
     competencia = _text(row.get("competencia")) or "SEM_COMPETENCIA"
     bucket = resumo.setdefault(
@@ -368,15 +378,17 @@ def _accumulate_resumo_mensal(
             "valor_revisar": Decimal("0.00"),
         },
     )
-    _accumulate_status_bucket(bucket, row)
+    _accumulate_status_bucket(bucket, row, force_ok=force_ok)
 
 
 def _accumulate_status_bucket(
     bucket: dict[str, object],
     row: dict[str, object],
+    *,
+    force_ok: bool = False,
 ) -> None:
     value = _decimal_value(row.get("valor"))
-    if _text(row.get("status_revisao")).upper() == "OK":
+    if force_ok or _text(row.get("status_revisao")).upper() == "OK":
         bucket["qtd_lancamentos_ok"] = int(bucket["qtd_lancamentos_ok"]) + 1
         bucket["valor_ok"] = bucket["valor_ok"] + value
     else:
@@ -455,7 +467,7 @@ def _build_auditoria(
             "total_lancamentos_ok",
             total_ok,
             "OK",
-            "Lancamentos com status_revisao OK.",
+            "Lancamentos com status_revisao OK e BONIFICACAO_RECEBIDA decidida em 2.05.003.",
         ),
         AuditoriaIndicador(
             "total_lancamentos_revisar",
@@ -624,7 +636,7 @@ def _write_instrucoes_sheet(
         "Nenhum CSV, XLSX assistido ou Excel original foi modificado.",
         "",
         "Abas:",
-        "- Lancamentos_OK: lancamentos com status_revisao OK.",
+        "- Lancamentos_OK: lancamentos com status_revisao OK e BONIFICACAO_RECEBIDA decidida em 2.05.003.",
         "- Lancamentos_REVISAR: lancamentos que exigem revisao humana.",
         "- Operacoes_Especiais: comodato, bonificacao e outros casos auditados a partir dos XML informados.",
         "- Resumo_por_Conta: totais por conta, separados entre OK e REVISAR.",
@@ -637,7 +649,7 @@ def _write_instrucoes_sheet(
         "- Lancamentos_REVISAR exigem revisao manual.",
         "- Operacoes_Especiais nao devem ser tratadas automaticamente como compra normal.",
         "- COMODATO deve permanecer fora da DRE ate validacao contabil.",
-        "- BONIFICACAO_RECEBIDA deve permanecer fora do custo de compra ate validacao contabil.",
+        "- BONIFICACAO_RECEBIDA decidida em 2.05.003 entra como reducao de custo.",
         "- A aba Auditoria serve somente para controle de coerencia.",
         "- Os resumos sao calculados a partir dos Excel originais de lancamentos.",
         "- Operacoes especiais aparecem em aba separada para controle e nao foram excluidas automaticamente dos resumos.",

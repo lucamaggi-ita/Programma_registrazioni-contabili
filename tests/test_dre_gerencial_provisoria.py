@@ -45,7 +45,7 @@ def test_gera_dre_apenas_com_ok_nao_especiais(tmp_path):
     assert result.valor_total_base_ok == Decimal("10.00")
 
 
-def test_exclui_comodato_e_bonificacao(tmp_path):
+def test_inclui_bonificacao_decidida_e_exclui_comodato(tmp_path):
     xml_comodato = _xml_dir_with_special_operation(tmp_path, natureza="Comodato", cfop="5908")
     xml_bonif = _xml_dir_with_special_operation(
         tmp_path, natureza="Bonificacao recebida", cfop="5910"
@@ -57,20 +57,40 @@ def test_exclui_comodato_e_bonificacao(tmp_path):
         excel_path,
         [
             _lancamento("ok-normal", chave_origem="NORMAL"),
-            _lancamento("ok-comodato", chave_origem=nfe_comodato.chave),
-            _lancamento("ok-bonif", chave_origem=nfe_bonif.chave),
+            _lancamento(
+                "comodato-revisar",
+                conta_id="13.01.001",
+                status_revisao="REVISAR",
+                chave_origem=nfe_comodato.chave,
+                tipo_operacao_especial="COMODATO",
+            ),
+            _lancamento(
+                "bonif-decidida",
+                conta_id="2.05.003",
+                conta_nome="Reducao de Custos - Bonificacoes Recebidas",
+                status_revisao="REVISAR",
+                chave_origem=nfe_bonif.chave,
+                tipo_operacao_especial="BONIFICACAO_RECEBIDA",
+                tratamento_operacao_especial="REDUCAO_CUSTO",
+            ),
         ],
     )
+    xlsx_path = tmp_path / "dre.xlsx"
 
     result = gerar_dre_gerencial_ok_provisoria(
         [excel_path],
         _save_mapping(tmp_path),
-        tmp_path / "dre.xlsx",
+        xlsx_path,
         pastas_operacoes_especiais=[xml_comodato, xml_bonif],
     )
 
-    assert result.lancamentos_base_ok == 1
+    workbook = load_workbook(xlsx_path, data_only=True)
+    base_rows = _sheet_rows(workbook, BASE_OK_DRE_SHEET)
+    assert result.lancamentos_base_ok == 2
+    assert result.lancamentos_revisar_excluidos == 1
     assert result.operacoes_especiais_excluidas == 2
+    assert {row["conta_id"] for row in base_rows} == {"2.01.004", "2.05.003"}
+    assert all(row["conta_id"] != "13.01.001" for row in base_rows)
 
 
 def test_separa_contas_sem_mapeamento(tmp_path):
@@ -155,6 +175,7 @@ linhas_dre:
 mapeamento:
   "1.01.001": { dre_linha_id: "01.01", entra_dre: true }
   "2.01.004": { dre_linha_id: "03.02", entra_dre: true }
+  "2.05.003": { dre_linha_id: "03.02", entra_dre: true }
 """,
         encoding="utf-8",
     )
@@ -187,9 +208,12 @@ def _lancamento(
     hash_registro: str,
     *,
     conta_id: str = "2.01.004",
+    conta_nome: str = "Conta teste",
     valor: Decimal = Decimal("10.00"),
     status_revisao: str = "OK",
     chave_origem: str = "NFE123",
+    tipo_operacao_especial: str = "",
+    tratamento_operacao_especial: str = "",
 ) -> Lancamento:
     return Lancamento(
         data_documento=date(2026, 5, 5),
@@ -201,7 +225,7 @@ def _lancamento(
         documento="12566",
         tipo_documento="XML_NFE",
         conta_id=conta_id,
-        conta_nome="Conta teste",
+        conta_nome=conta_nome,
         grupo_conta="Grupo teste",
         descricao_itens="ITEM TESTE",
         valor=valor,
@@ -212,5 +236,7 @@ def _lancamento(
         hash_registro=hash_registro,
         status_revisao=status_revisao,
         alertas="" if status_revisao == "OK" else "CLASSIFICACAO_NAO_ENCONTRADA",
+        tipo_operacao_especial=tipo_operacao_especial,
+        tratamento_operacao_especial=tratamento_operacao_especial,
         tipo_lancamento="custo",
     )

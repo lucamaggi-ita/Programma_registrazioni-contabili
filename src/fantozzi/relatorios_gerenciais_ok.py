@@ -14,6 +14,10 @@ from fantozzi.excel_writer import HEADERS, LANCAMENTOS_SHEET
 from fantozzi.operation_classifier import OperationAuditError, auditar_operacoes_especiais
 
 
+BONIFICACAO_RECEBIDA = "BONIFICACAO_RECEBIDA"
+BONIFICACAO_RECEBIDA_ACCOUNT_ID = "2.05.003"
+TRATAMENTO_REDUCAO_CUSTO = "REDUCAO_CUSTO"
+
 RESUMO_GERAL_SHEET = "Resumo_Geral"
 RESUMO_MENSAL_SHEET = "Resumo_Mensal"
 RESUMO_CONTA_SHEET = "Resumo_por_Conta"
@@ -124,11 +128,14 @@ def gerar_relatorios_gerenciais_ok_provisorios(
 
     for row in all_lancamentos:
         status = _text(row.get("status_revisao")).upper()
+        if _is_bonificacao_recebida_decidida(row):
+            included_ok.append(row)
+            continue
+        if status == "OK" and _lancamento_matches_special(row, special_keys):
+            excluded_special_ok.append(row)
+            continue
         if status != "OK":
             excluded_revisar.append(row)
-            continue
-        if _lancamento_matches_special(row, special_keys):
-            excluded_special_ok.append(row)
             continue
         included_ok.append(row)
 
@@ -234,9 +241,10 @@ def relatorio_texto(
         "Status do relatorio: PROVISORIO",
         "",
         "Criterio:",
-        "- Inclui somente status_revisao = OK",
+        "- Inclui status_revisao = OK",
+        "- Inclui BONIFICACAO_RECEBIDA decidida em 2.05.003 como reducao de custo",
         "- Exclui REVISAR",
-        "- Exclui operacoes especiais",
+        "- Exclui COMODATO e operacoes especiais sem decisao contabil segura",
         "",
         "Resumo:",
         f"- Total lancamentos origem: {result.total_lancamentos_origem}",
@@ -390,6 +398,15 @@ def _lancamento_matches_special(
     )
 
 
+def _is_bonificacao_recebida_decidida(row: dict[str, object]) -> bool:
+    return (
+        _text(row.get("tipo_operacao_especial")).upper() == BONIFICACAO_RECEBIDA
+        and _text(row.get("conta_id")) == BONIFICACAO_RECEBIDA_ACCOUNT_ID
+        and _text(row.get("tratamento_operacao_especial")).upper()
+        == TRATAMENTO_REDUCAO_CUSTO
+    )
+
+
 def _write_resumo_geral(
     sheet,
     all_lancamentos: list[dict[str, object]],
@@ -408,7 +425,7 @@ def _write_resumo_geral(
         {
             "indicador": "Lancamentos incluidos OK",
             "valor": len(included_ok),
-            "observacao": "Somente status_revisao OK, exceto operacoes especiais identificadas.",
+            "observacao": "Status OK mais BONIFICACAO_RECEBIDA decidida em 2.05.003.",
         },
         {
             "indicador": "Lancamentos excluidos REVISAR",
@@ -418,7 +435,7 @@ def _write_resumo_geral(
         {
             "indicador": "Operacoes especiais excluidas",
             "valor": len(operacoes_rows),
-            "observacao": "Comodato, bonificacao recebida e outras operacoes especiais auditadas.",
+            "observacao": "Operacoes especiais auditadas; BONIFICACAO_RECEBIDA decidida entra na base gerencial.",
         },
         {
             "indicador": "Lancamentos OK excluidos por operacoes especiais",
@@ -462,9 +479,10 @@ def _write_instrucoes_sheet(sheet, excel_paths: tuple[Path, ...]) -> None:
         "RELATORIOS GERENCIAIS OK PROVISORIOS",
         "",
         "Este relatorio e provisorio.",
-        "Inclui somente lancamentos com status OK.",
+        "Inclui lancamentos com status OK.",
+        "Inclui BONIFICACAO_RECEBIDA decidida em 2.05.003 como reducao de custo.",
         "Exclui lancamentos em revisao.",
-        "Exclui operacoes especiais como comodato e bonificacao recebida.",
+        "Exclui COMODATO e operacoes especiais sem decisao contabil segura.",
         "Nao substitui revisao contabil.",
         "Nao e DRE definitiva.",
         "Nao e livro diario definitivo.",

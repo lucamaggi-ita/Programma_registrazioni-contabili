@@ -106,6 +106,51 @@ def test_inclui_operacoes_especiais_quando_pasta_xml_e_informada(tmp_path):
     assert auditoria["status_geral_auditoria"]["Valor"] == "ATENCAO_CONTABIL"
 
 
+def test_bonificacao_decidida_entra_em_ok_e_comodato_permanece_revisar(tmp_path):
+    excel_path = tmp_path / "lancamentos.xlsx"
+    output_path = tmp_path / "reports" / "pre_livro.xlsx"
+    write_lancamentos_to_excel(
+        excel_path,
+        [
+            _lancamento("hash-ok", conta_id="2.01.004", valor=Decimal("10.00")),
+            _lancamento(
+                "hash-bonif",
+                conta_id="2.05.003",
+                conta_nome="Reducao de Custos - Bonificacoes Recebidas",
+                valor=Decimal("12.50"),
+                status_revisao="REVISAR",
+                alertas="OPERACAO_ESPECIAL_DECIDIDA",
+                tipo_operacao_especial="BONIFICACAO_RECEBIDA",
+                tratamento_operacao_especial="REDUCAO_CUSTO",
+            ),
+            _lancamento(
+                "hash-comodato",
+                conta_id="13.01.001",
+                conta_nome="Comodato - Fora DRE",
+                valor=Decimal("20.00"),
+                status_revisao="REVISAR",
+                alertas="OPERACAO_ESPECIAL_COMODATO",
+                tipo_operacao_especial="COMODATO",
+            ),
+        ],
+    )
+
+    result = gerar_pre_livro_diario_teste([excel_path], output_path)
+
+    workbook = load_workbook(output_path, data_only=True)
+    ok_rows = _sheet_rows(workbook, LANCAMENTOS_OK_SHEET)
+    revisar_rows = _sheet_rows(workbook, LANCAMENTOS_REVISAR_SHEET)
+    resumo_rows = _sheet_rows(workbook, RESUMO_CONTA_SHEET)
+    bonif_resumo = next(row for row in resumo_rows if row["conta_id"] == "2.05.003")
+    assert result.lancamentos_ok == 2
+    assert result.lancamentos_revisar == 1
+    assert any(row["conta_id"] == "2.05.003" for row in ok_rows)
+    assert all(row["tipo_operacao_especial"] != "COMODATO" for row in ok_rows)
+    assert [row["tipo_operacao_especial"] for row in revisar_rows] == ["COMODATO"]
+    assert bonif_resumo["qtd_lancamentos_ok"] == 1
+    assert bonif_resumo["qtd_lancamentos_revisar"] == 0
+
+
 def test_salva_relatorio_txt_de_auditoria_quando_informado(tmp_path):
     excel_path = tmp_path / "lancamentos.xlsx"
     output_path = tmp_path / "reports" / "pre_livro.xlsx"
@@ -151,6 +196,16 @@ def _audit_rows(workbook) -> dict[str, dict[str, object]]:
     return rows
 
 
+def _sheet_rows(workbook, sheet_name: str) -> list[dict[str, object]]:
+    sheet = workbook[sheet_name]
+    headers = [cell.value for cell in sheet[1]]
+    return [
+        dict(zip(headers, values))
+        for values in sheet.iter_rows(min_row=2, values_only=True)
+        if any(value is not None for value in values)
+    ]
+
+
 def _lancamento(
     hash_registro: str,
     *,
@@ -160,6 +215,8 @@ def _lancamento(
     valor: Decimal = Decimal("10.00"),
     status_revisao: str = "OK",
     alertas: str = "",
+    tipo_operacao_especial: str = "",
+    tratamento_operacao_especial: str = "",
 ) -> Lancamento:
     return Lancamento(
         data_documento=date(2026, 5, 5),
@@ -188,5 +245,7 @@ def _lancamento(
         hash_registro=hash_registro,
         status_revisao=status_revisao,
         alertas=alertas,
+        tipo_operacao_especial=tipo_operacao_especial,
+        tratamento_operacao_especial=tratamento_operacao_especial,
         tipo_lancamento="custo",
     )
