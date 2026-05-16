@@ -768,6 +768,14 @@ def build_parser() -> argparse.ArgumentParser:
             "Se omitido, a Fase 9 nao e executada."
         ),
     )
+    reprocessar_real.add_argument(
+        "--lancamentos-manuais-gerenciais-csv",
+        metavar="PATH",
+        help=(
+            "CSV de lancamentos manuais gerenciais controlados para aplicar na run. "
+            "No dry-run v1, o CSV nao e lido nem validado."
+        ),
+    )
     reprocessar_real.set_defaults(func=reprocessar_importacao_real_command)
 
     return parser
@@ -1363,6 +1371,9 @@ def reprocessar_importacao_real_command(args: argparse.Namespace) -> int:
             modo=args.modo,
             dry_run=args.dry_run,
             fase9_csv_path=args.fase9_csv,
+            lancamentos_manuais_gerenciais_csv_path=(
+                args.lancamentos_manuais_gerenciais_csv
+            ),
         )
     except reprocessamento_pipeline.ReprocessamentoPipelineError as exc:
         print(f"[ERRO] {exc}")
@@ -1396,6 +1407,8 @@ def reprocessar_importacao_real_command(args: argparse.Namespace) -> int:
         )
     else:
         print("[INFO] Fase 9 nao executada; relatorios permanecem provisorios.")
+    if args.lancamentos_manuais_gerenciais_csv:
+        print("[INFO] Lancamentos manuais gerenciais aplicados na run.")
     return 0
 
 

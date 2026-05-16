@@ -28,6 +28,9 @@ from fantozzi.fase9_decision_engine import (
     load_fase9_decisions_from_csv,
 )
 from fantozzi.fase9_writeback import write_fase9_applied_csv
+from fantozzi.lancamentos_manuais_gerenciais import (
+    processar_lancamentos_manuais_gerenciais,
+)
 from fantozzi.nfe_importer import parse_nfe
 from fantozzi.operation_classifier import (
     auditar_operacoes_especiais,
@@ -58,6 +61,7 @@ ETAPAS_PREVISTAS = (
     "IMPORTACAO_XML_CONCLUIDA",
     "DIAGNOSTICOS_CONCLUIDOS",
     "OPERACOES_ESPECIAIS_AUDITADAS",
+    "LANCAMENTOS_MANUAIS_GERENCIAIS_APLICADOS",
     "PRE_LIVRO_GERADO",
     "AUDITORIA_PRE_LIVRO_CONCLUIDA",
     "PACOTE_REVISAO_CONTABIL_GERADO",
@@ -84,6 +88,7 @@ class StepResult:
     totais: Mapping[str, object] = field(default_factory=dict)
     classificacao: Mapping[str, object] = field(default_factory=dict)
     avisos: tuple[str, ...] = ()
+    manifest_updates: Mapping[str, object] = field(default_factory=dict)
 
 
 @dataclass
@@ -98,6 +103,7 @@ class PipelineContext:
     manifest_path: Path
     fontes_xml: tuple[XmlSource, ...]
     fase9_csv_paths: tuple[Path, ...] = ()
+    lancamentos_manuais_gerenciais_csv_path: Path | None = None
     lancamentos_xlsx: tuple[Path, ...] = ()
 
 
@@ -138,12 +144,18 @@ def reprocessar_importacao_real_provisoria(
     steps: PipelineSteps | None = None,
     today: date | None = None,
     fase9_csv_path: Path | str | Sequence[Path | str] | None = None,
+    lancamentos_manuais_gerenciais_csv_path: Path | str | None = None,
 ) -> ReprocessamentoResultado:
     xml_base = Path(xml_base)
     saida_output = Path(saida_output)
     saida_reports = Path(saida_reports)
     project_root = Path(project_root or run_manager.PROJECT_ROOT)
     fase9_csv_paths = _normalize_fase9_csv_paths(fase9_csv_path)
+    lancamentos_manuais_path = (
+        Path(lancamentos_manuais_gerenciais_csv_path)
+        if lancamentos_manuais_gerenciais_csv_path
+        else None
+    )
 
     if modo == "definitivo":
         raise ReprocessamentoPipelineError(MODO_DEFINITIVO_BLOQUEADO)
@@ -202,6 +214,7 @@ def reprocessar_importacao_real_provisoria(
         manifest_path=run_result.manifest_path,
         fontes_xml=fontes_xml,
         fase9_csv_paths=fase9_csv_paths,
+        lancamentos_manuais_gerenciais_csv_path=lancamentos_manuais_path,
     )
     steps = steps or default_pipeline_steps()
     arquivos_gerados: list[Path] = []
@@ -239,6 +252,15 @@ def reprocessar_importacao_real_provisoria(
             avisos,
             etapas_executadas,
         )
+        if context.lancamentos_manuais_gerenciais_csv_path:
+            _executar_step(
+                context,
+                "LANCAMENTOS_MANUAIS_GERENCIAIS_APLICADOS",
+                _step_lancamentos_manuais_gerenciais,
+                arquivos_gerados,
+                avisos,
+                etapas_executadas,
+            )
         _executar_step(
             context,
             ("PRE_LIVRO_GERADO", "AUDITORIA_PRE_LIVRO_CONCLUIDA"),
@@ -306,6 +328,10 @@ def reprocessar_importacao_real_provisoria(
                 "nota": "Revisao contabil pendente. Nenhuma regra aprovada aplicada.",
             }
         )
+    manifest.setdefault(
+        "lancamentos_manuais_gerenciais",
+        {"executado": False},
+    )
     run_manager.save_manifest(context.manifest_path, _json_ready(manifest))
     run_manager.add_checkpoint(context.manifest_path, "FINALIZACAO_PROVISORIA")
     run_manager.update_manifest_status(
@@ -415,6 +441,7 @@ def _atualizar_manifesto_step(manifest_path: Path, result: StepResult) -> None:
         path_text = str(path)
         if path_text not in manifest["relatorios_gerados"]:
             manifest["relatorios_gerados"].append(path_text)
+    manifest.update(result.manifest_updates)
     run_manager.save_manifest(manifest_path, _json_ready(manifest))
 
 
@@ -545,6 +572,54 @@ def _step_gerar_pre_livro(context: PipelineContext) -> StepResult:
         totais={
             "lancamentos_ok": result.lancamentos_ok,
             "lancamentos_revisar": result.lancamentos_revisar,
+        },
+    )
+
+
+def _step_lancamentos_manuais_gerenciais(context: PipelineContext) -> StepResult:
+    csv_path = context.lancamentos_manuais_gerenciais_csv_path
+    if csv_path is None:
+        return StepResult(
+            manifest_updates={
+                "lancamentos_manuais_gerenciais": {"executado": False}
+            }
+        )
+
+    output_xlsx = (
+        context.output_run_dir
+        / "MANUAL_GERENCIAL"
+        / "lancamentos_manuais_gerenciais.xlsx"
+    )
+    output_csv = (
+        context.reports_run_dir / "lancamentos_manuais_gerenciais_aplicados.csv"
+    )
+    auditoria_txt = (
+        context.reports_run_dir / "auditoria_lancamentos_manuais_gerenciais.txt"
+    )
+    result = processar_lancamentos_manuais_gerenciais(
+        csv_path,
+        context.project_root / "config" / "plano_contas_gerencial.yaml",
+        context.project_root / "config" / "mapeamento_dre.yaml",
+        output_xlsx,
+        output_csv,
+        auditoria_txt,
+    )
+    context.lancamentos_xlsx = (*_lancamentos_xlsx(context), output_xlsx)
+    return StepResult(
+        arquivos_gerados=(output_xlsx, output_csv, auditoria_txt),
+        manifest_updates={
+            "lancamentos_manuais_gerenciais": {
+                "executado": True,
+                "input_csv": result.input_csv,
+                "output_xlsx_tecnico": result.output_xlsx,
+                "output_csv": result.output_csv,
+                "auditoria_txt": result.auditoria_txt,
+                "linhas_lidas": result.linhas_lidas,
+                "lancamentos_aceitos": result.lancamentos_aceitos,
+                "linhas_tecnicas_geradas": result.linhas_tecnicas_geradas,
+                "total_manual": result.total_manual,
+                "fonte": result.fonte,
+            }
         },
     )
 

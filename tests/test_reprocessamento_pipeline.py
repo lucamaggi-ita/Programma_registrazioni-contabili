@@ -267,6 +267,88 @@ def test_pipeline_provisoria_nao_aplica_regras(tmp_path):
     assert manifest["classificacao"]["regras_aplicadas"] == 0
 
 
+def test_pipeline_sem_csv_manual_registra_lancamentos_manuais_nao_executados(tmp_path):
+    result, _, _, _ = _run_pipeline(tmp_path)
+
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    assert manifest["lancamentos_manuais_gerenciais"] == {"executado": False}
+
+
+def test_pipeline_com_csv_manual_gera_outputs_e_manifest(tmp_path):
+    _save_config_9n(tmp_path)
+    csv_manual = tmp_path / "manual.csv"
+    _save_manual_csv_9n(csv_manual)
+    calls: list[tuple[str, Path]] = []
+    xml_base = _make_xml_base(tmp_path)
+    saida_output = tmp_path / "output" / "importacao_real"
+    saida_reports = tmp_path / "reports" / "importacao_real"
+
+    result = reprocessar_importacao_real_provisoria(
+        xml_base,
+        saida_output,
+        saida_reports,
+        project_root=tmp_path,
+        steps=_fake_steps(calls),
+        lancamentos_manuais_gerenciais_csv_path=csv_manual,
+    )
+
+    output_xlsx = (
+        result.output_run_dir
+        / "MANUAL_GERENCIAL"
+        / "lancamentos_manuais_gerenciais.xlsx"
+    )
+    output_csv = result.reports_run_dir / "lancamentos_manuais_gerenciais_aplicados.csv"
+    auditoria_txt = (
+        result.reports_run_dir / "auditoria_lancamentos_manuais_gerenciais.txt"
+    )
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    manual = manifest["lancamentos_manuais_gerenciais"]
+    checkpoints = [item["descricao"] for item in manifest["checkpoints"]]
+
+    assert output_xlsx.exists()
+    assert output_csv.exists()
+    assert auditoria_txt.exists()
+    assert manual["executado"] is True
+    assert manual["input_csv"] == str(csv_manual)
+    assert manual["output_xlsx_tecnico"] == str(output_xlsx)
+    assert manual["output_csv"] == str(output_csv)
+    assert manual["auditoria_txt"] == str(auditoria_txt)
+    assert manual["lancamentos_aceitos"] == 1
+    assert manual["linhas_tecnicas_geradas"] == 2
+    assert manual["total_manual"] == "10.50"
+    assert manual["fonte"] == "MANUAL_GERENCIAL"
+    assert str(output_xlsx) in manifest["relatorios_gerados"]
+    assert str(output_csv) in manifest["relatorios_gerados"]
+    assert checkpoints.index("OPERACOES_ESPECIAIS_AUDITADAS") < checkpoints.index(
+        "LANCAMENTOS_MANUAIS_GERENCIAIS_APLICADOS"
+    )
+    assert checkpoints.index("LANCAMENTOS_MANUAIS_GERENCIAIS_APLICADOS") < (
+        checkpoints.index("PRE_LIVRO_GERADO")
+    )
+    assert manifest["classificacao"]["fase9_executada"] is False
+
+
+def test_pipeline_dry_run_nao_valida_csv_manual(tmp_path):
+    calls: list[tuple[str, Path]] = []
+    xml_base = _make_xml_base(tmp_path)
+    saida_output = tmp_path / "output"
+    saida_reports = tmp_path / "reports"
+
+    result = reprocessar_importacao_real_provisoria(
+        xml_base,
+        saida_output,
+        saida_reports,
+        dry_run=True,
+        project_root=tmp_path,
+        steps=_fake_steps(calls),
+        lancamentos_manuais_gerenciais_csv_path=tmp_path / "inexistente.csv",
+    )
+
+    assert result.dry_run is True
+    assert calls == []
+    assert not result.manifest_path.exists()
+
+
 def test_pipeline_com_fase9_explicita_gera_csv_separado_e_manifest(tmp_path):
     _save_plano_contas_fase9(tmp_path)
     fase9_csv = tmp_path / "revisao_classificacao_revisada.csv"
@@ -671,6 +753,75 @@ contas:
         encoding="utf-8",
     )
     return plano
+
+
+def _save_config_9n(tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "plano_contas_gerencial.yaml").write_text(
+        """\
+contas:
+  - {id: "2.02.001", nome: "Carnes Bovinas", grupo: "Custos", tipo: custo}
+  - {id: "10.01.001", nome: "Equipamentos de Cozinha", grupo: "Investimentos", tipo: investimento}
+  - {id: "13.01.001", nome: "A Revisar", grupo: "Revisao", tipo: revisao}
+  - {id: "13.01.002", nome: "Ambiguo", grupo: "Revisao", tipo: revisao}
+  - {id: "13.01.006", nome: "Valor Inconsistente", grupo: "Revisao", tipo: revisao}
+  - {id: "13.01.009", nome: "Possivel Investimento", grupo: "Revisao", tipo: revisao}
+  - {id: "13.01.010", nome: "Pessoal a Regularizar", grupo: "Revisao", tipo: revisao}
+  - {id: "13.01.999", nome: "Outros", grupo: "Revisao", tipo: revisao}
+""",
+        encoding="utf-8",
+    )
+    (config_dir / "mapeamento_dre.yaml").write_text(
+        """\
+linhas_dre:
+  - {id: "03.01", nome: "CMV", grupo: "Custos", sinal: "-", ordem: 1}
+  - {id: "12.01", nome: "Investimentos", grupo: "Investimentos", sinal: "-", ordem: 2}
+mapeamento:
+  "2.02.001": {dre_linha_id: "03.01", entra_dre: true}
+  "10.01.001": {dre_linha_id: "12.01", entra_dre: false}
+""",
+        encoding="utf-8",
+    )
+
+
+def _save_manual_csv_9n(path: Path) -> None:
+    with path.open("w", encoding="utf-8", newline="") as file:
+        writer = csv.DictWriter(
+            file,
+            fieldnames=[
+                "data",
+                "historico",
+                "documento",
+                "fornecedor_ou_contraparte",
+                "conta_debito_id",
+                "conta_debito_nome",
+                "conta_credito_id",
+                "conta_credito_nome",
+                "valor",
+                "cnpj_origem_opcional",
+                "centro_custo_opcional",
+                "observacao",
+            ],
+            delimiter=";",
+        )
+        writer.writeheader()
+        writer.writerow(
+            {
+                "data": "2026-05-16",
+                "historico": "Ajuste manual gerencial",
+                "documento": "MAN-001",
+                "fornecedor_ou_contraparte": "Fornecedor Teste",
+                "conta_debito_id": "2.02.001",
+                "conta_debito_nome": "Carnes Bovinas",
+                "conta_credito_id": "10.01.001",
+                "conta_credito_nome": "Equipamentos de Cozinha",
+                "valor": "10,50",
+                "cnpj_origem_opcional": "",
+                "centro_custo_opcional": "CC-001",
+                "observacao": "fixture sintetica",
+            }
+        )
 
 
 def _fase9_row(**overrides: str) -> dict[str, str]:
