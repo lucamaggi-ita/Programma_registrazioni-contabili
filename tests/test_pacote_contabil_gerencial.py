@@ -43,6 +43,8 @@ def test_gera_indice_manifest_e_copia_arquivos_presentes(tmp_path):
     assert manifest["comodato_entra_dre"] is False
     assert manifest["bonificacao_recebida_entra_dre"] is True
     assert manifest["fase9_executada"] is False
+    assert manifest["arquivos"][INDICE_FILE]["status"] == "OK"
+    assert manifest["arquivos"][MANIFEST_FILE]["status"] == "OK"
     assert "COMODATO fora DRE: OK" in indice
     assert "Extrato bancario" in indice
 

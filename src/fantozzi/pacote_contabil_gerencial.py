@@ -112,6 +112,17 @@ def gerar_pacote_contabil_gerencial_provisorio(
         )
         else "PARCIAL"
     )
+    manifest_path = pacote_dir / MANIFEST_FILE
+    indice_path = pacote_dir / INDICE_FILE
+    files_manifest[MANIFEST_FILE] = {
+        "status": "OK",
+        "destino": str(manifest_path),
+    }
+    files_manifest[INDICE_FILE] = {
+        "status": "OK",
+        "destino": str(indice_path),
+    }
+
     manifest = _build_manifest(
         run_manifest,
         run_id=run_id,
@@ -121,24 +132,14 @@ def gerar_pacote_contabil_gerencial_provisorio(
         bonificacao_audit=bonificacao_audit,
         manuais_audit=manuais_audit,
     )
-    manifest_path = pacote_dir / MANIFEST_FILE
     manifest_path.write_text(
         json.dumps(_json_ready(manifest), ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
-    files_manifest[MANIFEST_FILE] = {
-        "status": "OK",
-        "destino": str(manifest_path),
-    }
     generated.append(manifest_path)
 
     indice_text = _indice_text(manifest, files_manifest)
-    indice_path = pacote_dir / INDICE_FILE
     indice_path.write_text(indice_text, encoding="utf-8", newline="\n")
-    files_manifest[INDICE_FILE] = {
-        "status": "OK",
-        "destino": str(indice_path),
-    }
     generated.append(indice_path)
 
     return PacoteContabilGerencialResult(
