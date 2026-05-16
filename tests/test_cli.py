@@ -1807,6 +1807,23 @@ def test_parser_aceita_lancamentos_manuais_gerenciais_csv():
     assert args.lancamentos_manuais_gerenciais_csv == "manual.csv"
 
 
+def test_parser_aceita_gerar_pacote_contabil_gerencial():
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "reprocessar-importacao-real",
+            "--xml-base", "XML_fatture_acquisto",
+            "--saida-output", "output/importacao_real",
+            "--saida-reports", "reports/importacao_real",
+            "--gerar-pacote-contabil-gerencial",
+        ]
+    )
+
+    assert args.command == "reprocessar-importacao-real"
+    assert args.gerar_pacote_contabil_gerencial is True
+
+
 def test_cli_preparar_run_cria_pastas_manifesto_current_run(tmp_path, capsys):
     import json
 

@@ -776,6 +776,15 @@ def build_parser() -> argparse.ArgumentParser:
             "No dry-run v1, o CSV nao e lido nem validado."
         ),
     )
+    reprocessar_real.add_argument(
+        "--gerar-pacote-contabil-gerencial",
+        action="store_true",
+        default=False,
+        help=(
+            "Gera pacote contabil gerencial provisorio ao final da run, com indice, "
+            "auditorias e manifest dedicado."
+        ),
+    )
     reprocessar_real.set_defaults(func=reprocessar_importacao_real_command)
 
     return parser
@@ -1374,6 +1383,7 @@ def reprocessar_importacao_real_command(args: argparse.Namespace) -> int:
             lancamentos_manuais_gerenciais_csv_path=(
                 args.lancamentos_manuais_gerenciais_csv
             ),
+            gerar_pacote_contabil_gerencial=args.gerar_pacote_contabil_gerencial,
         )
     except reprocessamento_pipeline.ReprocessamentoPipelineError as exc:
         print(f"[ERRO] {exc}")
@@ -1409,6 +1419,8 @@ def reprocessar_importacao_real_command(args: argparse.Namespace) -> int:
         print("[INFO] Fase 9 nao executada; relatorios permanecem provisorios.")
     if args.lancamentos_manuais_gerenciais_csv:
         print("[INFO] Lancamentos manuais gerenciais aplicados na run.")
+    if args.gerar_pacote_contabil_gerencial:
+        print("[INFO] Pacote contabil gerencial provisorio gerado na run.")
     return 0
 
 

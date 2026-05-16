@@ -37,6 +37,9 @@ from fantozzi.operation_classifier import (
     relatorio_operacoes_especiais,
     salvar_relatorio as salvar_relatorio_operacoes,
 )
+from fantozzi.pacote_contabil_gerencial import (
+    gerar_pacote_contabil_gerencial_provisorio,
+)
 from fantozzi.pipeline_paths import resolver_arquivos_lancamentos_xlsx
 from fantozzi.pre_livro_diario import gerar_pre_livro_diario_teste
 from fantozzi.product_classifier import ProductClassifier
@@ -68,6 +71,7 @@ ETAPAS_PREVISTAS = (
     "RELATORIOS_OK_GERADOS",
     "AUDITORIA_RELATORIOS_OK_CONCLUIDA",
     "DRE_OK_PROVISORIA_GERADA",
+    "PACOTE_CONTABIL_GERENCIAL_GERADO",
     "FINALIZACAO_PROVISORIA",
 )
 
@@ -104,6 +108,7 @@ class PipelineContext:
     fontes_xml: tuple[XmlSource, ...]
     fase9_csv_paths: tuple[Path, ...] = ()
     lancamentos_manuais_gerenciais_csv_path: Path | None = None
+    gerar_pacote_contabil_gerencial: bool = False
     lancamentos_xlsx: tuple[Path, ...] = ()
 
 
@@ -145,6 +150,7 @@ def reprocessar_importacao_real_provisoria(
     today: date | None = None,
     fase9_csv_path: Path | str | Sequence[Path | str] | None = None,
     lancamentos_manuais_gerenciais_csv_path: Path | str | None = None,
+    gerar_pacote_contabil_gerencial: bool = False,
 ) -> ReprocessamentoResultado:
     xml_base = Path(xml_base)
     saida_output = Path(saida_output)
@@ -215,6 +221,7 @@ def reprocessar_importacao_real_provisoria(
         fontes_xml=fontes_xml,
         fase9_csv_paths=fase9_csv_paths,
         lancamentos_manuais_gerenciais_csv_path=lancamentos_manuais_path,
+        gerar_pacote_contabil_gerencial=gerar_pacote_contabil_gerencial,
     )
     steps = steps or default_pipeline_steps()
     arquivos_gerados: list[Path] = []
@@ -310,6 +317,15 @@ def reprocessar_importacao_real_provisoria(
             avisos,
             etapas_executadas,
         )
+        if context.gerar_pacote_contabil_gerencial:
+            _executar_step(
+                context,
+                "PACOTE_CONTABIL_GERENCIAL_GERADO",
+                _step_gerar_pacote_contabil_gerencial,
+                arquivos_gerados,
+                avisos,
+                etapas_executadas,
+            )
     except Exception as exc:
         if isinstance(exc, ReprocessamentoPipelineError):
             raise
@@ -837,6 +853,22 @@ def _step_gerar_dre_ok(context: PipelineContext) -> StepResult:
         _xml_dirs(context),
     )
     return StepResult(arquivos_gerados=(output_path, report_path))
+
+
+def _step_gerar_pacote_contabil_gerencial(context: PipelineContext) -> StepResult:
+    result = gerar_pacote_contabil_gerencial_provisorio(context.reports_run_dir)
+    return StepResult(
+        arquivos_gerados=result.arquivos_gerados,
+        manifest_updates={
+            "pacote_contabil_gerencial": {
+                "executado": True,
+                "status": result.status,
+                "diretorio": result.pacote_dir,
+                "indice": result.indice_path,
+                "manifest": result.manifest_path,
+            }
+        },
+    )
 
 
 def _load_product_classifier(

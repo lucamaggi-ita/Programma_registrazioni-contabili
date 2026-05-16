@@ -328,6 +328,40 @@ def test_pipeline_com_csv_manual_gera_outputs_e_manifest(tmp_path):
     assert manifest["classificacao"]["fase9_executada"] is False
 
 
+def test_pipeline_com_flag_pacote_contabil_gera_pacote_e_manifest(tmp_path):
+    calls: list[tuple[str, Path]] = []
+    xml_base = _make_xml_base(tmp_path)
+    saida_output = tmp_path / "output" / "importacao_real"
+    saida_reports = tmp_path / "reports" / "importacao_real"
+
+    result = reprocessar_importacao_real_provisoria(
+        xml_base,
+        saida_output,
+        saida_reports,
+        project_root=tmp_path,
+        steps=_fake_steps(calls),
+        gerar_pacote_contabil_gerencial=True,
+    )
+
+    pacote_dir = result.reports_run_dir / "pacote_contabil_gerencial_provisorio"
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    checkpoints = [item["descricao"] for item in manifest["checkpoints"]]
+    pacote_manifest = pacote_dir / "manifest_pacote_contabil_gerencial.json"
+    indice = pacote_dir / "00_INDICE_PACOTE_CONTABIL_GERENCIAL.txt"
+
+    assert pacote_dir.is_dir()
+    assert pacote_manifest.exists()
+    assert indice.exists()
+    assert manifest["pacote_contabil_gerencial"]["executado"] is True
+    assert manifest["pacote_contabil_gerencial"]["diretorio"] == str(pacote_dir)
+    assert manifest["classificacao"]["fase9_executada"] is False
+    assert checkpoints.index("DRE_OK_PROVISORIA_GERADA") < checkpoints.index(
+        "PACOTE_CONTABIL_GERENCIAL_GERADO"
+    )
+    assert str(pacote_manifest) in manifest["relatorios_gerados"]
+    assert str(indice) in manifest["relatorios_gerados"]
+
+
 def test_pipeline_dry_run_nao_valida_csv_manual(tmp_path):
     calls: list[tuple[str, Path]] = []
     xml_base = _make_xml_base(tmp_path)
