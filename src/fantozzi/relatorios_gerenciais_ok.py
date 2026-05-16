@@ -17,6 +17,8 @@ from fantozzi.operation_classifier import OperationAuditError, auditar_operacoes
 BONIFICACAO_RECEBIDA = "BONIFICACAO_RECEBIDA"
 BONIFICACAO_RECEBIDA_ACCOUNT_ID = "2.05.003"
 TRATAMENTO_REDUCAO_CUSTO = "REDUCAO_CUSTO"
+ORIGEM_MANUAL_GERENCIAL = "MANUAL_GERENCIAL"
+TIPO_MANUAL_TOTALIZAVEL_SUFFIX = "_TOTALIZAVEL"
 
 RESUMO_GERAL_SHEET = "Resumo_Geral"
 RESUMO_MENSAL_SHEET = "Resumo_Mensal"
@@ -516,7 +518,7 @@ def _resumo_mensal_rows(rows: list[dict[str, object]]) -> list[dict[str, object]
             },
         )
         bucket["quantidade_lancamentos_ok"] = int(bucket["quantidade_lancamentos_ok"]) + 1
-        bucket["valor_total_ok"] = bucket["valor_total_ok"] + _decimal_value(row.get("valor"))
+        bucket["valor_total_ok"] = bucket["valor_total_ok"] + _economic_decimal_value(row, "valor")
     return sorted(grouped.values(), key=lambda row: (_text(row["identificador_operacional"]), _text(row["ano_mes"])))
 
 
@@ -536,7 +538,7 @@ def _resumo_conta_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]
             },
         )
         bucket["quantidade_lancamentos"] = int(bucket["quantidade_lancamentos"]) + 1
-        bucket["valor_total"] = bucket["valor_total"] + _decimal_value(row.get("valor"))
+        bucket["valor_total"] = bucket["valor_total"] + _economic_decimal_value(row, "valor")
     for bucket in grouped.values():
         if total:
             bucket["percentual_sobre_total_ok"] = (
@@ -560,7 +562,7 @@ def _resumo_fornecedor_rows(rows: list[dict[str, object]]) -> list[dict[str, obj
             },
         )
         bucket["quantidade_lancamentos"] = int(bucket["quantidade_lancamentos"]) + 1
-        bucket["valor_total"] = bucket["valor_total"] + _decimal_value(row.get("valor"))
+        bucket["valor_total"] = bucket["valor_total"] + _economic_decimal_value(row, "valor")
         account = _text(row.get("conta_nome")) or _text(row.get("conta_id"))
         if account:
             account_counts[fornecedor][account] += 1
@@ -584,7 +586,7 @@ def _resumo_cnpj_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
             },
         )
         bucket["quantidade_lancamentos_ok"] = int(bucket["quantidade_lancamentos_ok"]) + 1
-        bucket["valor_total_ok"] = bucket["valor_total_ok"] + _decimal_value(row.get("valor"))
+        bucket["valor_total_ok"] = bucket["valor_total_ok"] + _economic_decimal_value(row, "valor")
     return sorted(grouped.values(), key=lambda row: _text(row["identificador_operacional"]))
 
 
@@ -676,8 +678,20 @@ def _ano_mes(value: object) -> str:
 def _sum_values(rows: Iterable[dict[str, object]], field: str) -> Decimal:
     total = Decimal("0.00")
     for row in rows:
-        total += _decimal_value(row.get(field))
+        total += _economic_decimal_value(row, field)
     return total.quantize(Decimal("0.01"))
+
+
+def _economic_decimal_value(row: dict[str, object], field: str) -> Decimal:
+    value = _decimal_value(row.get(field))
+    if field != "valor":
+        return value
+    if _text(row.get("origem")).upper() != ORIGEM_MANUAL_GERENCIAL:
+        return value
+    tipo_lancamento = _text(row.get("tipo_lancamento")).upper()
+    if tipo_lancamento.endswith(TIPO_MANUAL_TOTALIZAVEL_SUFFIX):
+        return value
+    return Decimal("0.00")
 
 
 def _decimal_value(value: object) -> Decimal:

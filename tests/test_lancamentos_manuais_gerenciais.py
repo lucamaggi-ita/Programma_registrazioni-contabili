@@ -20,6 +20,9 @@ from fantozzi.lancamentos_manuais_gerenciais import (
     processar_lancamentos_manuais_gerenciais,
 )
 from fantozzi.pre_livro_diario import LANCAMENTOS_OK_SHEET, gerar_pre_livro_diario_teste
+from fantozzi.relatorios_gerenciais_ok import (
+    gerar_relatorios_gerenciais_ok_provisorios,
+)
 
 
 CSV_HEADERS = [
@@ -181,7 +184,7 @@ def test_chave_deduplicacao_estavel_e_conversao_em_duas_linhas(tmp_path):
 
     assert first[0].chave_deduplicacao == second[0].chave_deduplicacao
     assert [item.tipo_lancamento for item in tecnicos] == [
-        "MANUAL_GERENCIAL_DEBITO",
+        "MANUAL_GERENCIAL_DEBITO_TOTALIZAVEL",
         "MANUAL_GERENCIAL_CREDITO",
     ]
     assert {item.origem for item in tecnicos} == {FONTE_MANUAL_GERENCIAL}
@@ -247,6 +250,29 @@ def test_manual_com_uma_conta_dre_entra_uma_vez_no_pre_livro_e_dre(tmp_path):
     assert dre[DRE_GERAL_SHEET]["D2"].value == 10.5
 
 
+def test_manual_com_uma_conta_dre_totaliza_uma_vez_nos_relatorios_ok(tmp_path):
+    plano_path, dre_path = _save_config(tmp_path)
+    csv_path = _save_manual_csv(tmp_path)
+    output_dir = tmp_path / "output"
+    output_xlsx = output_dir / "MANUAL_GERENCIAL" / "lancamentos_manuais.xlsx"
+    processar_lancamentos_manuais_gerenciais(
+        csv_path,
+        plano_path,
+        dre_path,
+        output_xlsx,
+        tmp_path / "reports" / "manual.csv",
+        tmp_path / "reports" / "manual.txt",
+    )
+
+    result = gerar_relatorios_gerenciais_ok_provisorios(
+        [output_dir],
+        tmp_path / "reports" / "relatorios_ok.xlsx",
+    )
+
+    assert result.lancamentos_ok_incluidos == 2
+    assert result.valor_total_incluido == Decimal("10.50")
+
+
 def test_manual_com_zero_contas_dre_nao_gera_linha_dre(tmp_path):
     plano_path, dre_path = _save_config(tmp_path)
     csv_path = _save_manual_csv(
@@ -276,6 +302,35 @@ def test_manual_com_zero_contas_dre_nao_gera_linha_dre(tmp_path):
     dre = load_workbook(dre_path_out, data_only=True)
     assert pre_livro[LANCAMENTOS_OK_SHEET].max_row == 3
     assert dre[DRE_GERAL_SHEET].max_row == 1
+
+
+def test_manual_com_zero_contas_dre_nao_totaliza_nos_relatorios_ok(tmp_path):
+    plano_path, dre_path = _save_config(tmp_path)
+    csv_path = _save_manual_csv(
+        tmp_path,
+        conta_debito_id="10.01.001",
+        conta_debito_nome="Equipamentos de Cozinha",
+        conta_credito_id="10.01.003",
+        conta_credito_nome="Obras e Reformas",
+    )
+    output_dir = tmp_path / "output"
+    output_xlsx = output_dir / "MANUAL_GERENCIAL" / "lancamentos_manuais.xlsx"
+    processar_lancamentos_manuais_gerenciais(
+        csv_path,
+        plano_path,
+        dre_path,
+        output_xlsx,
+        tmp_path / "reports" / "manual.csv",
+        tmp_path / "reports" / "manual.txt",
+    )
+
+    result = gerar_relatorios_gerenciais_ok_provisorios(
+        [output_dir],
+        tmp_path / "reports" / "relatorios_ok.xlsx",
+    )
+
+    assert result.lancamentos_ok_incluidos == 2
+    assert result.valor_total_incluido == Decimal("0.00")
 
 
 def _save_config(tmp_path: Path) -> tuple[Path, Path]:

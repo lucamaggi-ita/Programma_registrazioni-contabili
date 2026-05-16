@@ -67,6 +67,8 @@ class LancamentoManualGerencial:
     chave_deduplicacao: str
     linha_origem_csv: int
     conta_dre_mapeada_count: int
+    conta_debito_totaliza_gerencial: bool
+    conta_credito_totaliza_gerencial: bool
 
 
 @dataclass(frozen=True)
@@ -297,11 +299,9 @@ def _parse_row(
         line_number,
     )
 
-    conta_dre_count = sum(
-        1
-        for account_id in (conta_debito_id, conta_credito_id)
-        if account_id in dre_account_ids
-    )
+    conta_debito_totaliza = conta_debito_id in dre_account_ids
+    conta_credito_totaliza = conta_credito_id in dre_account_ids
+    conta_dre_count = int(conta_debito_totaliza) + int(conta_credito_totaliza)
     if conta_dre_count > 1:
         raise LancamentosManuaisGerenciaisError(
             f"Linha {line_number}: debito e credito possuem contas mapeadas na DRE; "
@@ -336,6 +336,8 @@ def _parse_row(
         chave_deduplicacao=chave,
         linha_origem_csv=line_number,
         conta_dre_mapeada_count=conta_dre_count,
+        conta_debito_totaliza_gerencial=conta_debito_totaliza,
+        conta_credito_totaliza_gerencial=conta_credito_totaliza,
     )
 
 
@@ -353,9 +355,18 @@ def _technical_lancamento(
     contraparte_nome = manual.conta_credito_nome if is_debito else manual.conta_debito_nome
     conta = chart.get_by_id(conta_id)
     chave_origem = f"{manual.chave_deduplicacao}:{'D' if is_debito else 'C'}"
+    totaliza = (
+        manual.conta_debito_totaliza_gerencial
+        if is_debito
+        else manual.conta_credito_totaliza_gerencial
+    )
+    tipo_lancamento = f"MANUAL_GERENCIAL_{side}"
+    if totaliza:
+        tipo_lancamento += "_TOTALIZAVEL"
     observacoes = (
         f"Lancamento manual gerencial linha {manual.linha_origem_csv}; "
-        f"partida={side}; contrapartida={contraparte_id} - {contraparte_nome}"
+        f"partida={side}; contrapartida={contraparte_id} - {contraparte_nome}; "
+        f"manual_totaliza_gerencial={'sim' if totaliza else 'nao'}"
     )
     if manual.observacao:
         observacoes += f"; observacao={manual.observacao}"
@@ -381,7 +392,7 @@ def _technical_lancamento(
         alertas="",
         observacoes=observacoes,
         centro_custo=manual.centro_custo_opcional,
-        tipo_lancamento=f"MANUAL_GERENCIAL_{side}",
+        tipo_lancamento=tipo_lancamento,
     )
 
 
