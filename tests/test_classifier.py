@@ -299,6 +299,53 @@ def test_product_valor_inconsistente_nao_e_resolvido_por_alias(product_clf):
     assert result.confianca == "NAO_CLASSIFICADO"
 
 
+@pytest.mark.parametrize(
+    ("descricao", "conta_id"),
+    [
+        (
+            "FRANGO CONGELADO COM MIUDOS 20KG COXA/SOBRECOXA INDIVIDUAL "
+            "CONG 18KG LINGUICA DE CARNE DE FRANGO 20 KG EXTRA",
+            "2.02.002",
+        ),
+        (
+            "POLPA SEMPRE VIVA SC C/ 6 PCT 12 UND X 100GR CACAU "
+            "POLPA SEMPRE VIVA SC C/ 6 PCT 12 UND X 100GR MARACUJA "
+            "POLPA SEMPRE VIVA SC C/ 6 PCT 12 UND X 100GR MORANGO",
+            "2.01.007",
+        ),
+        ("MARMITEX FOLHA DESC BOREDA D08 1500ML C/100UN BOREDA UN", "2.03.003"),
+        (
+            "CAPSULA CHA MISTO TRES HIBISCO/LARANJA MEDITARRANEA 8X10X3G",
+            "2.01.007",
+        ),
+        ("AMENDOIM - DOCINHO", "2.02.015"),
+        (
+            "ACUCAR CRISTAL 30X1 KG CORURIPE FEIJAO CARIOCA T1 FD 10X1 KG "
+            "KICALDO CAFE TRADICIONAL VACUO 5X250 GR UNIAO",
+            "2.02.010",
+        ),
+        ("ARROZ ARBORIO 1KG CAPONE FEIJAO CAUPI FRADINHO 1KG KICALDO", "2.02.010"),
+        (
+            "CAFE TRADICIONAL VACUO 5X250 GR UNIAO FEIJAO CARIOCA T1 FD "
+            "10X1 KG KICALDO AMIDO DE MILHO 1 KG TECNUTRI",
+            "2.02.010",
+        ),
+        ("FARINHA MANDIOCA BRANCA 1KG PRINCESA", "2.02.010"),
+        ("FEIJAO CARIOCA T1 FD 10X1 KG KICALDO", "2.02.010"),
+    ],
+)
+def test_product_aliases_residuais_run_006(product_clf, descricao, conta_id):
+    result = product_clf.classify(descricao)
+    assert result.conta.id == conta_id
+    assert result.confianca == "OK"
+
+
+def test_product_sem_embalagem_nao_dispara_alias_generico(product_clf):
+    result = product_clf.classify("PRODUTO SEM EMBALAGEM")
+    assert result.conta.id == "13.01.001"
+    assert result.confianca == "NAO_CLASSIFICADO"
+
+
 def test_expense_energia_eletrica(expense_clf):
     result = expense_clf.classify("energia eletrica")
     assert result.conta.id == "4.01.011"

@@ -39,9 +39,11 @@ regras_por_fornecedor:
     observacao: "Fornecedor recorrente de hortifruti."
   - fornecedor_aliases:
       - rei das bombas
+      - vj comercial de bombas
+      - vj comercial de bombas ltda
     conta_id: "8.01.001"
     conta_nome: "Manutencao Predial"
-    observacao: "Fornecedor recorrente de manutencao de bomba de pressao."
+    observacao: "Fornecedores recorrentes de manutencao de bomba de pressao."
   - fornecedor_aliases:
       - delmax
     conta_id: "2.02.015"
@@ -186,6 +188,11 @@ regras:
       - refrigerador
       - cervejeira
       - refr vt vn
+      - farinha mandioca branca
+      - capsula cha misto
+      - capsula cha hibisco
+      - capsula cha laranja
+      - cha hibisco laranja
 
   - conta_id: "2.01.005"
     conta_nome: "Aguas Minerais"
@@ -205,6 +212,7 @@ regras:
       - red bull
       - monster
       - tnt ener
+      - energ tnt
       - energetico
     evitar_aliases:
       - picole cx com 27un 68g space monsters paletitas
@@ -222,6 +230,10 @@ regras:
       - monin xarope
       - xarope
       - polpa sempre viva
+      - capsula cha misto
+      - capsula cha hibisco
+      - capsula cha laranja
+      - cha hibisco laranja
       - polpa acerola
       - polpa caja
       - polpa caju
@@ -315,6 +327,11 @@ regras:
       - halls
       - monin xarope
       - agua tonica fys
+      - farinha mandioca branca
+      - capsula cha misto
+      - capsula cha hibisco
+      - capsula cha laranja
+      - cha hibisco laranja
       - refr fys
       - fys guarana
 
@@ -370,6 +387,7 @@ regras:
       - fgo coxa
       - file peite
       - linguica de carne de frango
+      - linguica de frango
       - frango inteiro
 
   - conta_id: "2.02.004"
@@ -412,6 +430,9 @@ regras:
       - lombo canadense
       - lombo tipo canadense
       - paleta cozida
+    evitar_aliases:
+      - linguica de carne de frango
+      - linguica de frango
 
   - conta_id: "2.02.006"
     conta_nome: "Laticinios e Queijos"
@@ -462,10 +483,14 @@ regras:
     prioridade: 75
     aliases:
       - arroz
+      - arroz arborio
       - feijao
+      - feijao fradinho
+      - feijao carioca
       - far trigo
       - farinha de trigo
       - farinha mandioca
+      - farinha mandioca branca
       - acucar
       - sal refinado
       - sal fino
@@ -500,6 +525,7 @@ regras:
       - cc sem acucar
       - sem acucar
       - zero acucar
+      - polpa sempre viva
       - paletitas
       - paleta cx
       - picole
@@ -542,6 +568,7 @@ regras:
       - caldo
       - vinagre
       - balsamico
+      - limao desidratado
       - shoyu
       - corante
       - pimenta
@@ -560,6 +587,11 @@ regras:
     evitar_aliases:
       - essencia coala
       - atum ral c oleo e caldo veg pouch
+      - kicaldo
+      - capsula cha misto
+      - capsula cha hibisco
+      - capsula cha laranja
+      - cha hibisco laranja
 
   - conta_id: "2.02.013"
     conta_nome: "Conservas e Enlatados"
@@ -609,7 +641,7 @@ regras:
       - acai
       - dc mix
       - pirulito
-      - geladinho
+      - amendoim docinho
       - pacoca
       - cone cx
       - leite trufado
@@ -619,7 +651,8 @@ regras:
       - paleta cx com 24un 120g morango com leite cond paletitas
       - picole cx com 24un 65g paletito zero ad de acucar paletitas
       - picole cx com 27un 68g space monsters paletitas
-
+    evitar_aliases:
+      - saco geladinho
   - conta_id: "2.02.016"
     conta_nome: "Cigarros e Tabacaria"
     prioridade: 85
@@ -661,16 +694,22 @@ regras:
       - papel manteiga
       - saco geladinho
       - bandeja aluminio
+      - palito dende
       - palito dente
-      - embalagem
       - coposchio
       - coposcchio
       - copobras
       - copo 50ml
       - copo 500ml
-      - colher sobremesa cristal
+      - colher sobremesa
+      - colher sobremessa
       - pote kit cristal
       - papel toalha bobina
+    evitar_aliases:
+      - sem embalagem
+      - marmitex folha
+      - marmitex desc
+      - marmitex boreda
 
   # ---- EMBALAGENS PARA DELIVERY ----
   - conta_id: "2.03.003"
@@ -678,7 +717,13 @@ regras:
     prioridade: 65
     aliases:
       - assadadeira retang
+      - embalegem
       - boreda
+      - marmitex folha
+      - marmitex desc
+      - marmitex boreda
+    evitar_aliases:
+      - sem embalagem
 
   - conta_id: "2.04.001"
     conta_nome: "Produtos de Limpeza e Higiene"
