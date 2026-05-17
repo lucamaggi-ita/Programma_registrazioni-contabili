@@ -1160,6 +1160,8 @@ def executar_matching_bancario_command(args: argparse.Namespace) -> int:
     print(f"CNPJ: {manifest.cnpj}")
     print(f"Periodo: {manifest.periodo}")
     print(f"Transacoes: {manifest.transaction_count}")
+    print(f"Saidas consideradas no matching: {manifest.outbound_transaction_count}")
+    print(f"Entradas fora de escopo: {manifest.out_of_scope_entry_count}")
     print(f"Comprovantes: {manifest.receipt_count}")
     print(f"Matches exatos: {manifest.exact_match_count}")
     print(f"Matches provaveis: {manifest.probable_match_count}")

@@ -51,6 +51,8 @@ class MatchingManifest:
     input_files: dict[str, str]
     output_dir: Path
     transaction_count: int
+    outbound_transaction_count: int
+    out_of_scope_entry_count: int
     receipt_count: int
     exact_match_count: int
     probable_match_count: int
@@ -69,6 +71,7 @@ class _Transaction:
     transaction_date: date
     amount: Decimal
     description_bank: str
+    technical_category: str
     source_row: dict[str, str]
 
 
@@ -125,9 +128,19 @@ def match_bank_files(
     receipts = [_receipt_from_row(row) for row in receipt_rows]
     effective_period = periodo or _infer_period(transactions, receipts)
     effective_cnpj = _infer_cnpj(transactions, receipts)
+    outbound_transactions = [
+        transaction
+        for transaction in transactions
+        if _is_matching_scope_transaction(transaction)
+    ]
+    out_of_scope_entries = [
+        transaction
+        for transaction in transactions
+        if transaction.technical_category == "ENTRADA_FORA_ESCOPO"
+    ]
 
     decisions = _decide_matches(
-        transactions,
+        outbound_transactions,
         receipts,
         periodo=effective_period,
         window_days=window_days,
@@ -152,6 +165,7 @@ def match_bank_files(
     matches_path = output_dir / "bank_matches.csv"
     unmatched_transactions_path = output_dir / "bank_unmatched_transactions.csv"
     unmatched_receipts_path = output_dir / "bank_unmatched_receipts.csv"
+    out_of_scope_entries_path = output_dir / "bank_entradas_fora_escopo.csv"
     audit_path = output_dir / "bank_matching_audit.csv"
     manifest_path = output_dir / "manifest_bank_matching.json"
 
@@ -162,7 +176,16 @@ def match_bank_files(
         unmatched_transactions,
     )
     _write_csv(unmatched_receipts_path, receipt_headers, unmatched_receipts)
-    _write_csv(audit_path, AUDIT_HEADERS, _audit_rows(decisions, receipts, effective_period))
+    _write_csv(
+        out_of_scope_entries_path,
+        [*transaction_headers, "technical_category", "exclusion_reason"],
+        _out_of_scope_entry_rows(out_of_scope_entries),
+    )
+    _write_csv(
+        audit_path,
+        AUDIT_HEADERS,
+        _audit_rows(decisions, receipts, out_of_scope_entries, effective_period),
+    )
 
     exact_count = sum(1 for decision in decisions if decision.status == "MATCH_EXATO")
     probable_count = sum(
@@ -180,6 +203,7 @@ def match_bank_files(
         "bank_matches": str(matches_path),
         "bank_unmatched_transactions": str(unmatched_transactions_path),
         "bank_unmatched_receipts": str(unmatched_receipts_path),
+        "bank_entradas_fora_escopo": str(out_of_scope_entries_path),
         "bank_matching_audit": str(audit_path),
         "manifest": str(manifest_path),
     }
@@ -192,6 +216,8 @@ def match_bank_files(
         },
         output_dir=output_dir,
         transaction_count=len(transactions),
+        outbound_transaction_count=len(outbound_transactions),
+        out_of_scope_entry_count=len(out_of_scope_entries),
         receipt_count=len(receipts),
         exact_match_count=exact_count,
         probable_match_count=probable_count,
@@ -357,6 +383,7 @@ def _transaction_from_row(row: dict[str, str]) -> _Transaction:
         transaction_date=transaction_date,
         amount=parse_decimal(row.get("amount")),
         description_bank=description_bank,
+        technical_category=_classify_bank_transaction(row, description_bank),
         source_row=row,
     )
 
@@ -401,7 +428,10 @@ def _match_rows(decisions: list[_Decision], periodo: str) -> list[dict[str, str]
                 "receipt_id": "|".join(item.receipt_id for item in receipts),
                 "match_status": decision.status,
                 "match_confidence": _decimal_text(decision.confidence),
-                "match_rule": decision.rule,
+                "match_rule": _rule_with_category(
+                    decision.rule,
+                    transaction.technical_category,
+                ),
                 "bank_date": transaction.transaction_date.isoformat(),
                 "receipt_date": (
                     receipt.payment_date.isoformat()
@@ -430,6 +460,7 @@ def _match_rows(decisions: list[_Decision], periodo: str) -> list[dict[str, str]
 def _audit_rows(
     decisions: list[_Decision],
     receipts: list[_Receipt],
+    out_of_scope_entries: list[_Transaction],
     periodo: str,
 ) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
@@ -446,9 +477,28 @@ def _audit_rows(
                 "cnpj": decision.transaction.cnpj,
                 "periodo": periodo,
                 "status": decision.status,
-                "rule": decision.rule,
+                "rule": _rule_with_category(
+                    decision.rule,
+                    decision.transaction.technical_category,
+                ),
                 "confidence": _decimal_text(decision.confidence),
                 "details": decision.notes,
+            }
+        )
+    for transaction in out_of_scope_entries:
+        rows.append(
+            {
+                "tipo": "BANK_TRANSACTION",
+                "entity_id": transaction.transaction_id,
+                "cnpj": transaction.cnpj,
+                "periodo": periodo,
+                "status": "FORA_ESCOPO",
+                "rule": "FORA_ESCOPO_ENTRADA",
+                "confidence": "0.00",
+                "details": (
+                    "Entrada bancaria excluida do matching com comprovantes. "
+                    f"Categoria tecnica: {transaction.technical_category}."
+                ),
             }
         )
     for receipt in receipts:
@@ -498,6 +548,8 @@ def _write_manifest(manifest: MatchingManifest) -> Path:
         "status": manifest.status,
         "input_files": manifest.input_files,
         "transaction_count": manifest.transaction_count,
+        "outbound_transaction_count": manifest.outbound_transaction_count,
+        "out_of_scope_entry_count": manifest.out_of_scope_entry_count,
         "receipt_count": manifest.receipt_count,
         "exact_match_count": manifest.exact_match_count,
         "probable_match_count": manifest.probable_match_count,
@@ -555,6 +607,59 @@ def _has_strong_text_identifier(transaction: _Transaction, receipt: _Receipt) ->
 
     beneficiary = normalize_key(receipt.beneficiary_name)
     return len(beneficiary) >= 8 and beneficiary in bank_text
+
+
+def _classify_bank_transaction(row: dict[str, str], description_bank: str) -> str:
+    amount = parse_decimal(row.get("amount"))
+    text_key = normalize_key(description_bank)
+
+    if amount > 0:
+        return "ENTRADA_FORA_ESCOPO"
+
+    if amount < 0:
+        if "sispag" in text_key:
+            return "SISPAG_AGREGADO"
+        if "tarifa" in text_key or "taxa" in text_key:
+            return "TARIFA_BANCARIA"
+        if "pix" in text_key:
+            return "PIX_TRANSFERENCIA_SAIDA"
+        if any(
+            token in text_key
+            for token in ("boleto", "ted", "transferencia", "transf")
+        ):
+            return "BOLETO_TED_TRANSFERENCIA_SAIDA"
+        return "SAIDA_PAGAMENTO"
+
+    return "OUTRO"
+
+
+def _is_matching_scope_transaction(transaction: _Transaction) -> bool:
+    return transaction.technical_category in {
+        "SAIDA_PAGAMENTO",
+        "SISPAG_AGREGADO",
+        "PIX_TRANSFERENCIA_SAIDA",
+        "BOLETO_TED_TRANSFERENCIA_SAIDA",
+        "TARIFA_BANCARIA",
+    }
+
+
+def _rule_with_category(rule: str, technical_category: str) -> str:
+    if technical_category == "SISPAG_AGREGADO":
+        return f"{rule}|SISPAG_AGREGADO"
+    return rule
+
+
+def _out_of_scope_entry_rows(transactions: list[_Transaction]) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    for transaction in transactions:
+        rows.append(
+            {
+                **transaction.source_row,
+                "technical_category": transaction.technical_category,
+                "exclusion_reason": "FORA_ESCOPO_ENTRADA",
+            }
+        )
+    return rows
 
 
 def _money(value: Decimal) -> Decimal:

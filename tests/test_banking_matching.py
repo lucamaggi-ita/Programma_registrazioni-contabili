@@ -32,6 +32,62 @@ def test_matching_exact_amount_and_date(tmp_path):
     assert rows[0]["amount_delta"] == "0.00"
 
 
+def test_matching_ignores_credit_with_same_amount_and_date(tmp_path):
+    input_dir = _write_inputs(
+        tmp_path,
+        transactions=[
+            _tx("TX-CREDIT", "2026-02-05", "20.00", "PIX QR CODE RECEBIDO"),
+            _tx("TX-DEBIT", "2026-02-05", "-20.00", "PIX FORNECEDOR TESTE"),
+        ],
+        receipts=[
+            _receipt("RC-1", "2026-02-05", "20.00", "Fornecedor Teste"),
+        ],
+    )
+
+    manifest = match_bank_files(
+        input_dir=input_dir,
+        output_dir=tmp_path / "matching",
+        periodo="2026-02",
+    )
+
+    rows = _read_csv(tmp_path / "matching" / "bank_matches.csv")
+    out_of_scope = _read_csv(tmp_path / "matching" / "bank_entradas_fora_escopo.csv")
+    audit_rows = _read_csv(tmp_path / "matching" / "bank_matching_audit.csv")
+    assert manifest.exact_match_count == 1
+    assert manifest.out_of_scope_entry_count == 1
+    assert rows[0]["bank_transaction_id"] == "TX-DEBIT"
+    assert out_of_scope[0]["transaction_id"] == "TX-CREDIT"
+    assert out_of_scope[0]["exclusion_reason"] == "FORA_ESCOPO_ENTRADA"
+    assert any(row["rule"] == "FORA_ESCOPO_ENTRADA" for row in audit_rows)
+
+
+def test_matching_does_not_match_receipt_against_credit_only(tmp_path):
+    input_dir = _write_inputs(
+        tmp_path,
+        transactions=[
+            _tx("TX-CREDIT", "2026-02-05", "20.00", "RECEBIMENTO REDE VISA"),
+        ],
+        receipts=[
+            _receipt("RC-1", "2026-02-05", "20.00", "Fornecedor Teste"),
+        ],
+    )
+
+    manifest = match_bank_files(
+        input_dir=input_dir,
+        output_dir=tmp_path / "matching",
+        periodo="2026-02",
+    )
+
+    matches = _read_csv(tmp_path / "matching" / "bank_matches.csv")
+    unmatched_receipts = _read_csv(tmp_path / "matching" / "bank_unmatched_receipts.csv")
+    out_of_scope = _read_csv(tmp_path / "matching" / "bank_entradas_fora_escopo.csv")
+    assert manifest.exact_match_count == 0
+    assert manifest.outbound_transaction_count == 0
+    assert matches == []
+    assert unmatched_receipts[0]["payment_id"] == "RC-1"
+    assert out_of_scope[0]["transaction_id"] == "TX-CREDIT"
+
+
 def test_matching_probable_inside_date_window(tmp_path):
     input_dir = _write_inputs(
         tmp_path,
@@ -126,6 +182,30 @@ def test_matching_uses_strong_text_identifier_when_date_is_outside_window(tmp_pa
     assert rows[0]["match_rule"] == "IDENTIFICADOR_TEXTUAL_FORTE"
 
 
+def test_matching_keeps_sispag_as_technical_conservative_category(tmp_path):
+    input_dir = _write_inputs(
+        tmp_path,
+        transactions=[
+            _tx("TX-1", "2026-02-05", "-20.00", "SISPAG FORNECEDORES"),
+        ],
+        receipts=[
+            _receipt("RC-1", "2026-02-05", "20.00", "Fornecedor Teste"),
+        ],
+    )
+
+    match_bank_files(
+        input_dir=input_dir,
+        output_dir=tmp_path / "matching",
+        periodo="2026-02",
+    )
+
+    rows = _read_csv(tmp_path / "matching" / "bank_matches.csv")
+    audit_rows = _read_csv(tmp_path / "matching" / "bank_matching_audit.csv")
+    assert rows[0]["match_status"] == "MATCH_EXATO"
+    assert rows[0]["match_rule"] == "VALOR_DATA_EXATA|SISPAG_AGREGADO"
+    assert audit_rows[0]["rule"] == "VALOR_DATA_EXATA|SISPAG_AGREGADO"
+
+
 def test_matching_manifest_has_status_counts_and_generated_files(tmp_path):
     input_dir = _write_inputs(
         tmp_path,
@@ -154,7 +234,10 @@ def test_matching_manifest_has_status_counts_and_generated_files(tmp_path):
     assert manifest_json["matching_executed"] is True
     assert manifest_json["classification_executed"] is False
     assert manifest_json["exact_match_count"] == 1
+    assert manifest_json["outbound_transaction_count"] == 2
+    assert manifest_json["out_of_scope_entry_count"] == 0
     assert "bank_matching_audit" in manifest_json["generated_files"]
+    assert "bank_entradas_fora_escopo" in manifest_json["generated_files"]
 
 
 def test_parser_accepts_executar_matching_bancario_command():
