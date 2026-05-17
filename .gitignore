@@ -9,6 +9,7 @@ build/
 .pytest_cache/
 .coverage
 htmlcov/
+bank_raw/
 output/*.xlsx
 output/*.bak
 reports/*.txt
