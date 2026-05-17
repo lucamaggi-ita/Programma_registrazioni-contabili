@@ -9,6 +9,7 @@ description = "Agente Fantozzi - Registro contábil de NF-e para restaurante"
 requires-python = ">=3.10"
 dependencies = [
     "openpyxl>=3.1",
+    "xlrd>=2.0.1",
     "pyyaml>=6.0",
     "click>=8.1",
 ]

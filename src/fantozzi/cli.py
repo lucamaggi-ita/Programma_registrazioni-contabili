@@ -10,6 +10,7 @@ from fantozzi.auditoria_relatorios_gerenciais_ok import (
     auditar_relatorios_gerenciais_ok_provisorios,
     console_lines as auditoria_relatorios_ok_console_lines,
 )
+from fantozzi.banking.normalizer import import_bank_files
 from fantozzi.chart_of_accounts import ChartOfAccounts
 from fantozzi.classification_candidates import (
     ClassificationCandidatesError,
@@ -217,6 +218,41 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_config_arguments(importar_pasta_nfe)
     importar_pasta_nfe.set_defaults(func=importar_pasta_nfe_command)
+
+    importar_extratos = subparsers.add_parser(
+        "importar-extratos-bancarios",
+        help="Importa extratos bancarios multi-fonte normalizados por CNPJ.",
+        description=(
+            "Normaliza OFX bancario, enriquecimento XLSX de lancamentos, "
+            "comprovantes ConsultaPagamentos .xls e auditoria de saldos. "
+            "Nao executa matching ou classificacao contabil."
+        ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    importar_extratos.add_argument("--cnpj", required=True, help="CNPJ da conta.")
+    importar_extratos.add_argument(
+        "--ofx",
+        required=True,
+        help="OFX primario com movimentos bancarios reais.",
+    )
+    importar_extratos.add_argument(
+        "--xlsx-lancamentos",
+        help="XLSX de lancamentos bancarios para enriquecimento/auditoria.",
+    )
+    importar_extratos.add_argument(
+        "--consulta-pagamentos",
+        help="Arquivo ConsultaPagamentos .xls com comprovantes.",
+    )
+    importar_extratos.add_argument(
+        "--ofx-saldos",
+        help="OFX mensal com linhas de saldo para auditoria.",
+    )
+    importar_extratos.add_argument(
+        "--saida",
+        default="output/banking_import",
+        help="Pasta raiz de saida dos CSV/manifest normalizados.",
+    )
+    importar_extratos.set_defaults(func=importar_extratos_bancarios_command)
 
     diagnosticar_excel = subparsers.add_parser(
         "diagnosticar-excel",
@@ -1041,6 +1077,34 @@ def gerar_proposta_classificacao_command(args: argparse.Namespace) -> int:
     ):
         print(line)
 
+    return 0
+
+
+def importar_extratos_bancarios_command(args: argparse.Namespace) -> int:
+    try:
+        manifest = import_bank_files(
+            cnpj=args.cnpj,
+            ofx=Path(args.ofx),
+            xlsx_lancamentos=(
+                Path(args.xlsx_lancamentos) if args.xlsx_lancamentos else None
+            ),
+            consulta_pagamentos=(
+                Path(args.consulta_pagamentos) if args.consulta_pagamentos else None
+            ),
+            ofx_saldos=Path(args.ofx_saldos) if args.ofx_saldos else None,
+            output_root=Path(args.saida),
+        )
+    except Exception as exc:
+        print(f"[ERRO] Nao foi possivel importar extratos bancarios: {exc}")
+        return 1
+
+    print("[OK] Importacao bancaria normalizada concluida.")
+    print(f"CNPJ: {manifest.cnpj}")
+    print(f"Transacoes: {manifest.transaction_count}")
+    print(f"Comprovantes: {manifest.payment_receipt_count}")
+    print(f"Auditorias de saldo: {manifest.balance_audit_count}")
+    print(f"Saida: {manifest.output_dir}")
+    print("[INFO] Matching contabil nao executado nesta fase.")
     return 0
 
 
