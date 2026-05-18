@@ -4,6 +4,8 @@ import csv
 import json
 from pathlib import Path
 
+import pytest
+
 from fantozzi.banking.matching import match_bank_files
 from fantozzi.cli import build_parser, main
 
@@ -240,42 +242,40 @@ def test_matching_manifest_has_status_counts_and_generated_files(tmp_path):
     assert "bank_entradas_fora_escopo" in manifest_json["generated_files"]
 
 
-def test_parser_accepts_executar_matching_bancario_command():
+def test_parser_rejects_executar_matching_bancario_command():
     parser = build_parser()
 
-    args = parser.parse_args(
-        [
-            "executar-matching-bancario",
-            "--entrada",
-            "output/banking_import/08884180000123",
-            "--saida",
-            "output/banking_matching/08884180000123",
-            "--periodo",
-            "2026-02",
-            "--janela-dias",
-            "2",
-        ]
-    )
+    with pytest.raises(SystemExit) as exc_info:
+        parser.parse_args(
+            [
+                "executar-matching-bancario",
+                "--entrada",
+                "output/banking_import/08884180000123",
+                "--saida",
+                "output/banking_matching/08884180000123",
+                "--periodo",
+                "2026-02",
+                "--janela-dias",
+                "2",
+            ]
+        )
 
-    assert args.command == "executar-matching-bancario"
-    assert args.entrada == "output/banking_import/08884180000123"
-    assert args.saida == "output/banking_matching/08884180000123"
-    assert args.periodo == "2026-02"
-    assert args.janela_dias == 2
+    assert exc_info.value.code == 2
 
 
-def test_cli_matching_returns_error_without_normalized_inputs(tmp_path):
-    result = main(
-        [
-            "executar-matching-bancario",
-            "--entrada",
-            str(tmp_path / "missing"),
-            "--saida",
-            str(tmp_path / "matching"),
-        ]
-    )
+def test_cli_matching_command_is_not_operational(tmp_path):
+    with pytest.raises(SystemExit) as exc_info:
+        main(
+            [
+                "executar-matching-bancario",
+                "--entrada",
+                str(tmp_path / "missing"),
+                "--saida",
+                str(tmp_path / "matching"),
+            ]
+        )
 
-    assert result == 1
+    assert exc_info.value.code == 2
 
 
 def _write_inputs(

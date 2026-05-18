@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+"""Historical bank/payment matching helpers.
+
+This module is intentionally not exposed by the operational CLI. Fase 13 now
+classifies payment receipts only through declared rules in
+config/regras_classificacao_comprovantes.yaml.
+"""
+
 import csv
 import json
 from dataclasses import dataclass

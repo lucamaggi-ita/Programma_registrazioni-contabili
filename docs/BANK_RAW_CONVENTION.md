@@ -4,7 +4,8 @@ Aggiornato: 2026-05-17
 
 ## Scopo
 
-`bank_raw/` e la convenzione operativa per organizzare i file bancari reali prima delle fasi di matching, riconciliazione, audit e debug.
+`bank_raw/` e la convenzione operativa per organizzare i file bancari reali
+prima della normalizzazione, riconciliazione manuale, audit e debug.
 
 La cartella contiene dati bancari reali e non deve essere committata. Per questo `bank_raw/` e inclusa in `.gitignore`.
 
@@ -64,4 +65,8 @@ python -m fantozzi.cli importar-extratos-bancarios `
   --saida <DIRETORIO_SAIDA>
 ```
 
-`bank_raw/` e una convenzione operativa, non un requisito funzionale della Fase 13A. Le fasi 13B e 13C potranno usarla come base organizzativa, senza assumere che i file raw siano versionati nel repository.
+`bank_raw/` e una convenzione operativa, non un requisito funzionale della
+Fase 13A. La Fase 13 non esegue piu matching automatico banco x comprovante:
+i comprovantes vengono classificati solo tramite
+`config/regras_classificacao_comprovantes.yaml`. Senza regola dichiarata, o con
+regole conflittanti verso conti diversi, l'output deve andare in revisione.

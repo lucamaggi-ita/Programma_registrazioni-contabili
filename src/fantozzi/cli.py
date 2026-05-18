@@ -10,7 +10,6 @@ from fantozzi.auditoria_relatorios_gerenciais_ok import (
     auditar_relatorios_gerenciais_ok_provisorios,
     console_lines as auditoria_relatorios_ok_console_lines,
 )
-from fantozzi.banking.matching import match_bank_files
 from fantozzi.banking.normalizer import import_bank_files
 from fantozzi.banking.payment_rules import (
     PaymentRulesError,
@@ -262,41 +261,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Pasta raiz de saida dos CSV/manifest normalizados.",
     )
     importar_extratos.set_defaults(func=importar_extratos_bancarios_command)
-
-    matching_bancario = subparsers.add_parser(
-        "executar-matching-bancario",
-        help="Executa matching bancario auditavel a partir dos CSV normalizados.",
-        description=(
-            "Le os CSV normalizados da Fase 13A e gera relatorios de matching "
-            "bancario auditaveis. Nao cria lancamentos definitivos, nao altera "
-            "DRE e nao executa classificacao contabil."
-        ),
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-    )
-    matching_bancario.add_argument(
-        "--entrada",
-        required=True,
-        help=(
-            "Pasta com bank_transactions_normalized.csv e "
-            "payment_receipts_normalized.csv."
-        ),
-    )
-    matching_bancario.add_argument(
-        "--saida",
-        required=True,
-        help="Pasta de saida dos CSV/manifest de matching bancario.",
-    )
-    matching_bancario.add_argument(
-        "--periodo",
-        help="Periodo auditado, por exemplo 2026-01. Se omitido, sera inferido.",
-    )
-    matching_bancario.add_argument(
-        "--janela-dias",
-        type=int,
-        default=3,
-        help="Janela maxima de dias para match provavel por valor/data.",
-    )
-    matching_bancario.set_defaults(func=executar_matching_bancario_command)
 
     classificar_comprovantes = subparsers.add_parser(
         "classificar-comprovantes-pagamento",
@@ -1188,35 +1152,6 @@ def importar_extratos_bancarios_command(args: argparse.Namespace) -> int:
     print(f"Auditorias de saldo: {manifest.balance_audit_count}")
     print(f"Saida: {manifest.output_dir}")
     print("[INFO] Matching contabil nao executado nesta fase.")
-    return 0
-
-
-def executar_matching_bancario_command(args: argparse.Namespace) -> int:
-    try:
-        manifest = match_bank_files(
-            input_dir=Path(args.entrada),
-            output_dir=Path(args.saida),
-            periodo=args.periodo,
-            window_days=args.janela_dias,
-        )
-    except Exception as exc:
-        print(f"[ERRO] Nao foi possivel executar matching bancario: {exc}")
-        return 1
-
-    print("[OK] Matching bancario auditavel concluido.")
-    print(f"CNPJ: {manifest.cnpj}")
-    print(f"Periodo: {manifest.periodo}")
-    print(f"Transacoes: {manifest.transaction_count}")
-    print(f"Saidas consideradas no matching: {manifest.outbound_transaction_count}")
-    print(f"Entradas fora de escopo: {manifest.out_of_scope_entry_count}")
-    print(f"Comprovantes: {manifest.receipt_count}")
-    print(f"Matches exatos: {manifest.exact_match_count}")
-    print(f"Matches provaveis: {manifest.probable_match_count}")
-    print(f"Ambiguos: {manifest.ambiguous_count}")
-    print(f"Transacoes sem match: {manifest.unmatched_transaction_count}")
-    print(f"Comprovantes sem match: {manifest.unmatched_receipt_count}")
-    print(f"Saida: {manifest.output_dir}")
-    print("[INFO] Lancamentos definitivos, DRE e classificacao nao foram alterados.")
     return 0
 
 
