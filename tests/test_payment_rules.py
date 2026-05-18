@@ -318,6 +318,19 @@ def test_audit_payment_rules_flags_planilha_identity_and_conflict(tmp_path):
     assert "CONFLITO_CRITERIO_CONTA" in report
 
 
+def test_current_payment_rules_yaml_is_autonomous_from_planilha():
+    rules_path = Path(__file__).resolve().parents[1] / "config" / (
+        "regras_classificacao_comprovantes.yaml"
+    )
+
+    result = audit_payment_rules_file(rules_path)
+    categories = {issue.categoria for issue in result.issues}
+
+    assert "REFERENCIA_PLANILHA" not in categories
+    assert "CAMPO_ORIGEM_PLANILHA" not in categories
+    assert "REGRA_ID_BASEADO_EM_LINHA" not in categories
+
+
 def test_rule_with_missing_account_fails_validation(tmp_path):
     rules = load_payment_rules(
         _write_rules(

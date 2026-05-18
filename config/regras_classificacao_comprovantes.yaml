@@ -3,7 +3,6 @@ idioma: pt-BR
 descricao: Regras declaradas pelo operador para classificacao de comprovantes de pagamento.
   A Fase 13H aplica somente regras explicitas e nao infere conta contabil a partir
   de extrato bancario.
-fonte_manual: bank_raw/_audit/Planilha per associazione spese a piano dei conti.xlsx
 politica:
   sem_regra: MANTER_REVISAR
   mais_de_uma_regra: MANTER_REVISAR_COM_ALERTA
@@ -17,8 +16,7 @@ normalizacao:
   remover_pontuacao_irrelevante: true
   compactar_espacos: true
 regras:
-- regra_id: COMPROVANTE_LINHA_002
-  origem_linha_planilha: 2
+- regra_id: REGRA_9_01_001_PJBANK_PAGAMENTOS
   conta_id: 9.01.001
   conta_nome: Publicidade e Propaganda
   dre_linha_id: '11.01'
@@ -28,8 +26,7 @@ regras:
     beneficiario_favorecido_contem_algum:
     - PJBANK PAGAMENTOS S A
     referencia_empresa_contem_algum: []
-- regra_id: COMPROVANTE_LINHA_003
-  origem_linha_planilha: 3
+- regra_id: REGRA_5_01_003_PARCSN
   conta_id: 5.01.003
   conta_nome: Parcelamento Federal / Receita Federal / PGFN / Simples
   dre_linha_id: '07.01'
@@ -39,8 +36,7 @@ regras:
     beneficiario_favorecido_contem_algum: []
     referencia_empresa_contem_algum:
     - parcsn
-- regra_id: COMPROVANTE_LINHA_004
-  origem_linha_planilha: 4
+- regra_id: REGRA_5_01_003_PERTSN
   conta_id: 5.01.003
   conta_nome: Parcelamento Federal / Receita Federal / PGFN / Simples
   dre_linha_id: '07.01'
@@ -50,8 +46,7 @@ regras:
     beneficiario_favorecido_contem_algum: []
     referencia_empresa_contem_algum:
     - pertsn
-- regra_id: COMPROVANTE_LINHA_005
-  origem_linha_planilha: 5
+- regra_id: REGRA_5_01_003_SISPAR_PGFN_8916087
   conta_id: 5.01.003
   conta_nome: Parcelamento Federal / Receita Federal / PGFN / Simples
   dre_linha_id: '07.01'
@@ -62,8 +57,7 @@ regras:
     referencia_empresa_contem_algum:
     - 'sispar: PGFN-SISPAR 8916087'
     - pgfn
-- regra_id: COMPROVANTE_LINHA_006
-  origem_linha_planilha: 6
+- regra_id: REGRA_5_01_001_SIMPLES
   conta_id: 5.01.001
   conta_nome: Simples Nacional - DAS Mensal - Anexo I
   dre_linha_id: '02.01'
@@ -73,8 +67,7 @@ regras:
     beneficiario_favorecido_contem_algum: []
     referencia_empresa_contem_algum:
     - simples
-- regra_id: COMPROVANTE_LINHA_007
-  origem_linha_planilha: 7
+- regra_id: REGRA_3_01_020_FGTS
   conta_id: 3.01.020
   conta_nome: FGTS sobre Folha / FGTS Funcionarios
   dre_linha_id: '05.01'
@@ -84,8 +77,7 @@ regras:
     beneficiario_favorecido_contem_algum: []
     referencia_empresa_contem_algum:
     - fgts
-- regra_id: COMPROVANTE_LINHA_008
-  origem_linha_planilha: 8
+- regra_id: REGRA_9_01_010_ITAPETRO_COMBUSTIV
   conta_id: 9.01.010
   conta_nome: Frete e Motoboy
   dre_linha_id: '11.01'
@@ -95,8 +87,7 @@ regras:
     beneficiario_favorecido_contem_algum:
     - ITAPETRO COMERCIO DE COMBUSTIV
     referencia_empresa_contem_algum: []
-- regra_id: COMPROVANTE_LINHA_009
-  origem_linha_planilha: 9
+- regra_id: REGRA_3_02_002_IONEIDE_GOMES_DOS_SANTOS
   conta_id: 3.02.002
   conta_nome: Van-Funcionarios
   dre_linha_id: '05.02'
@@ -106,8 +97,7 @@ regras:
     beneficiario_favorecido_contem_algum:
     - IONEIDE GOMES DOS SANTOS
     referencia_empresa_contem_algum: []
-- regra_id: COMPROVANTE_LINHA_010
-  origem_linha_planilha: 10
+- regra_id: REGRA_3_04_005_UELINTON_DOS_SANTOS_SILVA
   conta_id: 3.04.005
   conta_nome: Prestadores Autonomos - RPA
   dre_linha_id: '05.03'
@@ -117,8 +107,7 @@ regras:
     beneficiario_favorecido_contem_algum:
     - UELINTON DOS SANTOS SILVA
     referencia_empresa_contem_algum: []
-- regra_id: COMPROVANTE_LINHA_011
-  origem_linha_planilha: 11
+- regra_id: REGRA_4_01_001_SIRLEY_VIANA
   conta_id: 4.01.001
   conta_nome: Aluguel do Imovel
   dre_linha_id: '06.01'
@@ -128,8 +117,7 @@ regras:
     beneficiario_favorecido_contem_algum:
     - SIRLEY VIANA
     referencia_empresa_contem_algum: []
-- regra_id: COMPROVANTE_LINHA_012
-  origem_linha_planilha: 12
+- regra_id: REGRA_10_01_002_GIUSEPPE_DAL_DOSSO
   conta_id: 10.01.002
   conta_nome: Investimento em imoveis
   dre_linha_id: '12.01'
@@ -139,8 +127,7 @@ regras:
     beneficiario_favorecido_contem_algum:
     - GIUSEPPE DAL DOSSO
     referencia_empresa_contem_algum: []
-- regra_id: COMPROVANTE_LINHA_013
-  origem_linha_planilha: 13
+- regra_id: REGRA_9_01_001_ANDREA_CIONI
   conta_id: 9.01.001
   conta_nome: Publicidade e Propaganda
   dre_linha_id: '11.01'
@@ -150,8 +137,7 @@ regras:
     beneficiario_favorecido_contem_algum:
     - ANDREA CIONI
     referencia_empresa_contem_algum: []
-- regra_id: COMPROVANTE_LINHA_014
-  origem_linha_planilha: 14
+- regra_id: REGRA_2_01_009_EUDES_BRAGA_NASCIMENTO
   conta_id: 2.01.009
   conta_nome: Coco verde
   dre_linha_id: '03.02'
@@ -161,8 +147,7 @@ regras:
     beneficiario_favorecido_contem_algum:
     - EUDES BRAGA NASCIMENTO
     referencia_empresa_contem_algum: []
-- regra_id: COMPROVANTE_LINHA_015
-  origem_linha_planilha: 15
+- regra_id: REGRA_8_01_003_GILMAR_NETO_DOS_SANTOS
   conta_id: 8.01.003
   conta_nome: Eletrica Predial
   dre_linha_id: '10.01'
@@ -172,8 +157,7 @@ regras:
     beneficiario_favorecido_contem_algum:
     - GILMAR NETO DOS SANTOS
     referencia_empresa_contem_algum: []
-- regra_id: COMPROVANTE_LINHA_016
-  origem_linha_planilha: 16
+- regra_id: REGRA_2_02_008_LUIS_PUERTO_JIMENEZ
   conta_id: 2.02.008
   conta_nome: Hortifruti
   dre_linha_id: '03.01'
@@ -183,8 +167,7 @@ regras:
     beneficiario_favorecido_contem_algum:
     - LUIS PUERTO JIMENEZ
     referencia_empresa_contem_algum: []
-- regra_id: COMPROVANTE_LINHA_017
-  origem_linha_planilha: 17
+- regra_id: REGRA_2_02_006_LORENZO_GUARNACCIA
   conta_id: 2.02.006
   conta_nome: Laticinios e Queijos
   dre_linha_id: '03.01'
@@ -194,8 +177,7 @@ regras:
     beneficiario_favorecido_contem_algum:
     - LORENZO GUARNACCIA
     referencia_empresa_contem_algum: []
-- regra_id: COMPROVANTE_LINHA_018
-  origem_linha_planilha: 18
+- regra_id: REGRA_8_02_001_MICHELL_ARAUJO_LUZ
   conta_id: 8.02.001
   conta_nome: Manutencao de Equipamentos de Cozinha
   dre_linha_id: '10.01'
@@ -206,8 +188,7 @@ regras:
     - MICHELL ARAUJO LUZ 84078308520
     - MICHELL ARAUJO LUZ
     referencia_empresa_contem_algum: []
-- regra_id: COMPROVANTE_LINHA_019
-  origem_linha_planilha: 19
+- regra_id: REGRA_2_02_016_GILMAR_MEIRA_BISPO
   conta_id: 2.02.016
   conta_nome: Cigarros e Tabacaria
   dre_linha_id: '03.01'
@@ -217,8 +198,7 @@ regras:
     beneficiario_favorecido_contem_algum:
     - GILMAR MEIRA BISPO
     referencia_empresa_contem_algum: []
-- regra_id: COMPROVANTE_LINHA_020
-  origem_linha_planilha: 20
+- regra_id: REGRA_8_02_001_GUARACI_PINTO_DOS_SANTOS
   conta_id: 8.02.001
   conta_nome: Manutencao de Equipamentos de Cozinha
   dre_linha_id: '10.01'
@@ -228,8 +208,7 @@ regras:
     beneficiario_favorecido_contem_algum:
     - GUARACI PINTO DOS SANTOS
     referencia_empresa_contem_algum: []
-- regra_id: COMPROVANTE_LINHA_021
-  origem_linha_planilha: 21
+- regra_id: REGRA_4_01_010_ANTONIO_CONCEICAO_DA_SILVA
   conta_id: 4.01.010
   conta_nome: Lenha para pizzaria
   dre_linha_id: '06.02'
@@ -239,8 +218,7 @@ regras:
     beneficiario_favorecido_contem_algum:
     - ANTONIO CONCEICAO DA SILVA
     referencia_empresa_contem_algum: []
-- regra_id: COMPROVANTE_LINHA_022
-  origem_linha_planilha: 22
+- regra_id: REGRA_3_04_007_GEISA_DE_SOUSA_PEREIRA
   conta_id: 3.04.007
   conta_nome: Prestadores MEI
   dre_linha_id: '05.03'
@@ -250,8 +228,7 @@ regras:
     beneficiario_favorecido_contem_algum:
     - Geisa de Sousa Pereira
     referencia_empresa_contem_algum: []
-- regra_id: COMPROVANTE_LINHA_023
-  origem_linha_planilha: 23
+- regra_id: REGRA_2_01_009_OS_MORENOS_DO_COCO
   conta_id: 2.01.009
   conta_nome: Coco verde
   dre_linha_id: '03.02'
@@ -261,8 +238,7 @@ regras:
     beneficiario_favorecido_contem_algum:
     - OS MORENOS DO COCO LTDA
     referencia_empresa_contem_algum: []
-- regra_id: COMPROVANTE_LINHA_024
-  origem_linha_planilha: 24
+- regra_id: REGRA_2_02_001_MAK_IURI_FERNANDES_PORTUGAL
   conta_id: 2.02.001
   conta_nome: Carnes Bovinas
   dre_linha_id: '03.01'
@@ -272,8 +248,7 @@ regras:
     beneficiario_favorecido_contem_algum:
     - MAK IURI FERNANDES PORTUGAL
     referencia_empresa_contem_algum: []
-- regra_id: COMPROVANTE_LINHA_025
-  origem_linha_planilha: 25
+- regra_id: REGRA_5_01_002_SEFAZ_BAHIA_DAE
   conta_id: 5.01.002
   conta_nome: ICMS Estadual / Parcelamento Estadual
   dre_linha_id: '07.01'
@@ -283,8 +258,7 @@ regras:
     beneficiario_favorecido_contem_algum:
     - SEFAZ BAHIA-DAE
     referencia_empresa_contem_algum: []
-- regra_id: COMPROVANTE_LINHA_026
-  origem_linha_planilha: 26
+- regra_id: REGRA_6_01_001_FC_CONTABILIDADE
   conta_id: 6.01.001
   conta_nome: Honorarios Contabeis
   dre_linha_id: '08.01'
@@ -294,8 +268,7 @@ regras:
     beneficiario_favorecido_contem_algum:
     - FC CONTABILIDADE LTDA
     referencia_empresa_contem_algum: []
-- regra_id: COMPROVANTE_LINHA_027
-  origem_linha_planilha: 27
+- regra_id: REGRA_4_01_006_ECAD
   conta_id: 4.01.006
   conta_nome: Licencas, Alvaras e Vistorias
   dre_linha_id: '07.01'
@@ -305,8 +278,7 @@ regras:
     beneficiario_favorecido_contem_algum:
     - ECAD
     referencia_empresa_contem_algum: []
-- regra_id: COMPROVANTE_LINHA_028
-  origem_linha_planilha: 28
+- regra_id: REGRA_9_01_001_PROMID_STUDIO
   conta_id: 9.01.001
   conta_nome: Publicidade e Propaganda
   dre_linha_id: '11.01'
@@ -316,8 +288,7 @@ regras:
     beneficiario_favorecido_contem_algum:
     - PROMID STUDIO LTDA
     referencia_empresa_contem_algum: []
-- regra_id: COMPROVANTE_LINHA_029
-  origem_linha_planilha: 29
+- regra_id: REGRA_4_01_014_NET_INFO_INFORMATICA
   conta_id: 4.01.014
   conta_nome: Internet
   dre_linha_id: '06.02'
@@ -327,8 +298,7 @@ regras:
     beneficiario_favorecido_contem_algum:
     - NET INFO INFORMATICA LTDA
     referencia_empresa_contem_algum: []
-- regra_id: COMPROVANTE_LINHA_030
-  origem_linha_planilha: 30
+- regra_id: REGRA_9_01_001_ABRASEL_ASSOCIACAO_BRASILEIRA
   conta_id: 9.01.001
   conta_nome: Publicidade e Propaganda
   dre_linha_id: '11.01'
@@ -338,8 +308,7 @@ regras:
     beneficiario_favorecido_contem_algum:
     - ABRASEL  ASSOCIACAO BRASILEIRA
     referencia_empresa_contem_algum: []
-- regra_id: COMPROVANTE_LINHA_031
-  origem_linha_planilha: 31
+- regra_id: REGRA_3_04_006_D_LOPES_ENGENHARIA_MEDICINA
   conta_id: 3.04.006
   conta_nome: Prestadores Pessoa Juridica - PJ
   dre_linha_id: '05.03'
