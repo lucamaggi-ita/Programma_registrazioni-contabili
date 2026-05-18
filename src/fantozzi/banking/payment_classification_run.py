@@ -10,10 +10,13 @@ from pathlib import Path
 
 from fantozzi.banking.payment_rules import (
     STATUS_CLASSIFICADO,
+    STATUS_EXCLUIDO,
     STATUS_MULTIPLAS_REGRAS,
     STATUS_SEM_REGRA,
+    PaymentExclusionRule,
     PaymentRule,
     classify_payment_receipt,
+    load_payment_exclusion_rules,
     load_payment_rules,
     normalize_match_text,
     validate_payment_rules,
@@ -75,6 +78,28 @@ REVIEW_HEADERS = [
     "raw_hash",
 ]
 
+EXCLUDED_HEADERS = [
+    "cnpj",
+    "mes",
+    "data_pagamento",
+    "beneficiario_normalizado",
+    "referencia",
+    "valor",
+    "arquivo_origem",
+    "status_classificacao",
+    "acao",
+    "regra_id",
+    "motivo_exclusao",
+    "regras_candidatas",
+    "payment_id",
+    "beneficiary_name",
+    "beneficiary_document",
+    "payment_type",
+    "status_pagamento",
+    "source_file",
+    "raw_hash",
+]
+
 SUMMARY_ACCOUNT_HEADERS = [
     "conta_id",
     "conta_nome",
@@ -96,10 +121,13 @@ SUMMARY_CNPJ_MONTH_HEADERS = [
     "mes",
     "total_comprovantes",
     "total_classificados",
+    "total_excluidos_xml",
+    "total_excluidos_escludere",
     "total_a_revisar_sem_regra",
     "total_a_revisar_multiplas_regras",
     "valor_total",
     "valor_classificado",
+    "valor_excluido",
     "valor_a_revisar",
 ]
 
@@ -121,6 +149,8 @@ class PaymentClassificationRunManifest:
     output_dir: Path
     total_comprovantes: int
     total_classificados: int
+    total_excluidos_xml: int
+    total_excluidos_escludere: int
     total_a_revisar_sem_regra: int
     total_a_revisar_multiplas_regras: int
     total_erros: int
@@ -146,28 +176,37 @@ def execute_payment_classification_run(
         )
 
     rules = load_payment_rules(regras_path)
+    exclusion_rules = load_payment_exclusion_rules(regras_path)
     validate_payment_rules(
         rules,
         plano_contas_path=plano_contas_path,
         mapeamento_dre_path=mapeamento_dre_path,
     )
     rules_by_id = {rule.regra_id: rule for rule in rules}
+    exclusion_rules_by_id = {rule.regra_id: rule for rule in exclusion_rules}
 
     effective_run_id = run_id or _generate_run_id(saida_raiz, today=today)
     output_dir = saida_raiz / "runs" / effective_run_id
     output_dir.mkdir(parents=True, exist_ok=True)
 
     classified_rows: list[dict[str, object]] = []
+    excluded_rows: list[dict[str, object]] = []
     review_rows: list[dict[str, object]] = []
     summary_cnpj_mes: dict[tuple[str, str], dict[str, object]] = {}
 
     for source in sources:
         _, rows = _read_csv(source.path)
         for row in rows:
-            result = classify_payment_receipt(row, rules)
+            result = classify_payment_receipt(row, rules, exclusion_rules)
             base = _base_output_row(row, source)
             amount = _parse_decimal(base["valor"])
-            _update_cnpj_month_summary(summary_cnpj_mes, source, amount, result.status_classificacao)
+            _update_cnpj_month_summary(
+                summary_cnpj_mes,
+                source,
+                amount,
+                result.status_classificacao,
+                result.acao,
+            )
 
             if result.status_classificacao == STATUS_CLASSIFICADO:
                 classified_rows.append(
@@ -183,6 +222,17 @@ def execute_payment_classification_run(
                         "regras_candidatas": "|".join(result.regras_candidatas),
                     }
                 )
+            elif result.status_classificacao == STATUS_EXCLUIDO:
+                excluded_rows.append(
+                    {
+                        **base,
+                        "status_classificacao": result.status_classificacao,
+                        "acao": result.acao,
+                        "regra_id": result.regra_id,
+                        "motivo_exclusao": result.motivo,
+                        "regras_candidatas": "|".join(result.regras_candidatas),
+                    }
+                )
             else:
                 review_rows.append(
                     {
@@ -193,6 +243,7 @@ def execute_payment_classification_run(
                         "contas_candidatas": _candidate_accounts(
                             result.regras_candidatas,
                             rules_by_id,
+                            exclusion_rules_by_id,
                         ),
                         "DECISAO_OPERADOR": "",
                         "CONTA_ID_APROVADA": "",
@@ -215,6 +266,7 @@ def execute_payment_classification_run(
     summary_by_cnpj_month = _summary_cnpj_month_rows(summary_cnpj_mes)
 
     classified_path = output_dir / "comprovantes_classificados.csv"
+    excluded_path = output_dir / "comprovantes_excluidos.csv"
     review_path = output_dir / "comprovantes_a_revisar.csv"
     summary_account_path = output_dir / "resumo_por_conta.csv"
     summary_dre_path = output_dir / "resumo_por_dre.csv"
@@ -222,6 +274,7 @@ def execute_payment_classification_run(
     manifest_path = output_dir / "manifest_classificacao_comprovantes.json"
 
     _write_csv(classified_path, CLASSIFIED_HEADERS, classified_rows)
+    _write_csv(excluded_path, EXCLUDED_HEADERS, excluded_rows)
     _write_csv(review_path, REVIEW_HEADERS, review_rows)
     _write_csv(summary_account_path, SUMMARY_ACCOUNT_HEADERS, summary_by_account)
     _write_csv(summary_dre_path, SUMMARY_DRE_HEADERS, summary_by_dre)
@@ -230,6 +283,7 @@ def execute_payment_classification_run(
     generated_files = {
         "manifest": str(manifest_path),
         "comprovantes_classificados": str(classified_path),
+        "comprovantes_excluidos": str(excluded_path),
         "comprovantes_a_revisar": str(review_path),
         "resumo_por_conta": str(summary_account_path),
         "resumo_por_dre": str(summary_dre_path),
@@ -241,11 +295,15 @@ def execute_payment_classification_run(
     total_multiplas = sum(
         1 for row in review_rows if row["status_classificacao"] == STATUS_MULTIPLAS_REGRAS
     )
+    total_excluidos_xml = sum(1 for row in excluded_rows if row["acao"] == "XML")
+    total_excluidos_escludere = sum(1 for row in excluded_rows if row["acao"] == "ESCLUDERE")
     manifest = PaymentClassificationRunManifest(
         run_id=effective_run_id,
         output_dir=output_dir,
-        total_comprovantes=len(classified_rows) + len(review_rows),
+        total_comprovantes=len(classified_rows) + len(excluded_rows) + len(review_rows),
         total_classificados=len(classified_rows),
+        total_excluidos_xml=total_excluidos_xml,
+        total_excluidos_escludere=total_excluidos_escludere,
         total_a_revisar_sem_regra=total_sem_regra,
         total_a_revisar_multiplas_regras=total_multiplas,
         total_erros=0,
@@ -322,6 +380,7 @@ def _update_cnpj_month_summary(
     source: ReceiptSource,
     amount: Decimal,
     status_classificacao: str,
+    acao: str = "",
 ) -> None:
     key = (source.cnpj, source.mes)
     row = summary.setdefault(
@@ -331,10 +390,13 @@ def _update_cnpj_month_summary(
             "mes": source.mes,
             "total_comprovantes": 0,
             "total_classificados": 0,
+            "total_excluidos_xml": 0,
+            "total_excluidos_escludere": 0,
             "total_a_revisar_sem_regra": 0,
             "total_a_revisar_multiplas_regras": 0,
             "valor_total": Decimal("0"),
             "valor_classificado": Decimal("0"),
+            "valor_excluido": Decimal("0"),
             "valor_a_revisar": Decimal("0"),
         },
     )
@@ -343,6 +405,12 @@ def _update_cnpj_month_summary(
     if status_classificacao == STATUS_CLASSIFICADO:
         row["total_classificados"] = int(row["total_classificados"]) + 1
         row["valor_classificado"] = row["valor_classificado"] + amount
+    elif status_classificacao == STATUS_EXCLUIDO:
+        row["valor_excluido"] = row["valor_excluido"] + amount
+        if acao == "XML":
+            row["total_excluidos_xml"] = int(row["total_excluidos_xml"]) + 1
+        elif acao == "ESCLUDERE":
+            row["total_excluidos_escludere"] = int(row["total_excluidos_escludere"]) + 1
     else:
         row["valor_a_revisar"] = row["valor_a_revisar"] + amount
         if status_classificacao == STATUS_SEM_REGRA:
@@ -386,12 +454,19 @@ def _summary_cnpj_month_rows(
 def _candidate_accounts(
     regra_ids: tuple[str, ...],
     rules_by_id: dict[str, PaymentRule],
+    exclusion_rules_by_id: dict[str, PaymentExclusionRule] | None = None,
 ) -> str:
     accounts = {
         rules_by_id[regra_id].conta_id
         for regra_id in regra_ids
         if regra_id in rules_by_id
     }
+    if exclusion_rules_by_id:
+        accounts = {
+            account
+            for account in accounts
+            if account and account not in exclusion_rules_by_id
+        }
     return "|".join(sorted(accounts))
 
 
@@ -438,6 +513,8 @@ def _write_manifest(
         "meses_processados": list(manifest.meses_processados),
         "total_comprovantes": manifest.total_comprovantes,
         "total_classificados": manifest.total_classificados,
+        "total_excluidos_xml": manifest.total_excluidos_xml,
+        "total_excluidos_escludere": manifest.total_excluidos_escludere,
         "total_a_revisar_sem_regra": manifest.total_a_revisar_sem_regra,
         "total_a_revisar_multiplas_regras": manifest.total_a_revisar_multiplas_regras,
         "total_erros": manifest.total_erros,

@@ -20,6 +20,7 @@ from fantozzi.banking.payment_review_package import (
 )
 from fantozzi.banking.payment_rules import (
     STATUS_CLASSIFICADO,
+    STATUS_EXCLUIDO,
     STATUS_MULTIPLAS_REGRAS,
     STATUS_SEM_REGRA,
     PaymentRulesError,
@@ -27,6 +28,7 @@ from fantozzi.banking.payment_rules import (
     classify_payment_receipt,
     classify_payment_receipts_file,
     load_payment_rules,
+    load_payment_exclusion_rules,
     normalize_match_text,
     payment_rules_audit_report_text,
     validate_payment_rules,
@@ -101,6 +103,75 @@ def test_without_rule_goes_to_review(tmp_path):
     assert result.status_classificacao == STATUS_SEM_REGRA
     assert result.motivo == "SEM_REGRA"
     assert result.conta_id == ""
+
+
+def test_exclusion_rule_marks_receipt_without_account_or_dre(tmp_path):
+    rules_path = _write_rules_with_exclusions(
+        tmp_path,
+        positive_rules=[],
+        exclusions=[
+            _exclusion_rule(
+                "EXCLUSAO_XML_FORNECEDOR",
+                "XML",
+                beneficiary=["FORNECEDOR XML"],
+            )
+        ],
+    )
+    rules = load_payment_rules(rules_path)
+    exclusions = load_payment_exclusion_rules(rules_path)
+
+    result = classify_payment_receipt(
+        {
+            "beneficiary_name": "Fornecedor XML",
+            "reference_id": "-",
+        },
+        rules,
+        exclusions,
+    )
+
+    assert result.status_classificacao == STATUS_EXCLUIDO
+    assert result.acao == "XML"
+    assert result.conta_id == ""
+    assert result.conta_nome == ""
+    assert result.dre_linha_id == ""
+    assert result.entra_dre is False
+
+
+def test_inss_reference_exclusion_does_not_match_empty_reference(tmp_path):
+    rules_path = _write_rules_with_exclusions(
+        tmp_path,
+        positive_rules=[],
+        exclusions=[
+            _exclusion_rule(
+                "EXCLUSAO_ESCLUDERE_REFERENCIA_INSS",
+                "ESCLUDERE",
+                reference=["INSS"],
+            )
+        ],
+    )
+    rules = load_payment_rules(rules_path)
+    exclusions = load_payment_exclusion_rules(rules_path)
+
+    inss_result = classify_payment_receipt(
+        {
+            "beneficiary_name": "RECEITA FED DARF NUMERADO CB",
+            "reference_id": "INSS e IRRF MARCO 20",
+        },
+        rules,
+        exclusions,
+    )
+    caixa_result = classify_payment_receipt(
+        {
+            "beneficiary_name": "CAIXA ECONOMICA FEDERAL",
+            "reference_id": "-",
+        },
+        rules,
+        exclusions,
+    )
+
+    assert inss_result.status_classificacao == STATUS_EXCLUIDO
+    assert inss_result.acao == "ESCLUDERE"
+    assert caixa_result.status_classificacao == STATUS_SEM_REGRA
 
 
 def test_multiple_matching_rules_go_to_review(tmp_path):
@@ -638,6 +709,79 @@ def test_execute_payment_classification_run_generates_13s_package(tmp_path):
     assert manifest_json["nao_inferir_conta"] is True
 
 
+def test_execute_payment_classification_run_keeps_exclusions_out_of_account_and_dre(
+    tmp_path,
+):
+    plano_path, mapeamento_path = _write_plan_and_mapping(tmp_path)
+    rules_path = _write_rules_with_exclusions(
+        tmp_path,
+        positive_rules=[
+            _rule(
+                "REGRA_EMBASA",
+                "4.01.012",
+                "Agua e Esgoto",
+                "06.02",
+                beneficiary=["EMBASA"],
+            )
+        ],
+        exclusions=[
+            _exclusion_rule(
+                "EXCLUSAO_XML_FORNECEDOR",
+                "XML",
+                beneficiary=["FORNECEDOR XML"],
+            )
+        ],
+    )
+    input_dir = (
+        tmp_path
+        / "bank_raw"
+        / "_audit"
+        / "fase_13c"
+        / "2026-02"
+        / "08884180000123"
+        / "13a_import"
+        / "08884180000123"
+    )
+    input_dir.mkdir(parents=True)
+    _write_receipts_csv_to(
+        input_dir / "payment_receipts_normalized.csv",
+        [
+            _receipt("RC-1", "Embasa", "Agua mensal"),
+            _receipt("RC-2", "Fornecedor XML", "-"),
+            _receipt("RC-3", "Fornecedor sem regra", "-"),
+        ],
+    )
+
+    manifest = execute_payment_classification_run(
+        entrada_raiz=tmp_path / "bank_raw" / "_audit" / "fase_13c",
+        saida_raiz=tmp_path / "reports" / "comprovantes_classificacao",
+        regras_path=rules_path,
+        plano_contas_path=plano_path,
+        mapeamento_dre_path=mapeamento_path,
+        today=date(2026, 5, 18),
+    )
+
+    output_dir = tmp_path / "reports" / "comprovantes_classificacao" / "runs" / "2026-05-18_001"
+    classified = _read_csv(output_dir / "comprovantes_classificados.csv")
+    excluded = _read_csv(output_dir / "comprovantes_excluidos.csv")
+    review = _read_csv(output_dir / "comprovantes_a_revisar.csv")
+    summary_account = _read_csv(output_dir / "resumo_por_conta.csv")
+    summary_dre = _read_csv(output_dir / "resumo_por_dre.csv")
+
+    assert manifest.total_classificados == 1
+    assert manifest.total_excluidos_xml == 1
+    assert manifest.total_excluidos_escludere == 0
+    assert manifest.total_a_revisar_sem_regra == 1
+    assert classified[0]["payment_id"] == "RC-1"
+    assert excluded[0]["payment_id"] == "RC-2"
+    assert excluded[0]["status_classificacao"] == STATUS_EXCLUIDO
+    assert excluded[0]["acao"] == "XML"
+    assert "conta_id" not in excluded[0]
+    assert review[0]["payment_id"] == "RC-3"
+    assert sum(int(row["quantidade"]) for row in summary_account) == 1
+    assert sum(int(row["quantidade"]) for row in summary_dre) == 1
+
+
 def test_gerar_pacote_revisao_comprovantes_splits_sispag_and_guides_review(tmp_path):
     run_dir = tmp_path / "reports" / "comprovantes_classificacao" / "runs" / "2026-05-18_001"
     run_dir.mkdir(parents=True)
@@ -749,6 +893,45 @@ def _write_rules(tmp_path: Path, rules: list[str]) -> Path:
     rules_text = "\n".join(rules)
     path.write_text(f"regras:\n{rules_text}\n", encoding="utf-8")
     return path
+
+
+def _write_rules_with_exclusions(
+    tmp_path: Path,
+    *,
+    positive_rules: list[str],
+    exclusions: list[str],
+) -> Path:
+    path = tmp_path / "regras.yaml"
+    if positive_rules:
+        text = "regras:\n" + "\n".join(positive_rules) + "\n"
+    else:
+        text = "regras: []\n"
+    if exclusions:
+        text += "exclusoes:\n" + "\n".join(exclusions) + "\n"
+    else:
+        text += "exclusoes: []\n"
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+def _exclusion_rule(
+    regra_id: str,
+    acao: str,
+    *,
+    beneficiary: list[str] | None = None,
+    reference: list[str] | None = None,
+) -> str:
+    beneficiary_items = _yaml_list(beneficiary or [])
+    reference_items = _yaml_list(reference or [])
+    return f"""- regra_id: {regra_id}
+  acao: {acao}
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+{beneficiary_items}
+    referencia_empresa_contem_algum:
+{reference_items}
+"""
 
 
 def _write_plan_and_mapping(tmp_path: Path) -> tuple[Path, Path]:

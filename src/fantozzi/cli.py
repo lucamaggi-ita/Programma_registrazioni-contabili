@@ -1330,6 +1330,8 @@ def executar_classificacao_comprovantes_real_command(args: argparse.Namespace) -
     print(f"Meses: {', '.join(manifest.meses_processados)}")
     print(f"Comprovantes: {manifest.total_comprovantes}")
     print(f"Classificados: {manifest.total_classificados}")
+    print(f"Excluidos XML: {manifest.total_excluidos_xml}")
+    print(f"Excluidos ESCLUDERE: {manifest.total_excluidos_escludere}")
     print(f"A revisar sem regra: {manifest.total_a_revisar_sem_regra}")
     print(f"A revisar multiplas regras: {manifest.total_a_revisar_multiplas_regras}")
     print(f"Saida: {manifest.output_dir}")

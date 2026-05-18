@@ -320,3 +320,740 @@ regras:
     beneficiario_favorecido_contem_algum:
     - D LOPES ENGENHARIA E MEDICINA
     referencia_empresa_contem_algum: []
+
+exclusoes:
+- regra_id: EXCLUSAO_XML_OESA_COMERCIO_E_REPRESENTACOES
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - OESA COMERCIO E REPRESENTACOES
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_CHECON_DISTRIBUIDORA_E_TRANSPO
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - CHECON DISTRIBUIDORA E TRANSPO
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_FE_IMPORTADORA_E_DISTRIBUIDORA
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - FE IMPORTADORA E DISTRIBUIDORA
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_GP7_NORDESTE_DISTRIBUIDOR_DE_B
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - GP7 NORDESTE DISTRIBUIDOR DE B
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_NORSA_REFRIGERANTES_S_A
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - NORSA REFRIGERANTES S A
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_ARMAZEM_TOP_ALTO
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - ARMAZEM TOP ALTO
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_PRIME_SEAFOOD
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - PRIME SEAFOOD
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_JMT_COMERCIO_DE_DESCARTAVEIS_E
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - JMT COMERCIO DE DESCARTAVEIS E
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_KI_GELO_COMERCIO_E_FABRICACAO
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - KI GELO COMERCIO E FABRICACAO
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_QUEIJOS_FINOS_INDUSTRIA_COMER
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - QUEIJOS FINOS INDUSTRIA COMER
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_DATERRA_SPE_DISTRIBUIDORA_DE_A
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - DATERRA SPE DISTRIBUIDORA DE A
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_E_SANTOS_DE_OLIVEIRA_CARNES
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - E SANTOS DE OLIVEIRA CARNES
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_JACILENY_MAURICIO_T_SILVA_LTDA
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - JACILENY MAURICIO T SILVA LTDA
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_BRUNA_SAMPAIO
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - BRUNA SAMPAIO
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_CENTRAL_DE_ALIMENTOS_DA_BAHIA
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - CENTRAL DE ALIMENTOS DA BAHIA
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_WANESSA_NASCIMENTO_DE_JESUS
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - WANESSA NASCIMENTO DE JESUS
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_MARQUES_FAIR_INDUSTRIA_E_COMER
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - MARQUES FAIR INDUSTRIA E COMER
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_NATURAVES_INDUSTRIA_E_COMERCIO
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - NATURAVES INDUSTRIA E COMERCIO
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_ADRIANO_SOUZA_PEREIRA
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - ADRIANO SOUZA PEREIRA
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_ERISVALDO_BOMFIM_DE_OLIVEIRA
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - ERISVALDO BOMFIM DE OLIVEIRA
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_L_C_COMERCIO_DE_PRODUTOS_DE
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - L C COMERCIO DE PRODUTOS DE
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_QUEIJOS_FINOS
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - QUEIJOS FINOS
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_SOST_INDUSTRIA_C_A_LTDA
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - SOST INDUSTRIA C A LTDA
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_VINCENZO_STRAMAGLIA
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - VINCENZO STRAMAGLIA
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_AGMALDO_SANTOS_DO_NASCIMENTO_J
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - AGMALDO SANTOS DO NASCIMENTO J
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_CRISTIELE_OLIVEIRA_TRANCOSO
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - CRISTIELE OLIVEIRA TRANCOSO
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_JOAO_LUCAS_BOMFIM_DOS_SANTOS
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - JOAO LUCAS BOMFIM DOS SANTOS
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_JOSE_PAULO_DOS_SANTOS_FILHO
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - JOSE PAULO DOS SANTOS FILHO
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_MONIQUI_FERRETTI_LORENZONI_IZO
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - MONIQUI FERRETTI LORENZONI IZO
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_ROGERIO_MARINHO_DOS_SANTOS
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - ROGERIO MARINHO DOS SANTOS
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_AREA_MARKET_COMERCIO_LTDA
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - AREA MARKET COMERCIO LTDA
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_EDEN_PESCADOS_E_FRUTOS_DO_MAR
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - EDEN PESCADOS E FRUTOS DO MAR
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_L_P_DIST_GELADOS_LTDA_ME
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - L P DIST GELADOS LTDA ME
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_59_812_683_DANIEL_OLIVEIRA_DOS
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - 59 812 683 DANIEL OLIVEIRA DOS
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_ANA_LUIZA_LEONHARDT_DAVID
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - ANA LUIZA LEONHARDT DAVID
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_AUREO_ORLANDO_ACERBI
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - AUREO ORLANDO ACERBI
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_BANCO_SOFISA_S_A
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - BANCO SOFISA S A
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_CARVALHO_SORVETES_E_ALUGUEIS_L
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - CARVALHO SORVETES E ALUGUEIS L
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_IRLAN_ALVES_DE_OLIVEIRA
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - IRLAN ALVES DE OLIVEIRA
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_LUIS_ANSELMO_DE_JESUS_SANTOS
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - LUIS ANSELMO DE JESUS SANTOS
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_SINTHOTESB_SIND_TRAB_BARES_HOT
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - SINTHOTESB SIND TRAB BARES HOT
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_ANA_NERY_SALES_DOS_SANTOS
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - ANA NERY SALES DOS SANTOS
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_ARTHUR_SOUZA_GUEDES
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - ARTHUR SOUZA GUEDES
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_CABRAL_SOUSA_LTDA
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - CABRAL SOUSA LTDA
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_DELMAX_SUPERMERCADO
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - DELMAX SUPERMERCADO
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_GISLENE_APARECIDA_LANA
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - GISLENE APARECIDA LANA
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_ITALIBRAS_IMPORTACAO_EXPORTAC
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - ITALIBRAS IMPORTACAO EXPORTAC
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_LATICINIO_MAIS_VIDA_LTDA
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - LATICINIO MAIS VIDA LTDA
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_NOE_DE_OLIVEIRA_ANDRADE
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - NOE DE OLIVEIRA ANDRADE
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_SH_AIPIM_PROCESSADO_LTDA
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - SH AIPIM PROCESSADO LTDA
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_ARTHUR_HENRIQUE_SANTOS_COSTA
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - ARTHUR HENRIQUE SANTOS COSTA
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_ATTC_COMERCIO_DE_BEBIDAS_LTDA
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - ATTC COMERCIO DE BEBIDAS LTDA
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_BANCO_BOCOM_BBM_S_A
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - BANCO BOCOM BBM S A
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_COMPLASTIL_DESCARTAVEIS_LTDA
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - COMPLASTIL DESCARTAVEIS LTDA
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_FELIPE_ARNALDO_OLIVEIRA_MAGGI
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - FELIPE ARNALDO OLIVEIRA MAGGI
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_HENRIQUE_BATISTA_DOS_SANTOS_JU
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - HENRIQUE BATISTA DOS SANTOS JU
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_LEITE_MAIS_VIDA
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - LEITE MAIS VIDA
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_MARIA_DAJUDA_SILVA_CAJAZEIRA
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - MARIA DAJUDA SILVA CAJAZEIRA
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_PAULO_GURUNGA_BISPO
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - PAULO GURUNGA BISPO
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_VANESSA_SAMPAIO_DE_JESUS
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - VANESSA SAMPAIO DE JESUS
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_VITORIA_SOUZA_VIEIRA
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - VITORIA SOUZA VIEIRA
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_AGEU_LOPES_DA_SILVA
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - AGEU LOPES DA SILVA
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_BAHIANA_DISTRIBUIDO
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - BAHIANA DISTRIBUIDO
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_BENEDITA_BONFIM_DE_OLIVEIRA
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - BENEDITA BONFIM DE OLIVEIRA
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_ELIANE_RAMOS_SANTOS
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - ELIANE RAMOS SANTOS
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_EMERSON_PEREIRA_SANTOS
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - EMERSON PEREIRA SANTOS
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_ERGOS_DISTRIBUIDORA
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - ERGOS DISTRIBUIDORA
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_FABIO_REIS_DOS_SANTOS
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - FABIO REIS DOS SANTOS
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_FERNANDA_AGUIAR_DE_SOUZA
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - FERNANDA AGUIAR DE SOUZA
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_FILIPE_OTAVIO_SANTOS
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - FILIPE OTAVIO SANTOS
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_GUSTAVO_GOIS_PEIXOTO
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - GUSTAVO GOIS PEIXOTO
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_JOAO_PEDRO_ALVES_LOPES
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - JOAO PEDRO ALVES LOPES
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_LUANA_DE_JESUS_SANTOS
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - LUANA DE JESUS SANTOS
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_MIGUEL_KRAMER_BARBOSA
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - MIGUEL KRAMER BARBOSA
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_MONICA_FERREIRA_BORGES
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - MONICA FERREIRA BORGES
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_MULTIMARCAS_BEER_COMERCIO_DE_B
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - MULTIMARCAS BEER COMERCIO DE B
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_THIAGO_RIBEIRO_DE_MEDEIROS
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - THIAGO RIBEIRO DE MEDEIROS
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_ANDRE_LUIS_RAMOS_PIE
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - ANDRE LUIS RAMOS PIE
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_ARNALDO_BOMFIM_SANTOS
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - ARNALDO BOMFIM SANTOS
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_BERTHOLDI_SANTOS_LTDA
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - BERTHOLDI SANTOS LTDA
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_DAVID_ALVES_SOUZA_JUNIOR
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - DAVID ALVES SOUZA JUNIOR
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_ELIVAL_SANTOS_BARRETO
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - ELIVAL SANTOS BARRETO
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_ERNANDES_BORGES_DA_SILVA
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - ERNANDES BORGES DA SILVA
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_FELIPE_HENNING_FONSECA
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - FELIPE HENNING FONSECA
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_GB_ATACADISTAS_LTDA
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - GB ATACADISTAS LTDA
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_INGRIDE_NERES_DOS_SANTOS
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - INGRIDE NERES DOS SANTOS
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_MAXUEL_GERMANO_DOS_SANTOS
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - MAXUEL GERMANO DOS SANTOS
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_RONALDO_DE_SOUZA_SILVA
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - RONALDO DE SOUZA SILVA
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_TIELLY_BOMFIM_DE_SOUSA
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - TIELLY BOMFIM DE SOUSA
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_TRES_CORACOES_ALIMENTOS_S_A
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - TRES CORACOES ALIMENTOS S A
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_VALLENTINA_SANTOS_LIVRAMENTO
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - VALLENTINA SANTOS LIVRAMENTO
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_CHOCOSUL_DISTRIBUIDORA
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - CHOCOSUL DISTRIBUIDORA
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_CHOCOSUL_DISTRIBUIDORA_LTDA
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - CHOCOSUL DISTRIBUIDORA LTDA
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_COMERCIAL_DISKPAN_LTDA
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - COMERCIAL DISKPAN LTDA
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_GRACILIANO_DANTAS_NOBRE_FILHO
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - GRACILIANO DANTAS NOBRE FILHO
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_INDUSTRIA_COMERCIO_E_DISTRIBUI
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - INDUSTRIA COMERCIO E DISTRIBUI
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_JOSE_HENRIQUE_SALES_PRADO
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - JOSE HENRIQUE SALES PRADO
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_JURANDIR_DA_SILVA
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - JURANDIR DA SILVA
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_L_P_DISTRIBUIDORA_DE_GELADOS_L
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - L P DISTRIBUIDORA DE GELADOS L
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_LEONARDO_DE_MIRANDA_SANTOS
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - LEONARDO DE MIRANDA SANTOS
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_MATHEUS_FELIPE_DOS_SANTOS
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - MATHEUS FELIPE DOS SANTOS
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_ROBSON_DOS_SANTOS_SILVA
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - ROBSON DOS SANTOS SILVA
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_SOUZA_CRUZ_LTDA
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - SOUZA CRUZ LTDA
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_WIRLIS_DOS_SANTOS_CESAR
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - WIRLIS DOS SANTOS CESAR
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_ESCLUDERE_REFERENCIA_INSS
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum: []
+    referencia_empresa_contem_algum:
+    - INSS

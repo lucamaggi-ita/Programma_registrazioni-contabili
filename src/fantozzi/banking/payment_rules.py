@@ -14,14 +14,17 @@ from fantozzi.csv_utils import sniff_delimiter
 
 
 STATUS_CLASSIFICADO = "CLASSIFICADO_POR_REGRA"
+STATUS_EXCLUIDO = "EXCLUIDO_POR_REGRA"
 STATUS_SEM_REGRA = "REVISAR_SEM_REGRA"
 STATUS_MULTIPLAS_REGRAS = "REVISAR_MULTIPLAS_REGRAS"
 
 MOTIVO_REGRA_UNICA = "REGRA_UNICA_EXPLICITA"
+MOTIVO_EXCLUSAO_REGRA = "EXCLUSAO_OPERADOR_REGRA"
 MOTIVO_SEM_REGRA = "SEM_REGRA"
 MOTIVO_MULTIPLAS_REGRAS = "MAIS_DE_UMA_REGRA"
 
 MATCH_MODE = "TODAS_AS_CONDICOES_NAO_VAZIAS"
+EXCLUSION_ACTIONS = {"XML", "ESCLUDERE"}
 
 CLASSIFICATION_HEADERS = [
     "status_classificacao",
@@ -70,6 +73,13 @@ class PaymentRule:
 
 
 @dataclass(frozen=True)
+class PaymentExclusionRule:
+    regra_id: str
+    acao: str
+    match: dict[str, tuple[str, ...]]
+
+
+@dataclass(frozen=True)
 class PaymentClassificationResult:
     status_classificacao: str
     conta_id: str
@@ -79,6 +89,7 @@ class PaymentClassificationResult:
     regra_id: str
     motivo: str
     regras_candidatas: tuple[str, ...]
+    acao: str = ""
 
 
 @dataclass(frozen=True)
@@ -127,6 +138,19 @@ def load_payment_rules(path: Path | str) -> list[PaymentRule]:
     return [_rule_from_data(item, index) for index, item in enumerate(raw_rules, start=1)]
 
 
+def load_payment_exclusion_rules(path: Path | str) -> list[PaymentExclusionRule]:
+    rules_path = Path(path)
+    with rules_path.open(encoding="utf-8") as file:
+        data = yaml.safe_load(file) or {}
+    raw_rules = data.get("exclusoes", [])
+    if not isinstance(raw_rules, list):
+        raise PaymentRulesError("Campo 'exclusoes' deve ser uma lista.")
+    return [
+        _exclusion_rule_from_data(item, index)
+        for index, item in enumerate(raw_rules, start=1)
+    ]
+
+
 def audit_payment_rules_file(path: Path | str) -> PaymentRulesAuditResult:
     rules_path = Path(path)
     with rules_path.open(encoding="utf-8") as file:
@@ -134,6 +158,9 @@ def audit_payment_rules_file(path: Path | str) -> PaymentRulesAuditResult:
     raw_rules = data.get("regras", [])
     if not isinstance(raw_rules, list):
         raise PaymentRulesError("Campo 'regras' deve ser uma lista.")
+    raw_exclusions = data.get("exclusoes", [])
+    if not isinstance(raw_exclusions, list):
+        raise PaymentRulesError("Campo 'exclusoes' deve ser uma lista.")
 
     issues: list[PaymentRulesAuditIssue] = []
     if "fonte_manual" in data:
@@ -192,6 +219,41 @@ def audit_payment_rules_file(path: Path | str) -> PaymentRulesAuditResult:
         _audit_suspicious_rule(parsed_rule, issues)
 
     _audit_conflicting_aliases(parsed_rules, issues)
+
+    parsed_exclusions: list[PaymentExclusionRule] = []
+    for index, raw_rule in enumerate(raw_exclusions, start=1):
+        regra_id = _raw_rule_id(raw_rule, index)
+        if not isinstance(raw_rule, dict):
+            issues.append(
+                PaymentRulesAuditIssue(
+                    regra_id=regra_id,
+                    severidade="ERRO",
+                    categoria="EXCLUSAO_INVALIDA",
+                    mensagem="Regra de exclusao deve ser um objeto.",
+                )
+            )
+            continue
+        _audit_forbidden_origin_fields(raw_rule, regra_id, issues)
+        if any(field in raw_rule for field in ("conta_id", "conta_nome", "dre_linha_id", "entra_dre")):
+            issues.append(
+                PaymentRulesAuditIssue(
+                    regra_id=regra_id,
+                    severidade="ERRO",
+                    categoria="EXCLUSAO_COM_DESTINO_CONTABIL",
+                    mensagem="Exclusoes XML/ESCLUDERE nao podem ter conta ou DRE.",
+                )
+            )
+        try:
+            parsed_exclusions.append(_exclusion_rule_from_data(raw_rule, index))
+        except PaymentRulesError as exc:
+            issues.append(
+                PaymentRulesAuditIssue(
+                    regra_id=regra_id,
+                    severidade="ERRO",
+                    categoria="EXCLUSAO_INVALIDA",
+                    mensagem=str(exc),
+                )
+            )
 
     total_erros = sum(1 for issue in issues if issue.severidade == "ERRO")
     total_alertas = sum(1 for issue in issues if issue.severidade == "ALERTA")
@@ -290,7 +352,38 @@ def validate_payment_rules(
 def classify_payment_receipt(
     receipt: dict[str, str],
     rules: list[PaymentRule],
+    exclusion_rules: list[PaymentExclusionRule] | None = None,
 ) -> PaymentClassificationResult:
+    exclusion_candidates = [
+        rule for rule in (exclusion_rules or []) if _matches_rule(receipt, rule)
+    ]
+    if exclusion_candidates:
+        candidate_ids = tuple(rule.regra_id for rule in exclusion_candidates)
+        candidate_actions = {rule.acao for rule in exclusion_candidates}
+        if len(candidate_actions) > 1:
+            return PaymentClassificationResult(
+                status_classificacao=STATUS_MULTIPLAS_REGRAS,
+                conta_id="",
+                conta_nome="",
+                dre_linha_id="",
+                entra_dre=None,
+                regra_id="",
+                motivo=MOTIVO_MULTIPLAS_REGRAS,
+                regras_candidatas=candidate_ids,
+            )
+        rule = exclusion_candidates[0]
+        return PaymentClassificationResult(
+            status_classificacao=STATUS_EXCLUIDO,
+            conta_id="",
+            conta_nome="",
+            dre_linha_id="",
+            entra_dre=False,
+            regra_id=rule.regra_id,
+            motivo=MOTIVO_EXCLUSAO_REGRA,
+            regras_candidatas=candidate_ids,
+            acao=rule.acao,
+        )
+
     candidates = [rule for rule in rules if _matches_rule(receipt, rule)]
     candidate_ids = tuple(rule.regra_id for rule in candidates)
     if not candidates:
@@ -443,6 +536,35 @@ def _rule_from_data(data: Any, index: int) -> PaymentRule:
         entra_dre=entra_dre,
         match=match,
     )
+
+
+def _exclusion_rule_from_data(data: Any, index: int) -> PaymentExclusionRule:
+    if not isinstance(data, dict):
+        raise PaymentRulesError(f"Exclusao #{index} deve ser um objeto.")
+
+    regra_id = str(data.get("regra_id") or data.get("id") or f"EXCLUSAO_{index:03d}")
+    acao = str(data.get("acao") or "").strip().upper()
+    match_data = data.get("match")
+    if acao not in EXCLUSION_ACTIONS:
+        raise PaymentRulesError(f"{regra_id}: acao de exclusao invalida: {acao}.")
+    if any(data.get(field) for field in ("conta_id", "conta_nome", "dre_linha_id", "entra_dre")):
+        raise PaymentRulesError(f"{regra_id}: exclusao nao deve ter conta ou DRE.")
+    if not isinstance(match_data, dict):
+        raise PaymentRulesError(f"{regra_id}: match deve ser um objeto.")
+    if match_data.get("modo") != MATCH_MODE:
+        raise PaymentRulesError(f"{regra_id}: match.modo deve ser {MATCH_MODE}.")
+
+    match: dict[str, tuple[str, ...]] = {}
+    for condition in CONDITION_FIELDS:
+        aliases = tuple(
+            normalized
+            for item in _as_list(match_data.get(condition))
+            if (normalized := normalize_match_text(item))
+        )
+        match[condition] = aliases
+    if not any(match.values()):
+        raise PaymentRulesError(f"{regra_id}: ao menos uma condicao de match e obrigatoria.")
+    return PaymentExclusionRule(regra_id=regra_id, acao=acao, match=match)
 
 
 def _raw_rule_id(raw_rule: object, index: int) -> str:
