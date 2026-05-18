@@ -11,6 +11,10 @@ from fantozzi.auditoria_relatorios_gerenciais_ok import (
     console_lines as auditoria_relatorios_ok_console_lines,
 )
 from fantozzi.banking.normalizer import import_bank_files
+from fantozzi.banking.payment_classification_run import (
+    PaymentClassificationRunError,
+    execute_payment_classification_run,
+)
 from fantozzi.banking.payment_rules import (
     PaymentRulesError,
     classify_payment_receipts_file,
@@ -117,6 +121,8 @@ DEFAULT_REGRAS_COMPROVANTES = (
     PROJECT_ROOT / "config" / "regras_classificacao_comprovantes.yaml"
 )
 DEFAULT_MAPEAMENTO_DRE_PATH = PROJECT_ROOT / "config" / "mapeamento_dre.yaml"
+DEFAULT_COMPROVANTES_REAL_INPUT = PROJECT_ROOT / "bank_raw" / "_audit" / "fase_13c"
+DEFAULT_COMPROVANTES_REAL_REPORTS = PROJECT_ROOT / "reports" / "comprovantes_classificacao"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -299,6 +305,49 @@ def build_parser() -> argparse.ArgumentParser:
     )
     classificar_comprovantes.set_defaults(
         func=classificar_comprovantes_pagamento_command
+    )
+
+    classificar_comprovantes_real = subparsers.add_parser(
+        "executar-classificacao-comprovantes-real",
+        help="Executa Fase 13S para comprovantes reais normalizados.",
+        description=(
+            "Descobre payment_receipts_normalized.csv por mes/CNPJ e classifica "
+            "somente por regras declaradas. Nao executa matching bancario, nao "
+            "infere contas e nao altera DRE, Fase 9 ou lancamentos definitivos."
+        ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    classificar_comprovantes_real.add_argument(
+        "--entrada-raiz",
+        default=str(DEFAULT_COMPROVANTES_REAL_INPUT),
+        help="Pasta raiz onde procurar payment_receipts_normalized.csv.",
+    )
+    classificar_comprovantes_real.add_argument(
+        "--saida-raiz",
+        default=str(DEFAULT_COMPROVANTES_REAL_REPORTS),
+        help="Pasta raiz dos reports da Fase 13S; a run sera criada em runs/<run_id>.",
+    )
+    classificar_comprovantes_real.add_argument(
+        "--regras",
+        default=str(DEFAULT_REGRAS_COMPROVANTES),
+        help="YAML com regras declaradas de comprovantes.",
+    )
+    classificar_comprovantes_real.add_argument(
+        "--plano-contas",
+        default=str(DEFAULT_PLANO_CONTAS),
+        help="Arquivo YAML do plano de contas gerencial.",
+    )
+    classificar_comprovantes_real.add_argument(
+        "--mapeamento-dre",
+        default=str(DEFAULT_MAPEAMENTO_DRE_PATH),
+        help="Arquivo YAML de mapeamento das contas para linhas DRE.",
+    )
+    classificar_comprovantes_real.add_argument(
+        "--run-id",
+        help="Run id opcional. Se omitido, usa YYYY-MM-DD_NNN.",
+    )
+    classificar_comprovantes_real.set_defaults(
+        func=executar_classificacao_comprovantes_real_command
     )
 
     diagnosticar_excel = subparsers.add_parser(
@@ -1174,6 +1223,35 @@ def classificar_comprovantes_pagamento_command(args: argparse.Namespace) -> int:
     print(f"Sem regra: {manifest.review_without_rule_count}")
     print(f"Multiplas regras: {manifest.review_multiple_rules_count}")
     print(f"Saida: {manifest.output_dir}")
+    print("[INFO] Nenhuma conta foi inferida sem regra explicita.")
+    print("[INFO] Lancamentos definitivos, DRE e Fase 9 nao foram alterados.")
+    return 0
+
+
+def executar_classificacao_comprovantes_real_command(args: argparse.Namespace) -> int:
+    try:
+        manifest = execute_payment_classification_run(
+            entrada_raiz=Path(args.entrada_raiz),
+            saida_raiz=Path(args.saida_raiz),
+            regras_path=Path(args.regras),
+            plano_contas_path=Path(args.plano_contas),
+            mapeamento_dre_path=Path(args.mapeamento_dre),
+            run_id=args.run_id,
+        )
+    except (OSError, PaymentRulesError, PaymentClassificationRunError, ValueError) as exc:
+        print(f"[ERRO] Nao foi possivel executar Fase 13S: {exc}")
+        return 1
+
+    print("[OK] Fase 13S concluida: comprovantes classificados por regras.")
+    print(f"Run: {manifest.run_id}")
+    print(f"CNPJs: {', '.join(manifest.cnpjs_processados)}")
+    print(f"Meses: {', '.join(manifest.meses_processados)}")
+    print(f"Comprovantes: {manifest.total_comprovantes}")
+    print(f"Classificados: {manifest.total_classificados}")
+    print(f"A revisar sem regra: {manifest.total_a_revisar_sem_regra}")
+    print(f"A revisar multiplas regras: {manifest.total_a_revisar_multiplas_regras}")
+    print(f"Saida: {manifest.output_dir}")
+    print("[INFO] matching_automatico_executado=false")
     print("[INFO] Nenhuma conta foi inferida sem regra explicita.")
     print("[INFO] Lancamentos definitivos, DRE e Fase 9 nao foram alterados.")
     return 0

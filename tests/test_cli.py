@@ -371,6 +371,27 @@ def test_parser_accepts_gerar_dre_gerencial_ok_provisoria_command():
     assert args.relatorio == "reports/importacao_real/dre_gerencial_ok_provisoria.txt"
 
 
+def test_parser_accepts_executar_classificacao_comprovantes_real_command():
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "executar-classificacao-comprovantes-real",
+            "--entrada-raiz",
+            "bank_raw/_audit/fase_13c",
+            "--saida-raiz",
+            "reports/comprovantes_classificacao",
+            "--run-id",
+            "2026-05-18_001",
+        ]
+    )
+
+    assert args.command == "executar-classificacao-comprovantes-real"
+    assert args.entrada_raiz == "bank_raw/_audit/fase_13c"
+    assert args.saida_raiz == "reports/comprovantes_classificacao"
+    assert args.run_id == "2026-05-18_001"
+
+
 def test_general_help_returns_zero_and_lists_commands(capsys):
     with pytest.raises(SystemExit) as exc_info:
         main(["--help"])
@@ -395,6 +416,7 @@ def test_general_help_returns_zero_and_lists_commands(capsys):
     assert "gerar-relatorios-gerenciais-ok-provisorios" in captured.out
     assert "auditar-relatorios-gerenciais-ok-provisorios" in captured.out
     assert "gerar-dre-gerencial-ok-provisoria" in captured.out
+    assert "executar-classificacao-comprovantes-real" in captured.out
     assert "reprocessar-importacao-real" in captured.out
 
 

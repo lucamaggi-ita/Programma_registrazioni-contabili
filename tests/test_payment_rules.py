@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import csv
 import json
+from datetime import date
 from pathlib import Path
 
 import pytest
 
+from fantozzi.banking.payment_classification_run import (
+    execute_payment_classification_run,
+)
 from fantozzi.banking.payment_rules import (
     STATUS_CLASSIFICADO,
     STATUS_MULTIPLAS_REGRAS,
@@ -316,6 +320,75 @@ def test_parser_accepts_classificar_comprovantes_pagamento_command():
     assert args.saida == "output/fase_13h"
 
 
+def test_execute_payment_classification_run_generates_13s_package(tmp_path):
+    plano_path, mapeamento_path = _write_plan_and_mapping(tmp_path)
+    rules_path = _write_rules(
+        tmp_path,
+        [
+            _rule(
+                "REGRA_EMBASA",
+                "4.01.012",
+                "Agua e Esgoto",
+                "06.02",
+                beneficiary=["EMBASA"],
+                reference=["AGUA"],
+            )
+        ],
+    )
+    input_dir = (
+        tmp_path
+        / "bank_raw"
+        / "_audit"
+        / "fase_13c"
+        / "2026-02"
+        / "08884180000123"
+        / "13a_import"
+        / "08884180000123"
+    )
+    input_dir.mkdir(parents=True)
+    _write_receipts_csv_to(
+        input_dir / "payment_receipts_normalized.csv",
+        [
+            _receipt("RC-1", "Embasa", "Agua mensal"),
+            _receipt("RC-2", "Fornecedor", "Sem regra"),
+        ],
+    )
+
+    manifest = execute_payment_classification_run(
+        entrada_raiz=tmp_path / "bank_raw" / "_audit" / "fase_13c",
+        saida_raiz=tmp_path / "reports" / "comprovantes_classificacao",
+        regras_path=rules_path,
+        plano_contas_path=plano_path,
+        mapeamento_dre_path=mapeamento_path,
+        today=date(2026, 5, 18),
+    )
+
+    output_dir = tmp_path / "reports" / "comprovantes_classificacao" / "runs" / "2026-05-18_001"
+    classified = _read_csv(output_dir / "comprovantes_classificados.csv")
+    review = _read_csv(output_dir / "comprovantes_a_revisar.csv")
+    summary_account = _read_csv(output_dir / "resumo_por_conta.csv")
+    summary_cnpj_month = _read_csv(output_dir / "resumo_por_cnpj_mes.csv")
+    manifest_json = json.loads(
+        (output_dir / "manifest_classificacao_comprovantes.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    assert manifest.run_id == "2026-05-18_001"
+    assert manifest.total_comprovantes == 2
+    assert manifest.total_classificados == 1
+    assert classified[0]["conta_id"] == "4.01.012"
+    assert review[0]["status_classificacao"] == STATUS_SEM_REGRA
+    assert review[0]["DECISAO_OPERADOR"] == ""
+    assert summary_account[0]["quantidade"] == "1"
+    assert summary_account[0]["valor_total"] == "20.00"
+    assert summary_cnpj_month[0]["total_comprovantes"] == "2"
+    assert manifest_json["fase"] == "13S"
+    assert manifest_json["modo"] == "provisorio"
+    assert manifest_json["matching_automatico_executado"] is False
+    assert manifest_json["nao_inferir_conta"] is True
+
+
 def _rule(
     regra_id: str,
     conta_id: str,
@@ -420,11 +493,15 @@ def _receipt(payment_id: str, beneficiary: str, reference: str) -> dict[str, str
 
 def _write_receipts_csv(tmp_path: Path, rows: list[dict[str, str]]) -> Path:
     path = tmp_path / "payment_receipts_normalized.csv"
+    _write_receipts_csv_to(path, rows)
+    return path
+
+
+def _write_receipts_csv_to(path: Path, rows: list[dict[str, str]]) -> None:
     with path.open("w", encoding="utf-8-sig", newline="") as file:
         writer = csv.DictWriter(file, fieldnames=list(rows[0].keys()), delimiter=";")
         writer.writeheader()
         writer.writerows(rows)
-    return path
 
 
 def _read_csv(path: Path) -> list[dict[str, str]]:

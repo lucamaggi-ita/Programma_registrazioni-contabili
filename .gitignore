@@ -13,6 +13,7 @@ bank_raw/
 output/*.xlsx
 output/*.bak
 reports/*.txt
+reports/comprovantes_classificacao/
 *.zip
 *.log
 .DS_Store
