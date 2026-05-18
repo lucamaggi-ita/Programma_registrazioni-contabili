@@ -12,6 +12,10 @@ from fantozzi.auditoria_relatorios_gerenciais_ok import (
 )
 from fantozzi.banking.matching import match_bank_files
 from fantozzi.banking.normalizer import import_bank_files
+from fantozzi.banking.payment_rules import (
+    PaymentRulesError,
+    classify_payment_receipts_file,
+)
 from fantozzi.chart_of_accounts import ChartOfAccounts
 from fantozzi.classification_candidates import (
     ClassificationCandidatesError,
@@ -110,6 +114,10 @@ DEFAULT_PLANO_CONTAS = PROJECT_ROOT / "config" / "plano_contas_gerencial.yaml"
 DEFAULT_REGRAS_PRODUTOS = (
     PROJECT_ROOT / "config" / "regras_classificacao_produtos.yaml"
 )
+DEFAULT_REGRAS_COMPROVANTES = (
+    PROJECT_ROOT / "config" / "regras_classificacao_comprovantes.yaml"
+)
+DEFAULT_MAPEAMENTO_DRE_PATH = PROJECT_ROOT / "config" / "mapeamento_dre.yaml"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -289,6 +297,45 @@ def build_parser() -> argparse.ArgumentParser:
         help="Janela maxima de dias para match provavel por valor/data.",
     )
     matching_bancario.set_defaults(func=executar_matching_bancario_command)
+
+    classificar_comprovantes = subparsers.add_parser(
+        "classificar-comprovantes-pagamento",
+        help="Classifica comprovantes por regras declaradas pelo operador.",
+        description=(
+            "Le payment_receipts_normalized.csv e aplica somente regras "
+            "explicitas aprovadas pelo operador. Sem regra ou conflito vai "
+            "para revisao; nao altera DRE, Fase 9 ou lancamentos definitivos."
+        ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    classificar_comprovantes.add_argument(
+        "--comprovantes",
+        required=True,
+        help="CSV payment_receipts_normalized.csv gerado pela Fase 13A.",
+    )
+    classificar_comprovantes.add_argument(
+        "--regras",
+        default=str(DEFAULT_REGRAS_COMPROVANTES),
+        help="YAML com regras declaradas de comprovantes.",
+    )
+    classificar_comprovantes.add_argument(
+        "--plano-contas",
+        default=str(DEFAULT_PLANO_CONTAS),
+        help="Arquivo YAML do plano de contas gerencial.",
+    )
+    classificar_comprovantes.add_argument(
+        "--mapeamento-dre",
+        default=str(DEFAULT_MAPEAMENTO_DRE_PATH),
+        help="Arquivo YAML de mapeamento das contas para linhas DRE.",
+    )
+    classificar_comprovantes.add_argument(
+        "--saida",
+        required=True,
+        help="Pasta de saida dos CSV/manifest de classificacao.",
+    )
+    classificar_comprovantes.set_defaults(
+        func=classificar_comprovantes_pagamento_command
+    )
 
     diagnosticar_excel = subparsers.add_parser(
         "diagnosticar-excel",
@@ -1170,6 +1217,30 @@ def executar_matching_bancario_command(args: argparse.Namespace) -> int:
     print(f"Comprovantes sem match: {manifest.unmatched_receipt_count}")
     print(f"Saida: {manifest.output_dir}")
     print("[INFO] Lancamentos definitivos, DRE e classificacao nao foram alterados.")
+    return 0
+
+
+def classificar_comprovantes_pagamento_command(args: argparse.Namespace) -> int:
+    try:
+        manifest = classify_payment_receipts_file(
+            comprovantes_path=Path(args.comprovantes),
+            regras_path=Path(args.regras),
+            plano_contas_path=Path(args.plano_contas),
+            mapeamento_dre_path=Path(args.mapeamento_dre),
+            output_dir=Path(args.saida),
+        )
+    except (OSError, PaymentRulesError, ValueError) as exc:
+        print(f"[ERRO] Nao foi possivel classificar comprovantes: {exc}")
+        return 1
+
+    print("[OK] Classificacao de comprovantes por regras concluida.")
+    print(f"Comprovantes: {manifest.receipt_count}")
+    print(f"Classificados: {manifest.classified_count}")
+    print(f"Sem regra: {manifest.review_without_rule_count}")
+    print(f"Multiplas regras: {manifest.review_multiple_rules_count}")
+    print(f"Saida: {manifest.output_dir}")
+    print("[INFO] Nenhuma conta foi inferida sem regra explicita.")
+    print("[INFO] Lancamentos definitivos, DRE e Fase 9 nao foram alterados.")
     return 0
 
 
