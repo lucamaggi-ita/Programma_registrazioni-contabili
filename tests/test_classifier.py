@@ -353,4 +353,4 @@ def test_expense_energia_eletrica(expense_clf):
 
 def test_expense_fgts(expense_clf):
     result = expense_clf.classify("fgts guia")
-    assert result.conta.id == "3.03.001"
+    assert result.conta.id == "3.01.020"

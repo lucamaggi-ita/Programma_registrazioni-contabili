@@ -82,8 +82,8 @@ regras:
       - alelo
       - vr
 
-  - conta_id: "3.03.001"
-    conta_nome: "FGTS"
+  - conta_id: "3.01.020"
+    conta_nome: "FGTS sobre Folha / FGTS Funcionarios"
     aliases:
       - fgts
       - guia fgts
