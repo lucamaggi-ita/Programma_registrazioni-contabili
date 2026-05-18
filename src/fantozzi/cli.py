@@ -15,9 +15,17 @@ from fantozzi.banking.payment_classification_run import (
     PaymentClassificationRunError,
     execute_payment_classification_run,
 )
+from fantozzi.banking.payment_review_package import (
+    PaymentReviewPackageError,
+    console_lines as comprovantes_review_console_lines,
+    gerar_pacote_revisao_comprovantes,
+)
 from fantozzi.banking.payment_rules import (
     PaymentRulesError,
+    audit_payment_rules_file,
     classify_payment_receipts_file,
+    payment_rules_audit_console_lines,
+    payment_rules_audit_report_text,
 )
 from fantozzi.chart_of_accounts import ChartOfAccounts
 from fantozzi.classification_candidates import (
@@ -307,6 +315,29 @@ def build_parser() -> argparse.ArgumentParser:
         func=classificar_comprovantes_pagamento_command
     )
 
+    auditar_regras_comprovantes = subparsers.add_parser(
+        "auditar-regras-comprovantes",
+        help="Audita YAML de regras de comprovantes sem alterar arquivos.",
+        description=(
+            "Le regras_classificacao_comprovantes.yaml em modo somente leitura "
+            "e aponta regras invalidas, campos herdados de planilha, IDs baseados "
+            "em linha, conflitos de criterio e condicoes potencialmente restritivas."
+        ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    auditar_regras_comprovantes.add_argument(
+        "--regras",
+        default=str(DEFAULT_REGRAS_COMPROVANTES),
+        help="YAML com regras declaradas de comprovantes.",
+    )
+    auditar_regras_comprovantes.add_argument(
+        "--relatorio",
+        help="Arquivo TXT opcional para salvar o relatorio da auditoria.",
+    )
+    auditar_regras_comprovantes.set_defaults(
+        func=auditar_regras_comprovantes_command
+    )
+
     classificar_comprovantes_real = subparsers.add_parser(
         "executar-classificacao-comprovantes-real",
         help="Executa Fase 13S para comprovantes reais normalizados.",
@@ -348,6 +379,37 @@ def build_parser() -> argparse.ArgumentParser:
     )
     classificar_comprovantes_real.set_defaults(
         func=executar_classificacao_comprovantes_real_command
+    )
+
+    pacote_revisao_comprovantes = subparsers.add_parser(
+        "gerar-pacote-revisao-comprovantes",
+        help="Gera XLSX/TXT 13T para revisao manual dos comprovantes.",
+        description=(
+            "Le comprovantes_a_revisar.csv de uma run 13S e gera pacote manual "
+            "de revisao. SISPAG e marcado como FORA_ESCOPO_SISPAG e separado "
+            "da aba operacional. Nao cria regras YAML e nao executa matching."
+        ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    pacote_revisao_comprovantes.add_argument(
+        "--run-dir",
+        required=True,
+        help="Diretorio da run 13S com comprovantes_a_revisar.csv.",
+    )
+    pacote_revisao_comprovantes.add_argument(
+        "--csv-revisao",
+        help="CSV alternativo de comprovantes a revisar.",
+    )
+    pacote_revisao_comprovantes.add_argument(
+        "--saida-xlsx",
+        help="Caminho do XLSX de saida. Padrao: dentro do run-dir.",
+    )
+    pacote_revisao_comprovantes.add_argument(
+        "--relatorio",
+        help="Caminho do TXT de acompanhamento. Padrao: dentro do run-dir.",
+    )
+    pacote_revisao_comprovantes.set_defaults(
+        func=gerar_pacote_revisao_comprovantes_command
     )
 
     diagnosticar_excel = subparsers.add_parser(
@@ -1228,6 +1290,26 @@ def classificar_comprovantes_pagamento_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def auditar_regras_comprovantes_command(args: argparse.Namespace) -> int:
+    try:
+        result = audit_payment_rules_file(Path(args.regras))
+        if args.relatorio:
+            Path(args.relatorio).parent.mkdir(parents=True, exist_ok=True)
+            Path(args.relatorio).write_text(
+                payment_rules_audit_report_text(result),
+                encoding="utf-8",
+            )
+    except (OSError, PaymentRulesError, ValueError) as exc:
+        print(f"[ERRO] Nao foi possivel auditar regras de comprovantes: {exc}")
+        return 1
+
+    for line in payment_rules_audit_console_lines(result):
+        print(line)
+    if args.relatorio:
+        print(f"Relatorio: {args.relatorio}")
+    return 0
+
+
 def executar_classificacao_comprovantes_real_command(args: argparse.Namespace) -> int:
     try:
         manifest = execute_payment_classification_run(
@@ -1254,6 +1336,23 @@ def executar_classificacao_comprovantes_real_command(args: argparse.Namespace) -
     print("[INFO] matching_automatico_executado=false")
     print("[INFO] Nenhuma conta foi inferida sem regra explicita.")
     print("[INFO] Lancamentos definitivos, DRE e Fase 9 nao foram alterados.")
+    return 0
+
+
+def gerar_pacote_revisao_comprovantes_command(args: argparse.Namespace) -> int:
+    try:
+        result = gerar_pacote_revisao_comprovantes(
+            Path(args.run_dir),
+            csv_revisao=Path(args.csv_revisao) if args.csv_revisao else None,
+            xlsx_path=Path(args.saida_xlsx) if args.saida_xlsx else None,
+            report_path=Path(args.relatorio) if args.relatorio else None,
+        )
+    except (OSError, PaymentReviewPackageError, ValueError) as exc:
+        print(f"[ERRO] Nao foi possivel gerar pacote 13T: {exc}")
+        return 1
+
+    for line in comprovantes_review_console_lines(result):
+        print(line)
     return 0
 
 

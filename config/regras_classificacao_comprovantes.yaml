@@ -27,11 +27,7 @@ regras:
     modo: TODAS_AS_CONDICOES_NAO_VAZIAS
     beneficiario_favorecido_contem_algum:
     - PJBANK PAGAMENTOS S A
-    referencia_empresa_contem_algum:
-    - redes sociais
-    - facebook
-    - xadrez
-    - pubblicitá
+    referencia_empresa_contem_algum: []
 - regra_id: COMPROVANTE_LINHA_003
   origem_linha_planilha: 3
   conta_id: 5.01.003
@@ -164,8 +160,7 @@ regras:
     modo: TODAS_AS_CONDICOES_NAO_VAZIAS
     beneficiario_favorecido_contem_algum:
     - EUDES BRAGA NASCIMENTO
-    referencia_empresa_contem_algum:
-    - coco verde
+    referencia_empresa_contem_algum: []
 - regra_id: COMPROVANTE_LINHA_015
   origem_linha_planilha: 15
   conta_id: 8.01.003

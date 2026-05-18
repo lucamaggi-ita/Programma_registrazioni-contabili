@@ -392,6 +392,27 @@ def test_parser_accepts_executar_classificacao_comprovantes_real_command():
     assert args.run_id == "2026-05-18_001"
 
 
+def test_parser_accepts_gerar_pacote_revisao_comprovantes_command():
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "gerar-pacote-revisao-comprovantes",
+            "--run-dir",
+            "reports/comprovantes_classificacao/runs/2026-05-18_001",
+            "--saida-xlsx",
+            "reports/comprovantes_classificacao/runs/2026-05-18_001/pacote.xlsx",
+            "--relatorio",
+            "reports/comprovantes_classificacao/runs/2026-05-18_001/pacote.txt",
+        ]
+    )
+
+    assert args.command == "gerar-pacote-revisao-comprovantes"
+    assert args.run_dir == "reports/comprovantes_classificacao/runs/2026-05-18_001"
+    assert args.saida_xlsx.endswith("pacote.xlsx")
+    assert args.relatorio.endswith("pacote.txt")
+
+
 def test_general_help_returns_zero_and_lists_commands(capsys):
     with pytest.raises(SystemExit) as exc_info:
         main(["--help"])
@@ -416,7 +437,9 @@ def test_general_help_returns_zero_and_lists_commands(capsys):
     assert "gerar-relatorios-gerenciais-ok-provisorios" in captured.out
     assert "auditar-relatorios-gerenciais-ok-provisorios" in captured.out
     assert "gerar-dre-gerencial-ok-provisoria" in captured.out
+    assert "auditar-regras-comprovantes" in captured.out
     assert "executar-classificacao-comprovantes-real" in captured.out
+    assert "gerar-pacote-revisao-comprovantes" in captured.out
     assert "reprocessar-importacao-real" in captured.out
 
 

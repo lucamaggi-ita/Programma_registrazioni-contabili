@@ -93,6 +93,23 @@ class PaymentClassificationManifest:
     generated_files: dict[str, str]
 
 
+@dataclass(frozen=True)
+class PaymentRulesAuditIssue:
+    regra_id: str
+    severidade: str
+    categoria: str
+    mensagem: str
+
+
+@dataclass(frozen=True)
+class PaymentRulesAuditResult:
+    regras_path: Path
+    total_regras: int
+    total_erros: int
+    total_alertas: int
+    issues: tuple[PaymentRulesAuditIssue, ...]
+
+
 def normalize_match_text(value: object) -> str:
     normalized = unicodedata.normalize("NFKD", "" if value is None else str(value))
     ascii_text = "".join(ch for ch in normalized if not unicodedata.combining(ch))
@@ -108,6 +125,124 @@ def load_payment_rules(path: Path | str) -> list[PaymentRule]:
     if not isinstance(raw_rules, list):
         raise PaymentRulesError("Campo 'regras' deve ser uma lista.")
     return [_rule_from_data(item, index) for index, item in enumerate(raw_rules, start=1)]
+
+
+def audit_payment_rules_file(path: Path | str) -> PaymentRulesAuditResult:
+    rules_path = Path(path)
+    with rules_path.open(encoding="utf-8") as file:
+        data = yaml.safe_load(file) or {}
+    raw_rules = data.get("regras", [])
+    if not isinstance(raw_rules, list):
+        raise PaymentRulesError("Campo 'regras' deve ser uma lista.")
+
+    issues: list[PaymentRulesAuditIssue] = []
+    if "fonte_manual" in data:
+        issues.append(
+            PaymentRulesAuditIssue(
+                regra_id="__YAML__",
+                severidade="ALERTA",
+                categoria="REFERENCIA_PLANILHA",
+                mensagem="Campo top-level fonte_manual referencia planilha externa.",
+            )
+        )
+
+    parsed_rules: list[PaymentRule] = []
+    for index, raw_rule in enumerate(raw_rules, start=1):
+        regra_id = _raw_rule_id(raw_rule, index)
+        if not isinstance(raw_rule, dict):
+            issues.append(
+                PaymentRulesAuditIssue(
+                    regra_id=regra_id,
+                    severidade="ERRO",
+                    categoria="REGRA_INVALIDA",
+                    mensagem="Regra deve ser um objeto.",
+                )
+            )
+            continue
+
+        _audit_forbidden_origin_fields(raw_rule, regra_id, issues)
+        _audit_raw_match_text(raw_rule, regra_id, issues)
+        if re.fullmatch(r"COMPROVANTE_LINHA_\d+", regra_id):
+            issues.append(
+                PaymentRulesAuditIssue(
+                    regra_id=regra_id,
+                    severidade="ALERTA",
+                    categoria="REGRA_ID_BASEADO_EM_LINHA",
+                    mensagem=(
+                        "regra_id depende da posicao na planilha; identidade "
+                        "operacional deveria derivar do criterio aprovado."
+                    ),
+                )
+            )
+
+        try:
+            parsed_rule = _rule_from_data(raw_rule, index)
+        except PaymentRulesError as exc:
+            issues.append(
+                PaymentRulesAuditIssue(
+                    regra_id=regra_id,
+                    severidade="ERRO",
+                    categoria="REGRA_INVALIDA",
+                    mensagem=str(exc),
+                )
+            )
+            continue
+
+        parsed_rules.append(parsed_rule)
+        _audit_suspicious_rule(parsed_rule, issues)
+
+    _audit_conflicting_aliases(parsed_rules, issues)
+
+    total_erros = sum(1 for issue in issues if issue.severidade == "ERRO")
+    total_alertas = sum(1 for issue in issues if issue.severidade == "ALERTA")
+    return PaymentRulesAuditResult(
+        regras_path=rules_path,
+        total_regras=len(raw_rules),
+        total_erros=total_erros,
+        total_alertas=total_alertas,
+        issues=tuple(issues),
+    )
+
+
+def payment_rules_audit_report_text(result: PaymentRulesAuditResult) -> str:
+    lines = [
+        "Auditoria de regras de comprovantes",
+        f"Arquivo: {result.regras_path}",
+        f"Regras: {result.total_regras}",
+        f"Erros: {result.total_erros}",
+        f"Alertas: {result.total_alertas}",
+        "",
+    ]
+    if not result.issues:
+        lines.append("Nenhum problema encontrado.")
+        return "\n".join(lines) + "\n"
+
+    lines.append("Problemas encontrados:")
+    for issue in result.issues:
+        lines.append(
+            f"- [{issue.severidade}] {issue.regra_id} "
+            f"{issue.categoria}: {issue.mensagem}"
+        )
+    return "\n".join(lines) + "\n"
+
+
+def payment_rules_audit_console_lines(result: PaymentRulesAuditResult) -> list[str]:
+    lines = [
+        "[OK] Auditoria de regras de comprovantes concluida.",
+        f"Regras: {result.total_regras}",
+        f"Erros: {result.total_erros}",
+        f"Alertas: {result.total_alertas}",
+    ]
+    if result.issues:
+        lines.append("Problemas encontrados:")
+        for issue in result.issues:
+            lines.append(
+                f"- [{issue.severidade}] {issue.regra_id} "
+                f"{issue.categoria}: {issue.mensagem}"
+            )
+    else:
+        lines.append("Nenhum problema encontrado.")
+    return lines
 
 
 def validate_payment_rules(
@@ -308,6 +443,132 @@ def _rule_from_data(data: Any, index: int) -> PaymentRule:
         entra_dre=entra_dre,
         match=match,
     )
+
+
+def _raw_rule_id(raw_rule: object, index: int) -> str:
+    if isinstance(raw_rule, dict):
+        return str(raw_rule.get("regra_id") or raw_rule.get("id") or f"REGRA_{index:03d}")
+    return f"REGRA_{index:03d}"
+
+
+def _audit_forbidden_origin_fields(
+    raw_rule: dict[str, object],
+    regra_id: str,
+    issues: list[PaymentRulesAuditIssue],
+) -> None:
+    forbidden_fields = (
+        "origem_linha_planilha",
+        "linha_planilha",
+        "numero_linha",
+        "arquivo_origem",
+        "coluna_origem",
+    )
+    for field in forbidden_fields:
+        if field in raw_rule:
+            issues.append(
+                PaymentRulesAuditIssue(
+                    regra_id=regra_id,
+                    severidade="ALERTA",
+                    categoria="CAMPO_ORIGEM_PLANILHA",
+                    mensagem=f"Campo {field} referencia a planilha e nao e operacional.",
+                )
+            )
+
+
+def _audit_raw_match_text(
+    raw_rule: dict[str, object],
+    regra_id: str,
+    issues: list[PaymentRulesAuditIssue],
+) -> None:
+    match_data = raw_rule.get("match")
+    if not isinstance(match_data, dict):
+        return
+    for condition in CONDITION_FIELDS:
+        for item in _as_list(match_data.get(condition)):
+            raw_text = "" if item is None else str(item)
+            if _looks_like_mojibake(raw_text):
+                issues.append(
+                    PaymentRulesAuditIssue(
+                        regra_id=regra_id,
+                        severidade="ALERTA",
+                        categoria="TEXTO_SUSPEITO",
+                        mensagem=(
+                            f"Criterio em {condition} parece conter texto com "
+                            f"encoding corrompido: {raw_text}."
+                        ),
+                    )
+                )
+
+
+def _audit_suspicious_rule(
+    rule: PaymentRule,
+    issues: list[PaymentRulesAuditIssue],
+) -> None:
+    active_conditions = {
+        condition: aliases
+        for condition, aliases in rule.match.items()
+        if aliases
+    }
+    if len(active_conditions) > 1:
+        conditions = ", ".join(active_conditions)
+        issues.append(
+            PaymentRulesAuditIssue(
+                regra_id=rule.regra_id,
+                severidade="ALERTA",
+                categoria="MULTIPLAS_CONDICOES_OBRIGATORIAS",
+                mensagem=(
+                    f"Regra exige todas as condicoes nao vazias ({conditions}); "
+                    "se algum campo estiver vazio no comprovante, nao classifica."
+                ),
+            )
+        )
+
+    for condition, aliases in rule.match.items():
+        for alias in aliases:
+            if _looks_like_mojibake(alias):
+                issues.append(
+                    PaymentRulesAuditIssue(
+                        regra_id=rule.regra_id,
+                        severidade="ALERTA",
+                        categoria="TEXTO_SUSPEITO",
+                        mensagem=(
+                            f"Criterio em {condition} parece conter texto com "
+                            f"encoding corrompido: {alias}."
+                        ),
+                    )
+                )
+
+
+def _audit_conflicting_aliases(
+    rules: list[PaymentRule],
+    issues: list[PaymentRulesAuditIssue],
+) -> None:
+    seen: dict[tuple[str, str], PaymentRule] = {}
+    for rule in rules:
+        for condition, aliases in rule.match.items():
+            for alias in aliases:
+                key = (condition, alias)
+                previous = seen.get(key)
+                if previous is None:
+                    seen[key] = rule
+                    continue
+                if previous.conta_id != rule.conta_id:
+                    issues.append(
+                        PaymentRulesAuditIssue(
+                            regra_id=rule.regra_id,
+                            severidade="ERRO",
+                            categoria="CONFLITO_CRITERIO_CONTA",
+                            mensagem=(
+                                f"Criterio {condition}={alias} ja existe em "
+                                f"{previous.regra_id} com conta {previous.conta_id}; "
+                                f"candidata aponta para {rule.conta_id}."
+                            ),
+                        )
+                    )
+
+
+def _looks_like_mojibake(value: str) -> bool:
+    return any(marker in value for marker in ("Ã", "Â", "�"))
 
 
 def _matches_rule(receipt: dict[str, str], rule: PaymentRule) -> bool:
