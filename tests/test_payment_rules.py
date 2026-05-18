@@ -286,6 +286,40 @@ def test_pjbank_rule_matches_beneficiary_with_dash_reference(tmp_path):
     assert result.regra_id == "COMPROVANTE_LINHA_002"
 
 
+def test_sispar_pgfn_rule_matches_real_reference_variants(tmp_path):
+    rules = load_payment_rules(
+        _write_rules(
+            tmp_path,
+            [
+                _rule(
+                    "REGRA_5_01_003_SISPAR_PGFN_8916087",
+                    "5.01.003",
+                    "Parcelamento Federal / Receita Federal / PGFN / Simples",
+                    "07.01",
+                    reference=["sispar", "PGFN 8916087", "SISPAR 8916087", "pgfn"],
+                )
+            ],
+        )
+    )
+
+    for reference in (
+        "PGFN-SISPAR 8916087",
+        "SISPAR 8916087 RT29",
+        "SISPAR 8916087 R.30",
+    ):
+        result = classify_payment_receipt(
+            {
+                "beneficiary_name": "DAS-SIMPLES NACIONAL-COD BARRA",
+                "reference_id": reference,
+            },
+            rules,
+        )
+
+        assert result.status_classificacao == STATUS_CLASSIFICADO
+        assert result.conta_id == "5.01.003"
+        assert result.regra_id == "REGRA_5_01_003_SISPAR_PGFN_8916087"
+
+
 def test_audit_payment_rules_flags_planilha_identity_and_conflict(tmp_path):
     rules_path = _write_rules(
         tmp_path,

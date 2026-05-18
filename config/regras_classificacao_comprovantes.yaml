@@ -55,7 +55,9 @@ regras:
     modo: TODAS_AS_CONDICOES_NAO_VAZIAS
     beneficiario_favorecido_contem_algum: []
     referencia_empresa_contem_algum:
-    - 'sispar: PGFN-SISPAR 8916087'
+    - sispar
+    - PGFN 8916087
+    - SISPAR 8916087
     - pgfn
 - regra_id: REGRA_5_01_001_SIMPLES
   conta_id: 5.01.001
