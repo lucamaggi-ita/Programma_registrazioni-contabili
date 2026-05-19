@@ -36,8 +36,8 @@ Le fonti di dati contabili del progetto, in ordine di priorità per completezza 
 | # | Fonte | Contenuto | Fase |
 |---|---|---|---|
 | 1 | XML / NF-e | Fatture elettroniche di acquisto e vendita | 9, XML |
-| 2 | Comprovantes / Consulta Pagamentos | Pagamenti bancari con beneficiario e referencia | 13 |
-| 3 | Estratti conto | Movimenti bancari aggregati | 13 |
+| 2 | Estratti conto | Movimenti bancari aggregati | 13 |
+| 3 | Comprovantes / Consulta Pagamentos | Pagamenti bancari con beneficiario e referencia | 13 |
 | 4 | Lançamentos manuais gestionali | Movimenti inseriti manualmente dall'utente | manuale |
 | 5 | Operazioni di cassa / denaro contante | Movimenti non tracciati bancariamente | manuale |
 | 6 | Correzioni manuali controllate | Rettifiche su righe automatiche | manuale |
@@ -133,6 +133,19 @@ Le fasi automatiche del sistema non devono mai:
 | 13W | Diagnostica pendenze | Analisi `REVISAR_SEM_REGRA` rimasti |
 
 Le fasi future continuano questo percorso verso giornale e DRE attendibile.
+
+---
+
+## File operativi ufficiali
+
+I file XLSX utilizzati dall'utente per leggere i dati bancari e definire le regole sono:
+
+| File | Contenuto | Fonte |
+|---|---|---|
+| `bank_raw/Analisi_regole_registrazioni_banca_conto_corrente.xlsx` | Estratto conto — universo ufficiale dei movimenti bancari in uscita | Primaria |
+| `bank_raw/Analisi_regole_registrazioni_banca_comprovanti.xlsx` | Comprovantes — beneficiario reale e referencia per ogni pagamento | Ausiliaria |
+
+Il sistema non modifica questi file. Sono consultati dall'utente per decidere le regole; il sistema le applica.
 
 ---
 
