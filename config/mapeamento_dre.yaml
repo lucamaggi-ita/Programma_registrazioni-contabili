@@ -163,6 +163,13 @@ linhas_dre:
   sinal: '-'
   ordem: 1301
   calculada: false
+- id: '13.02'
+  nome: Distribuicao e Antecipacao de Lucros
+  grupo: Movimentos Patrimoniais
+  sinal: '-'
+  ordem: 1302
+  calculada: false
+  entra_dre: false
 - id: '99.01'
   nome: A REVISAR
   grupo: Revisao
@@ -495,10 +502,10 @@ mapeamento:
     dre_linha_id: '13.01'
     entra_dre: true
   11.01.005:
-    dre_linha_id: '13.01'
+    dre_linha_id: '13.02'
     entra_dre: false
   11.01.006:
-    dre_linha_id: '13.01'
+    dre_linha_id: '13.02'
     entra_dre: false
   11.01.010:
     dre_linha_id: '99.01'
