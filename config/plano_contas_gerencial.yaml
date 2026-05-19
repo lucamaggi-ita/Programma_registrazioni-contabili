@@ -172,7 +172,7 @@ contas:
   tipo: custo
 - id: 2.04.002
   nome: Utensilios de Cozinha e Salao
-  grupo: Materiais de Limpeza e Higiene
+  grupo: Utensilios de Cozinha e Salao
   tipo: custo
 - id: 2.05.001
   nome: Fretes, Seguros e Outras Despesas sobre Compras
@@ -317,6 +317,10 @@ contas:
   nome: Internet
   grupo: Ocupacao, Utilidades e Funcionamento
   tipo: despesa
+- id: 4.01.015
+  nome: Dedetizacao e Controle de Pragas
+  grupo: Ocupacao, Utilidades e Funcionamento
+  tipo: despesa
 - id: 5.01.001
   nome: Simples Nacional - DAS Mensal - Anexo I
   grupo: Impostos, Taxas e Obrigacoes Fiscais
@@ -351,6 +355,10 @@ contas:
   tipo: despesa
 - id: 6.01.006
   nome: Papelaria e Impressos
+  grupo: Despesas Administrativas e Escritorio
+  tipo: despesa
+- id: 6.01.007
+  nome: Software e Sistema de PDV
   grupo: Despesas Administrativas e Escritorio
   tipo: despesa
 - id: 7.01.001

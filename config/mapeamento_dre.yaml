@@ -138,6 +138,12 @@ linhas_dre:
   sinal: '-'
   ordem: 1001
   calculada: false
+- id: '10.02'
+  nome: Veiculos
+  grupo: Despesas Operacionais
+  sinal: '-'
+  ordem: 1002
+  calculada: false
 - id: '11.01'
   nome: Marketing e Delivery
   grupo: Despesas Operacionais
@@ -211,7 +217,7 @@ mapeamento:
     entra_dre: true
   2.01.009:
     dre_linha_id: '03.02'
-    entra_dre: false
+    entra_dre: true
   2.02.001:
     dre_linha_id: '03.01'
     entra_dre: true
@@ -366,7 +372,7 @@ mapeamento:
     dre_linha_id: '07.01'
     entra_dre: true
   4.01.010:
-    dre_linha_id: '06.02'
+    dre_linha_id: '03.05'
     entra_dre: true
   4.01.011:
     dre_linha_id: '06.02'
@@ -378,6 +384,9 @@ mapeamento:
     dre_linha_id: '03.05'
     entra_dre: true
   4.01.014:
+    dre_linha_id: '06.02'
+    entra_dre: true
+  4.01.015:
     dre_linha_id: '06.02'
     entra_dre: true
   5.01.001:
@@ -405,6 +414,9 @@ mapeamento:
     dre_linha_id: '08.01'
     entra_dre: true
   6.01.006:
+    dre_linha_id: '08.01'
+    entra_dre: true
+  6.01.007:
     dre_linha_id: '08.01'
     entra_dre: true
   7.01.001:
@@ -453,7 +465,7 @@ mapeamento:
     dre_linha_id: '11.01'
     entra_dre: true
   8.03.002:
-    dre_linha_id: '10.01'
+    dre_linha_id: '10.02'
     entra_dre: true
   9.01.001:
     dre_linha_id: '11.01'
@@ -469,7 +481,7 @@ mapeamento:
     entra_dre: false
   10.01.002:
     dre_linha_id: '12.01'
-    entra_dre: true
+    entra_dre: false
   10.01.003:
     dre_linha_id: '12.01'
     entra_dre: false
