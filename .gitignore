@@ -18,3 +18,4 @@ reports/comprovantes_classificacao/
 *.log
 .DS_Store
 Thumbs.db
+.claude/
