@@ -314,7 +314,7 @@ contas:
   grupo: Ocupacao, Utilidades e Funcionamento
   tipo: despesa
 - id: 4.01.014
-  nome: Internet
+  nome: Internet e Telefonia
   grupo: Ocupacao, Utilidades e Funcionamento
   tipo: despesa
 - id: 4.01.015

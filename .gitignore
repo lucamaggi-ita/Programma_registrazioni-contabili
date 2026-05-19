@@ -12,8 +12,12 @@ htmlcov/
 bank_raw/
 output/*.xlsx
 output/*.bak
+output/importacao_real/
 reports/*.txt
 reports/comprovantes_classificacao/
+reports/documentacao_contabil/
+reports/importacao_real/
+pendenze_*.txt
 *.zip
 *.log
 .DS_Store
