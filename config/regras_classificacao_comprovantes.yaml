@@ -320,6 +320,76 @@ regras:
     beneficiario_favorecido_contem_algum:
     - D LOPES ENGENHARIA E MEDICINA
     referencia_empresa_contem_algum: []
+- regra_id: REGRA_4_01_014_TELEFONICA_BRASIL_SA
+  conta_id: 4.01.014
+  conta_nome: Internet e Telefonia
+  dre_linha_id: '06.02'
+  entra_dre: true
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - TELEFONICA BRASIL S.A.
+    referencia_empresa_contem_algum: []
+- regra_id: REGRA_3_04_007_BIO_RENOVA_COLETA
+  conta_id: 3.04.007
+  conta_nome: Prestadores MEI
+  dre_linha_id: '05.03'
+  entra_dre: true
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - BIO RENOVA COLETA
+    referencia_empresa_contem_algum: []
+- regra_id: REGRA_10_01_003_DANIEL_PINHEIRO_DE_OLIVEIRA
+  conta_id: 10.01.003
+  conta_nome: Equipamentos de Cozinha
+  dre_linha_id: '12.01'
+  entra_dre: false
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - DANIEL PINHEIRO DE OLIVEIRA
+    referencia_empresa_contem_algum: []
+- regra_id: REGRA_2_01_002_DEBORA_TORQUATO
+  conta_id: 2.01.002
+  conta_nome: Vinhos e Espumantes
+  dre_linha_id: '03.02'
+  entra_dre: true
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - DEBORA TORQUATO
+    referencia_empresa_contem_algum: []
+- regra_id: REGRA_3_02_008_ELIANA_UNIFORMES_LTDA
+  conta_id: 3.02.008
+  conta_nome: Uniformes
+  dre_linha_id: '05.02'
+  entra_dre: true
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - ELIANA UNIFORMES LTDA
+    referencia_empresa_contem_algum: []
+- regra_id: REGRA_8_01_001_NESTOR_ACCO_LTDA
+  conta_id: 8.01.001
+  conta_nome: Manutencao Predial
+  dre_linha_id: '10.01'
+  entra_dre: true
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - NESTOR ACCO LTDA
+    referencia_empresa_contem_algum: []
+- regra_id: REGRA_11_01_006_UNIMED_COSTA_DO_DESCOBRIMENTO
+  conta_id: 11.01.006
+  conta_nome: Antecipacao de Lucros
+  dre_linha_id: '13.02'
+  entra_dre: false
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - UNIMED COSTA DO DESCOBRIMENTO
+    referencia_empresa_contem_algum: []
 
 exclusoes:
 - regra_id: EXCLUSAO_XML_OESA_COMERCIO_E_REPRESENTACOES
