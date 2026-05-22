@@ -292,7 +292,7 @@ regras:
     referencia_empresa_contem_algum: []
 - regra_id: REGRA_4_01_014_NET_INFO_INFORMATICA
   conta_id: 4.01.014
-  conta_nome: Internet
+  conta_nome: Internet e Telefonia
   dre_linha_id: '06.02'
   entra_dre: true
   match:
