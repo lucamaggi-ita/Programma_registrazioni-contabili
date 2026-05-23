@@ -49,6 +49,69 @@ regras_por_fornecedor:
     conta_id: "2.02.015"
     conta_nome: "Sobremesas, Sorvetes e Picoles"
     observacao: "Fornecedor recorrente de doces, balas e sobremesas sem conta especifica propria."
+  - fornecedor_aliases:
+      - checon distribuidora e transportadora lt
+    produto_aliases:
+      - devassa
+      - heineken
+      - amstel
+      - praya
+      - blue moon
+      - stella artois
+      - brahma
+      - original 600
+      - malzebier
+      - itaipava
+      - spaten
+      - baden
+      - sol premium
+      - cerv
+      - ita pils
+      - corona
+      - petra
+    conta_id: "2.01.001"
+    conta_nome: "Cervejas"
+    observacao: "Regra batch XML aprovada e consolidada a partir das linhas 7 e 89."
+  - fornecedor_aliases:
+      - naturaves industria e comercio de alimentos ltda
+    produto_aliases:
+      - frango
+      - fgo
+      - coxa/sobre
+      - sobrecoxa
+      - linguica de carne de frango
+    conta_id: "2.02.002"
+    conta_nome: "Aves"
+    observacao: "Regra batch XML aprovada a partir da linha 23."
+  - fornecedor_aliases:
+      - italibras importacao, exportacao e comercio de alimentos ltd
+    produto_aliases:
+      - bianco beneventano
+    conta_id: "2.01.002"
+    conta_nome: "Vinhos e Espumantes"
+    observacao: "Regra batch XML aprovada a partir da linha 38."
+  - fornecedor_aliases:
+      - jacileny mauricio teixeira
+    produto_aliases:
+      - deter zab
+    conta_id: "2.04.001"
+    conta_nome: "Produtos de Limpeza e Higiene"
+    observacao: "Regra batch XML aprovada a partir da linha 78."
+  - fornecedor_aliases:
+      - jmt comercio de descartaveis e artigos de limpeza ltda
+    produto_aliases:
+      - pa lixo
+      - deter zab
+    conta_id: "2.04.001"
+    conta_nome: "Produtos de Limpeza e Higiene"
+    observacao: "Regra batch XML aprovada e consolidada a partir das linhas 80 e 83."
+  - fornecedor_aliases:
+      - geronimo ferragens e ferramentas ltda
+    produto_aliases:
+      - fita crepe
+    conta_id: "6.01.005"
+    conta_nome: "Material de Escritorio"
+    observacao: "Regra batch XML aprovada a partir da linha 99."
 
 # Regras gerais de classificacao
 regras:
@@ -125,6 +188,7 @@ regras:
       - las perdices
       - pinot noir
       - puente austral
+      - v chil puente austral pinot noir reserva priv 696 00
 
   - conta_id: "2.01.003"
     conta_nome: "Destilados, Licores e Aperitivos"
@@ -184,6 +248,16 @@ regras:
       - ft colot
       - fl lt
       - pepsi
+      - cc sem acucar lt 350ml colorcx12 1057 12
+      - h2oh limao c gas pet 500ml caixa c 12 51 50 h2oh limoneto pet 500ml shrink c 12 npal 102 99
+      - cc sem acucar lt 350ml colorcx12 70 63 coca cola orig pet 1l 73 21
+      - h2oh limao c gas pet 500ml caixa c 12 102 99
+      - fl lt 350ml color 61 64
+      - fanta lar lt 350ml color 30 82
+      - fl lt 350ml color 30 82
+      - agua tonica c limao fys zero lt 350ml 12un 30 31
+      - agua tonica com limao fys lt 350ml 12un 30 31
+      - fys guarana 350ml 28 14
     evitar_aliases:
       - refrigerador
       - cervejeira
@@ -244,6 +318,7 @@ regras:
       - polpa morango
       - polpa cupuacu
       - polpa cacau
+      - monin xarope pessego 700ml 105 40 monin xarope abacaxi 700 ml 52 70
 
   - conta_id: "2.01.008"
     conta_nome: "Gelo"
@@ -311,6 +386,7 @@ regras:
       - manjericao
       - salsinha
       - cuentro
+      - tomate b7 kg 297 00
     evitar_aliases:
       - coca cola
       - coca-cola
@@ -545,6 +621,7 @@ regras:
       - oliva ext vrg
       - oleo soja
       - dom gameiro
+      - oleo soja misto 5 02l dom gameiro 580 72
     evitar_aliases:
       - atum ral c oleo e caldo veg pouch
 
@@ -584,6 +661,11 @@ regras:
       - alecrim
       - louro
       - sal lebre sache
+      - tomate s pele la bella san marzano 2 5kg 2229 11
+      - molho pim verde c espc crem 12x450ml 474 00
+      - atum ral c oleo e caldo veg pouch 500 gr 88 239 76
+      - leite de coco tp 1 l ducoco 179 88
+      - coco ralado 100gr ducoco 18 60 adocante zero cal 100ml 57 00 canela po kg 11 40
     evitar_aliases:
       - essencia coala
       - atum ral c oleo e caldo veg pouch
@@ -651,6 +733,18 @@ regras:
       - paleta cx com 24un 120g morango com leite cond paletitas
       - picole cx com 24un 65g paletito zero ad de acucar paletitas
       - picole cx com 27un 68g space monsters paletitas
+      - paleta cx com 24un 120g leitinho trufado paletitas 271 68 paleta cx com 24un 120g morango com leite cond paletitas 271 68
+      - paleta cx com 24un 120g coco com doce de leite paletitas 271 68 paleta cx com 24un 120g leitinho trufado paletitas 271 68 paleta cx com 24un 120g morango com leite cond paletitas 271 68
+      - picole cx com 20un 70g real il vero gelato pistacchio zero acucar 261 60 picole cx com 24un 65g paletito zero ad de acucar paletitas 230 88 picole cx com 26un 55g coco sem adicao de acucares paletitas 161 98
+      - picole cx com 20un 60g bombom italiano sem adicao de acucares paletitas 247 80 picole cx com 26un 55g coco sem adicao de acucares paletitas 161 98
+      - picole cx com 27un 68g space monsters paletitas 170 91
+      - picole cx com 27un 68g space monsters paletitas 341 82
+      - paleta cx com 24un 120g coco com doce de leite paletitas 271 68
+      - picole cx com 26un 55g limao paletitas 124 02
+      - picole cx com 26un 55g limao paletitas 248 04
+      - picole cx com 20un 70g real il vero gelato pistacchio zero acucar 233 80
+      - picole cx com 24un 65g paletito zero ad de acucar paletitas 230 88
+      - amendoim docinho 3 50
     evitar_aliases:
       - saco geladinho
   - conta_id: "2.02.016"
@@ -705,6 +799,9 @@ regras:
       - colher sobremessa
       - pote kit cristal
       - papel toalha bobina
+      - papel toalha bobina 20 x 200 6 rolos total fsc 25 gr 172 00
+      - pote kit cristal 250ml 25un 172 00
+      - copo coposchio 500ml 52 50
     evitar_aliases:
       - sem embalagem
       - marmitex folha
@@ -722,8 +819,15 @@ regras:
       - marmitex folha
       - marmitex desc
       - marmitex boreda
+      - b aluminio emb boreda 120x160mm c 10un boreda un 101 50 b aluminio emb boreda 175x224mm c 10un boreda un 161 50
     evitar_aliases:
       - sem embalagem
+
+  - conta_id: "2.03.002"
+    conta_nome: "Guardanapos, Canudos e Saches"
+    prioridade: 65
+    aliases:
+      - sal lebre sache 2000x0 8g bom sabor 25 90
 
   - conta_id: "2.04.001"
     conta_nome: "Produtos de Limpeza e Higiene"
@@ -780,6 +884,8 @@ regras:
       - dispenser porta higienico
       - deter radiante
       - desinf limpo 5lts
+      - saco de lixo multipop 60l 55 x 70 almofada preto 90 00
+      - dispenser porta higienico pto fortcom 45 00
     evitar_aliases:
       - papel toalha bobina
 
@@ -845,6 +951,7 @@ regras:
       - cooler intel
       - computador
       - m/b bluecase
+      - m b bluecase bmbh470 d3hgu m2 rev 2 0 box ddr4 1200p gigabit 64gb win11 hdmi usb 3 0 m 2 nvme matx 789 00
 
   # ---- MANUTENCAO E OBRAS ----
   - conta_id: "8.01.001"
@@ -911,6 +1018,7 @@ regras:
       - extrator p grampo
       - grampo 26 6
       - pasta escolar
+      - tekbond corante 50ml laranja 6 60
 
   # ---- MANUTENCAO DE EQUIPAMENTOS ----
   - conta_id: "8.02.005"
