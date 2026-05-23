@@ -27,6 +27,12 @@ from fantozzi.banking.payment_rules import (
     payment_rules_audit_console_lines,
     payment_rules_audit_report_text,
 )
+from fantozzi.banking.revisao_banca import (
+    ImportaRevisaoBancaError,
+    console_lines as revisao_banca_console_lines,
+    importar_revisao_banca,
+    resolve_bank_raw_dir,
+)
 from fantozzi.chart_of_accounts import ChartOfAccounts
 from fantozzi.classification_candidates import (
     ClassificationCandidatesError,
@@ -129,6 +135,7 @@ DEFAULT_REGRAS_COMPROVANTES = (
     PROJECT_ROOT / "config" / "regras_classificacao_comprovantes.yaml"
 )
 DEFAULT_MAPEAMENTO_DRE_PATH = PROJECT_ROOT / "config" / "mapeamento_dre.yaml"
+DEFAULT_BANK_DECISOES_DIR = PROJECT_ROOT / "bank_raw" / "_decisoes_regras"
 DEFAULT_COMPROVANTES_REAL_INPUT = PROJECT_ROOT / "bank_raw" / "_audit" / "fase_13c"
 DEFAULT_COMPROVANTES_REAL_REPORTS = PROJECT_ROOT / "reports" / "comprovantes_classificacao"
 
@@ -275,6 +282,50 @@ def build_parser() -> argparse.ArgumentParser:
         help="Pasta raiz de saida dos CSV/manifest normalizados.",
     )
     importar_extratos.set_defaults(func=importar_extratos_bancarios_command)
+
+    importar_revisao = subparsers.add_parser(
+        "importar-revisao-banca",
+        help="Gera/atualiza Excel decisional para regras banca/comprovantes.",
+        description=(
+            "Le bank_raw/YYYY/YYYY-MM/CNPJ com ConsultaPagamentos .xls e "
+            "Extrato_Lancamentos .xlsx, aplica regras atuais somente em memoria "
+            "e gera planilhas decisorias. OFX e opcional e nao e usado."
+        ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    importar_revisao.add_argument(
+        "--bank-raw-dir",
+        help="Pasta do mes, por exemplo bank_raw/2026/2026-04.",
+    )
+    importar_revisao.add_argument(
+        "--ano",
+        help="Ano usado com --mes para construir bank_raw/<ano>/<YYYY-MM>.",
+    )
+    importar_revisao.add_argument(
+        "--mes",
+        help="Mes MM ou YYYY-MM usado com --ano.",
+    )
+    importar_revisao.add_argument(
+        "--saida-dir",
+        default=str(DEFAULT_BANK_DECISOES_DIR),
+        help="Pasta dos Excel decisorios e manifest.",
+    )
+    importar_revisao.add_argument(
+        "--regras",
+        default=str(DEFAULT_REGRAS_COMPROVANTES),
+        help="YAML com regras declaradas de comprovantes.",
+    )
+    importar_revisao.add_argument(
+        "--plano-contas",
+        default=str(DEFAULT_PLANO_CONTAS),
+        help="Arquivo YAML do plano de contas gerencial.",
+    )
+    importar_revisao.add_argument(
+        "--mapeamento-dre",
+        default=str(DEFAULT_MAPEAMENTO_DRE_PATH),
+        help="Arquivo YAML de mapeamento das contas para linhas DRE.",
+    )
+    importar_revisao.set_defaults(func=importar_revisao_banca_command)
 
     classificar_comprovantes = subparsers.add_parser(
         "classificar-comprovantes-pagamento",
@@ -1263,6 +1314,35 @@ def importar_extratos_bancarios_command(args: argparse.Namespace) -> int:
     print(f"Auditorias de saldo: {manifest.balance_audit_count}")
     print(f"Saida: {manifest.output_dir}")
     print("[INFO] Matching contabil nao executado nesta fase.")
+    return 0
+
+
+def importar_revisao_banca_command(args: argparse.Namespace) -> int:
+    try:
+        bank_raw_dir = resolve_bank_raw_dir(
+            bank_raw_dir=Path(args.bank_raw_dir) if args.bank_raw_dir else None,
+            ano=args.ano,
+            mes=args.mes,
+            project_root=PROJECT_ROOT,
+        )
+        result = importar_revisao_banca(
+            bank_raw_dir=bank_raw_dir,
+            output_dir=Path(args.saida_dir),
+            regras_path=Path(args.regras),
+            plano_contas_path=Path(args.plano_contas),
+            mapeamento_dre_path=Path(args.mapeamento_dre),
+        )
+    except (
+        OSError,
+        PaymentRulesError,
+        ImportaRevisaoBancaError,
+        ValueError,
+    ) as exc:
+        print(f"[ERRO] Nao foi possivel importar revisao banca: {exc}")
+        return 1
+
+    for line in revisao_banca_console_lines(result):
+        print(line)
     return 0
 
 
