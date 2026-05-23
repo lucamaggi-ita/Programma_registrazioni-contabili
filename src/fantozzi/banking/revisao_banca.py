@@ -13,7 +13,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
 
-from fantozzi.banking.common import only_digits, stable_hash
+from fantozzi.banking.common import only_digits
 from fantozzi.banking.models import BankLaunchEnrichment, PaymentReceiptRaw
 from fantozzi.banking.payment_receipt_parser import parse_payment_receipts
 from fantozzi.banking.payment_rules import (
@@ -674,6 +674,7 @@ def _existing_key(row: dict[str, object], kind: str) -> str:
                 f"COMPROVANTE|BENEFICIARIO={beneficiary}|REFERENCIA={reference}|"
                 f"TIPO={payment_type}"
             )
+        return ""
     history = normalize_match_text(row.get("LANCAMENTO") or row.get("HISTORICO_NORMALIZADO"))
     razao = normalize_match_text(row.get("RAZAO_SOCIAL")) or "SEM_RAZAO"
     tipo = _tipo_movimento_text(history, _parse_decimal(row.get("VALOR")))
@@ -690,7 +691,39 @@ def _preserve_manual(target: dict[str, object], existing: dict[str, object] | No
         return
     for column in MANUAL_COLUMNS:
         if column in target and existing.get(column) not in (None, ""):
+            if column in {"CONTA_ID_APROVADA", "CONTA_NOME_APROVADA"}:
+                continue
             target[column] = existing[column]
+    conta_id, conta_nome = _account_from_choice(existing.get("CONTA_ESCOLHIDA"))
+    if conta_id and "CONTA_ID_APROVADA" in target:
+        target["CONTA_ID_APROVADA"] = conta_id
+    elif (
+        "CONTA_ID_APROVADA" in target
+        and existing.get("CONTA_ID_APROVADA") not in (None, "")
+        and not _is_formula(existing.get("CONTA_ID_APROVADA"))
+    ):
+        target["CONTA_ID_APROVADA"] = existing["CONTA_ID_APROVADA"]
+
+    if conta_nome and "CONTA_NOME_APROVADA" in target:
+        target["CONTA_NOME_APROVADA"] = conta_nome
+    elif (
+        "CONTA_NOME_APROVADA" in target
+        and existing.get("CONTA_NOME_APROVADA") not in (None, "")
+        and not _is_formula(existing.get("CONTA_NOME_APROVADA"))
+    ):
+        target["CONTA_NOME_APROVADA"] = existing["CONTA_NOME_APROVADA"]
+
+
+def _account_from_choice(value: object) -> tuple[str, str]:
+    choice = str(value or "").strip()
+    if " - " not in choice or _is_formula(choice):
+        return "", ""
+    conta_id, conta_nome = choice.split(" - ", 1)
+    return conta_id.strip(), conta_nome.strip()
+
+
+def _is_formula(value: object) -> bool:
+    return isinstance(value, str) and value.startswith("=")
 
 
 def _write_decision_workbook(

@@ -14,6 +14,7 @@ from fantozzi.banking.revisao_banca import (
     CONTA_CORRENTE_SHEET,
     CONTA_CORRENTE_XLSX,
     ImportaRevisaoBancaError,
+    _existing_key,
     importar_revisao_banca,
     resolve_bank_raw_dir,
 )
@@ -177,6 +178,69 @@ def test_importa_revisao_banca_filters_total_receipt_from_decision_sheets(
     assert all("BENEFICIARIO=TOTAL" not in row[key_col] for row in tecnico_rows[1:])
 
 
+def test_importa_revisao_banca_derives_account_fields_from_choice_not_old_formulas(
+    monkeypatch,
+    tmp_path,
+):
+    bank_raw_dir = tmp_path / "bank_raw" / "2026" / "2026-04"
+    cnpj_dir = bank_raw_dir / "08884180000123"
+    cnpj_dir.mkdir(parents=True)
+    (cnpj_dir / "ConsultaPagamentos.xls").write_bytes(b"placeholder")
+    output_dir = tmp_path / "bank_raw" / "_decisoes_regras"
+    output_dir.mkdir(parents=True)
+    _write_existing_comprovantes_with_stale_formula(output_dir / COMPROVANTES_XLSX)
+
+    monkeypatch.setattr(
+        "fantozzi.banking.revisao_banca.parse_payment_receipts",
+        lambda path: [
+            PaymentReceiptRaw(
+                payment_date=date(2026, 4, 5),
+                amount=Decimal("20.00"),
+                beneficiary_name="Fornecedor Teste",
+                beneficiary_document="12.345.678/0001-90",
+                payment_type="PIX Transferencias",
+                reference_id="-",
+                status="Efetuado",
+                source_file=path.name,
+                raw_hash="receipt-1",
+            )
+        ],
+    )
+
+    importar_revisao_banca(
+        bank_raw_dir=bank_raw_dir,
+        output_dir=output_dir,
+        regras_path=_write_rules(tmp_path),
+        plano_contas_path=_write_plan(tmp_path),
+        mapeamento_dre_path=_write_mapping(tmp_path),
+    )
+
+    workbook = load_workbook(output_dir / COMPROVANTES_XLSX, data_only=False)
+    sheet = workbook[COMPROVANTES_SHEET]
+    headers = [cell.value for cell in sheet[1]]
+    conta_id_col = headers.index("CONTA_ID_APROVADA") + 1
+    conta_nome_col = headers.index("CONTA_NOME_APROVADA") + 1
+
+    assert sheet.max_row == 2
+    assert sheet.cell(row=2, column=conta_id_col).value == "4.01.012"
+    assert sheet.cell(row=2, column=conta_nome_col).value == "Agua e Esgoto"
+
+
+def test_existing_key_for_comprovantes_without_beneficiary_does_not_fall_through():
+    assert (
+        _existing_key(
+            {
+                "BENEFICIARIO_FAVORECIDO": "",
+                "LANCAMENTO": "PIX ENVIADO",
+                "RAZAO_SOCIAL": "Fornecedor Teste",
+                "VALOR": "-20.00",
+            },
+            "comprovantes",
+        )
+        == ""
+    )
+
+
 def test_cli_accepts_importar_revisao_banca_modes():
     parser = build_parser()
 
@@ -271,6 +335,84 @@ def _write_existing_comprovantes(path: Path) -> None:
             999,
             "old",
             "preservar",
+        ]
+    )
+    workbook.save(path)
+
+
+def _write_existing_comprovantes_with_stale_formula(path: Path) -> None:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = COMPROVANTES_SHEET
+    headers = [
+        "STATUS_DECISAO",
+        "ACAO_REGRA",
+        "PERIODO",
+        "CNPJ",
+        "DATA_PAGAMENTO",
+        "VALOR",
+        "BENEFICIARIO_FAVORECIDO",
+        "REFERENCIA_EMPRESA",
+        "TIPO_PAGAMENTO",
+        "CONTA_ESCOLHIDA",
+        "CONTA_ID_APROVADA",
+        "CONTA_NOME_APROVADA",
+        "CHAVE_REGRA_BENEFICIARIO",
+        "CHAVE_REGRA_REFERENCIA",
+        "RISCO_DUPLICIDADE_XML",
+        "ESCOPO_REGRA",
+        "QTD_OCORRENCIAS",
+        "VALOR_TOTAL",
+        "EXEMPLOS",
+        "OBSERVACAO_OPERADOR",
+    ]
+    sheet.append(headers)
+    sheet.append(
+        [
+            "APROVADO",
+            "CLASSIFICAR",
+            "2026-04",
+            "08884180000123",
+            "2026-04-04",
+            10,
+            "OUTRO FORNECEDOR",
+            "-",
+            "PIX Transferencias",
+            "7.01.001 - Tarifas Bancarias",
+            '=IFERROR(LEFT(J2,FIND(" - ",J2)-1),"")',
+            '=IFERROR(MID(J2,FIND(" - ",J2)+3,999),"")',
+            "OUTRO FORNECEDOR",
+            "",
+            "OK",
+            "COMPROVANTE",
+            1,
+            10,
+            "old",
+            "",
+        ]
+    )
+    sheet.append(
+        [
+            "APROVADO",
+            "CLASSIFICAR",
+            "2026-04",
+            "08884180000123",
+            "2026-04-05",
+            20,
+            "FORNECEDOR TESTE",
+            "-",
+            "PIX Transferencias",
+            "4.01.012 - Agua e Esgoto",
+            '=IFERROR(LEFT(J2,FIND(" - ",J2)-1),"")',
+            '=IFERROR(MID(J2,FIND(" - ",J2)+3,999),"")',
+            "FORNECEDOR TESTE",
+            "",
+            "OK",
+            "COMPROVANTE",
+            1,
+            20,
+            "old",
+            "",
         ]
     )
     workbook.save(path)
