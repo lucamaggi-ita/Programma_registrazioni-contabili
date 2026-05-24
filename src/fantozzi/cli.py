@@ -96,6 +96,12 @@ from fantozzi.fase9_decision_engine import (
     load_fase9_decisions_from_csv,
 )
 from fantozzi.fase9_writeback import apply_fase9_writeback, write_fase9_applied_csv
+from fantozzi.importa_revisao_xml import (
+    ImportaRevisaoXmlError,
+    console_lines as revisao_xml_console_lines,
+    importar_revisao_xml,
+    resolve_run_reports_dir,
+)
 from fantozzi.logging_utils import error, info, warning
 from fantozzi.nfe_importer import parse_nfe
 from fantozzi.operation_classifier import (
@@ -136,6 +142,8 @@ DEFAULT_REGRAS_COMPROVANTES = (
 )
 DEFAULT_MAPEAMENTO_DRE_PATH = PROJECT_ROOT / "config" / "mapeamento_dre.yaml"
 DEFAULT_BANK_DECISOES_DIR = PROJECT_ROOT / "bank_raw" / "_decisoes_regras"
+DEFAULT_XML_DECISOES_DIR = PROJECT_ROOT / "Database_Dev" / "_decisoes_regras" / "xml"
+DEFAULT_REPORTS_RUNS_ROOT = PROJECT_ROOT / "reports" / "importacao_real" / "runs"
 DEFAULT_COMPROVANTES_REAL_INPUT = PROJECT_ROOT / "bank_raw" / "_audit" / "fase_13c"
 DEFAULT_COMPROVANTES_REAL_REPORTS = PROJECT_ROOT / "reports" / "comprovantes_classificacao"
 
@@ -326,6 +334,51 @@ def build_parser() -> argparse.ArgumentParser:
         help="Arquivo YAML de mapeamento das contas para linhas DRE.",
     )
     importar_revisao.set_defaults(func=importar_revisao_banca_command)
+
+    importar_revisao_xml_parser = subparsers.add_parser(
+        "importar-revisao-xml",
+        help="Gera/atualiza Excel decisional para regras XML/produtos.",
+        description=(
+            "Le reports/importacao_real/runs/<RUN_ID>/<CNPJ>/"
+            "revisao_classificacao_real.csv, confere o hash do YAML de produtos "
+            "usado na run e gera a planilha decisoria XML sem modificar YAML."
+        ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    importar_revisao_xml_parser.add_argument(
+        "--run-reports-dir",
+        help="Pasta da run em reports/importacao_real/runs/<RUN_ID>.",
+    )
+    importar_revisao_xml_parser.add_argument(
+        "--run-id",
+        help="Run id a resolver dentro de --reports-runs-root.",
+    )
+    importar_revisao_xml_parser.add_argument(
+        "--reports-runs-root",
+        default=str(DEFAULT_REPORTS_RUNS_ROOT),
+        help="Raiz das runs de reports para resolver --run-id.",
+    )
+    importar_revisao_xml_parser.add_argument(
+        "--saida-dir",
+        default=str(DEFAULT_XML_DECISOES_DIR),
+        help="Pasta do Excel decisorio XML e manifest.",
+    )
+    importar_revisao_xml_parser.add_argument(
+        "--regras",
+        default=str(DEFAULT_REGRAS_PRODUTOS),
+        help="YAML atual de regras de produtos, usado somente para hash.",
+    )
+    importar_revisao_xml_parser.add_argument(
+        "--plano-contas",
+        default=str(DEFAULT_PLANO_CONTAS),
+        help="Arquivo YAML do plano de contas gerencial.",
+    )
+    importar_revisao_xml_parser.add_argument(
+        "--allow-stale-run",
+        action="store_true",
+        help="Permite gerar workbook de auditoria mesmo se o hash da run estiver obsoleto.",
+    )
+    importar_revisao_xml_parser.set_defaults(func=importar_revisao_xml_command)
 
     classificar_comprovantes = subparsers.add_parser(
         "classificar-comprovantes-pagamento",
@@ -1342,6 +1395,31 @@ def importar_revisao_banca_command(args: argparse.Namespace) -> int:
         return 1
 
     for line in revisao_banca_console_lines(result):
+        print(line)
+    return 0
+
+
+def importar_revisao_xml_command(args: argparse.Namespace) -> int:
+    try:
+        run_reports_dir = resolve_run_reports_dir(
+            run_reports_dir=(
+                Path(args.run_reports_dir) if args.run_reports_dir else None
+            ),
+            run_id=args.run_id,
+            reports_runs_root=Path(args.reports_runs_root),
+        )
+        result = importar_revisao_xml(
+            run_reports_dir=run_reports_dir,
+            output_dir=Path(args.saida_dir),
+            regras_path=Path(args.regras),
+            plano_contas_path=Path(args.plano_contas),
+            allow_stale_run=args.allow_stale_run,
+        )
+    except (OSError, ImportaRevisaoXmlError, ValueError) as exc:
+        print(f"[ERRO] Nao foi possivel importar revisao XML: {exc}")
+        return 1
+
+    for line in revisao_xml_console_lines(result):
         print(line)
     return 0
 
