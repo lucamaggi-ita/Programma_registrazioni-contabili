@@ -32,6 +32,7 @@ from fantozzi.banking.xlsx_bank_parser import parse_bank_launches
 COMPROVANTES_XLSX = "Analisi_regole_registrazioni_banca_comprovanti.xlsx"
 CONTA_CORRENTE_XLSX = "Analisi_regole_registrazioni_banca_conto_corrente.xlsx"
 MANIFEST_NAME = "manifest_importa_revisao_banca.json"
+MANIFEST_HISTORICO_TEMPLATE = "manifest_importa_revisao_banca_{periodo}.json"
 
 COMPROVANTES_SHEET = "decisoes_comprovantes"
 CONTA_CORRENTE_SHEET = "decisoes_conta_corrente"
@@ -76,6 +77,7 @@ CONTA_CORRENTE_HEADERS = [
     "CONTA_NOME_APROVADA",
     "CHAVE_REGRA_LANCAMENTO",
     "CHAVE_REGRA_RAZAO_SOCIAL",
+    "POSSIVEL_COMPROVANTE_RELACIONADO",
     "USAR_SOMENTE_SEM_COMPROVANTE",
     "RISCO_DUPLICIDADE_XML",
     "ESCOPO_REGRA",
@@ -122,6 +124,7 @@ MANUAL_COLUMNS = {
     "CHAVE_REGRA_REFERENCIA",
     "CHAVE_REGRA_LANCAMENTO",
     "CHAVE_REGRA_RAZAO_SOCIAL",
+    "POSSIVEL_COMPROVANTE_RELACIONADO",
     "USAR_SOMENTE_SEM_COMPROVANTE",
     "RISCO_DUPLICIDADE_XML",
     "ESCOPO_REGRA",
@@ -145,10 +148,13 @@ class ImportaRevisaoBancaResult:
     excel_comprovantes: Path
     excel_conta_corrente: Path
     manifest_path: Path
+    manifest_historico_path: Path
     ofx_encontrado: bool
     ofx_usado: bool
     decisoes_preservadas: int
     novas_chaves_adicionadas: int
+    possiveis_comprovantes_relacionados: int
+    alertas: tuple[str, ...]
 
 
 @dataclass
@@ -209,6 +215,9 @@ def importar_revisao_banca(
     comprovantes_path = output_dir / COMPROVANTES_XLSX
     conta_corrente_path = output_dir / CONTA_CORRENTE_XLSX
     manifest_path = output_dir / MANIFEST_NAME
+    manifest_historico_path = output_dir / MANIFEST_HISTORICO_TEMPLATE.format(
+        periodo=periodo
+    )
 
     existing_comprovantes = _load_existing_decisions(
         comprovantes_path,
@@ -228,6 +237,7 @@ def importar_revisao_banca(
     lancamentos_lidos = 0
     comprovante_groups: dict[str, _Group] = {}
     conta_groups: dict[str, _Group] = {}
+    receipt_beneficiaries_by_context: dict[tuple[str, str], set[str]] = {}
 
     for cnpj_dir in _cnpj_dirs(bank_raw_dir):
         cnpj = only_digits(cnpj_dir.name)
@@ -248,6 +258,12 @@ def importar_revisao_banca(
             for receipt in receipts:
                 if _is_non_operational_receipt(receipt):
                     continue
+                _register_receipt_beneficiary(
+                    receipt_beneficiaries_by_context,
+                    cnpj=cnpj,
+                    periodo=periodo,
+                    receipt=receipt,
+                )
                 row = _receipt_dict(receipt, cnpj)
                 result = classify_payment_receipt(row, rules, exclusion_rules)
                 if result.status_classificacao in {STATUS_CLASSIFICADO, STATUS_EXCLUIDO}:
@@ -277,7 +293,13 @@ def importar_revisao_banca(
                     _Group(chave_estavel=key, rows=[], tecnico_rows=[]),
                 )
                 group.rows.append(
-                    _conta_source_row(launch, cnpj, periodo, lancamentos_path)
+                    _conta_source_row(
+                        launch,
+                        cnpj,
+                        periodo,
+                        lancamentos_path,
+                        receipt_beneficiaries_by_context,
+                    )
                 )
                 group.tecnico_rows.append(
                     _tecnico_conta_row(launch, cnpj, periodo, lancamentos_path, key)
@@ -290,6 +312,12 @@ def importar_revisao_banca(
         conta_groups,
         existing_conta,
     )
+    possiveis_comprovantes_relacionados = sum(
+        1
+        for row in conta_rows
+        if row.get("POSSIVEL_COMPROVANTE_RELACIONADO") in {"SIM", "INCERTO"}
+    )
+    alertas = _build_alertas(possiveis_comprovantes_relacionados)
 
     _write_decision_workbook(
         comprovantes_path,
@@ -324,10 +352,13 @@ def importar_revisao_banca(
         excel_comprovantes=comprovantes_path,
         excel_conta_corrente=conta_corrente_path,
         manifest_path=manifest_path,
+        manifest_historico_path=manifest_historico_path,
         ofx_encontrado=ofx_found,
         ofx_usado=False,
         decisoes_preservadas=preserved_comprovantes + preserved_conta,
         novas_chaves_adicionadas=new_comprovantes + new_conta,
+        possiveis_comprovantes_relacionados=possiveis_comprovantes_relacionados,
+        alertas=alertas,
     )
     _write_manifest(result)
     return result
@@ -347,6 +378,9 @@ def console_lines(result: ImportaRevisaoBancaResult) -> list[str]:
         f"Excel comprovantes: {result.excel_comprovantes}",
         f"Excel conta corrente: {result.excel_conta_corrente}",
         f"Manifest: {result.manifest_path}",
+        f"Manifest historico: {result.manifest_historico_path}",
+        f"Possiveis comprovantes relacionados no conta corrente: {result.possiveis_comprovantes_relacionados}",
+        *[f"ALERTA: {alerta}" for alerta in result.alertas],
         "OFX usado: false",
         "YAML de regras nao modificado.",
     ]
@@ -404,6 +438,19 @@ def _receipt_dict(receipt: PaymentReceiptRaw, cnpj: str) -> dict[str, str]:
     }
 
 
+def _register_receipt_beneficiary(
+    receipt_beneficiaries_by_context: dict[tuple[str, str], set[str]],
+    *,
+    cnpj: str,
+    periodo: str,
+    receipt: PaymentReceiptRaw,
+) -> None:
+    beneficiary = normalize_match_text(receipt.beneficiary_name)
+    if not beneficiary:
+        return
+    receipt_beneficiaries_by_context.setdefault((cnpj, periodo), set()).add(beneficiary)
+
+
 def _is_non_operational_receipt(receipt: PaymentReceiptRaw) -> bool:
     return normalize_match_text(receipt.beneficiary_name) == "TOTAL"
 
@@ -457,6 +504,7 @@ def _conta_source_row(
     cnpj: str,
     periodo: str,
     source_path: Path,
+    receipt_beneficiaries_by_context: dict[tuple[str, str], set[str]],
 ) -> dict[str, object]:
     return {
         "CNPJ": cnpj,
@@ -467,11 +515,32 @@ def _conta_source_row(
         "RAZAO_SOCIAL": launch.counterparty_name,
         "CHAVE_REGRA_LANCAMENTO": normalize_match_text(launch.description),
         "CHAVE_REGRA_RAZAO_SOCIAL": normalize_match_text(launch.counterparty_name),
+        "POSSIVEL_COMPROVANTE_RELACIONADO": _possible_related_receipt(
+            launch,
+            receipt_beneficiaries_by_context.get((cnpj, periodo), set()),
+        ),
         "USAR_SOMENTE_SEM_COMPROVANTE": "SIM",
         "ORIGEM_ARQUIVO": str(source_path),
         "HASH_ORIGEM": launch.raw_hash,
         "TIPO_MOVIMENTO": _tipo_movimento(launch),
     }
+
+
+def _possible_related_receipt(
+    launch: BankLaunchEnrichment,
+    receipt_beneficiaries: set[str],
+) -> str:
+    if not receipt_beneficiaries:
+        return "NAO"
+    counterparty = normalize_match_text(launch.counterparty_name)
+    description = normalize_match_text(launch.description)
+    if counterparty and counterparty in receipt_beneficiaries:
+        return "SIM"
+    if description and any(
+        beneficiary and beneficiary in description for beneficiary in receipt_beneficiaries
+    ):
+        return "INCERTO"
+    return "NAO"
 
 
 def _tecnico_comprovante_row(
@@ -592,6 +661,9 @@ def _build_conta_output_rows(
             "CONTA_NOME_APROVADA": "",
             "CHAVE_REGRA_LANCAMENTO": first.get("CHAVE_REGRA_LANCAMENTO", ""),
             "CHAVE_REGRA_RAZAO_SOCIAL": first.get("CHAVE_REGRA_RAZAO_SOCIAL", ""),
+            "POSSIVEL_COMPROVANTE_RELACIONADO": first.get(
+                "POSSIVEL_COMPROVANTE_RELACIONADO", "NAO"
+            ),
             "USAR_SOMENTE_SEM_COMPROVANTE": "SIM",
             "RISCO_DUPLICIDADE_XML": "",
             "ESCOPO_REGRA": "",
@@ -888,11 +960,23 @@ def _write_manifest(result: ImportaRevisaoBancaResult) -> None:
         "ofx_usado": result.ofx_usado,
         "decisoes_preservadas": result.decisoes_preservadas,
         "novas_chaves_adicionadas": result.novas_chaves_adicionadas,
+        "manifest_historico": str(result.manifest_historico_path),
+        "possiveis_comprovantes_relacionados": result.possiveis_comprovantes_relacionados,
+        "alertas": list(result.alertas),
         "yaml_modificado": False,
     }
-    result.manifest_path.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
+    text = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+    result.manifest_path.write_text(text, encoding="utf-8")
+    result.manifest_historico_path.write_text(text, encoding="utf-8")
+
+
+def _build_alertas(possiveis_comprovantes_relacionados: int) -> tuple[str, ...]:
+    if possiveis_comprovantes_relacionados <= 0:
+        return ()
+    return (
+        "Existem movimentos de conta corrente possivelmente relacionados a "
+        "comprovantes. Verificar USAR_SOMENTE_SEM_COMPROVANTE para evitar "
+        "duplicidade no DRE.",
     )
 
 
@@ -969,6 +1053,7 @@ def _suggested_width(header: str) -> int:
         "RAZAO_SOCIAL": 34,
         "CONTA_ESCOLHIDA": 42,
         "CONTA_NOME_APROVADA": 34,
+        "POSSIVEL_COMPROVANTE_RELACIONADO": 28,
         "EXEMPLOS": 70,
         "OBSERVACAO_OPERADOR": 45,
         "ORIGEM_ARQUIVO": 58,
@@ -983,6 +1068,7 @@ def _wrap(header: str) -> bool:
         "REFERENCIA_EMPRESA",
         "LANCAMENTO",
         "RAZAO_SOCIAL",
+        "POSSIVEL_COMPROVANTE_RELACIONADO",
         "EXEMPLOS",
         "OBSERVACAO_OPERADOR",
         "ORIGEM_ARQUIVO",
@@ -999,4 +1085,5 @@ def _instructions(sheet_name: str) -> list[str]:
         "CONTA_ESCOLHIDA e um dropdown operacional; CONTA_ID_APROVADA e o campo tecnico usado pela skill de regras.",
         "OFX nao e obrigatorio nesta fase e nao foi usado para gerar as linhas.",
         "As decisoes manuais existentes sao preservadas por CHAVE_ESTAVEL quando o arquivo e regenerado.",
+        "POSSIVEL_COMPROVANTE_RELACIONADO e informativo; nao classifica conta automaticamente.",
     ]
