@@ -519,3 +519,7 @@ contas:
   grupo: Contas de Revisao e Classificacao Pendente
   tipo: revisao
   exige_revisao: true
+- id: 99.99.998
+  nome: Contrapartida Tecnica Lancamentos Manuais
+  grupo: Controles Tecnicos
+  tipo: tecnico

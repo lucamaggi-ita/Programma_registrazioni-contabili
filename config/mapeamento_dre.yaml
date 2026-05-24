@@ -540,3 +540,6 @@ mapeamento:
   13.01.999:
     dre_linha_id: '99.01'
     entra_dre: true
+  99.99.998:
+    dre_linha_id: ''
+    entra_dre: false
