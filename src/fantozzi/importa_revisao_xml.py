@@ -35,6 +35,7 @@ DECISOES_HEADERS = [
     "DESCRICAO_EXEMPLO",
     "DESCRICAO_NORMALIZADA",
     "FORNECEDORES",
+    "CNPJS_ORIGEM",
     "TIPO_OPERACAO_ESPECIAL",
     "CONTA_ESCOLHIDA",
     "CONTA_ID_APROVADA",
@@ -397,6 +398,7 @@ def _decision_row(group: _Group) -> dict[str, object]:
         "FORNECEDORES": _joined_unique(
             source_row.get("fornecedores") for source_row in rows
         ),
+        "CNPJS_ORIGEM": "; ".join(sorted(group.cnpjs)),
         "TIPO_OPERACAO_ESPECIAL": special_type,
         "CONTA_ESCOLHIDA": "",
         "CONTA_ID_APROVADA": "",
@@ -546,6 +548,7 @@ def _write_workbook(
     sheet.title = DECISOES_SHEET
     _append_rows(sheet, DECISOES_HEADERS, decision_rows)
     _style_sheet(sheet, DECISOES_HEADERS)
+    _add_action_validation(sheet, DECISOES_HEADERS, decision_rows)
     _add_account_validation(sheet, DECISOES_HEADERS, len(decision_rows), len(account_options))
     _add_account_formulas(sheet, DECISOES_HEADERS, len(decision_rows))
 
@@ -644,6 +647,40 @@ def _add_account_validation(
     validation.errorTitle = "Conta invalida"
     sheet.add_data_validation(validation)
     validation.add(f"{letter}2:{letter}{row_count + 1}")
+
+
+def _add_action_validation(
+    sheet,
+    headers: list[str],
+    rows: list[dict[str, object]],
+) -> None:
+    if "ACAO_REGRA" not in headers or "STATUS_DECISAO" not in headers:
+        return
+    action_col = get_column_letter(headers.index("ACAO_REGRA") + 1)
+    default_validation = DataValidation(
+        type="list",
+        formula1='"CRIAR_REGRA,CRIAR_ALIAS,IGNORAR,REVISAR"',
+        allow_blank=True,
+    )
+    blocked_validation = DataValidation(
+        type="list",
+        formula1='"IGNORAR,BLOQUEADO,REVISAR"',
+        allow_blank=True,
+    )
+    default_validation.error = "Escolha uma acao valida."
+    default_validation.errorTitle = "Acao invalida"
+    blocked_validation.error = (
+        "Riga BLOQUEADO: use somente IGNORAR, BLOQUEADO ou REVISAR."
+    )
+    blocked_validation.errorTitle = "Acao bloqueada"
+    sheet.add_data_validation(default_validation)
+    sheet.add_data_validation(blocked_validation)
+    for row_offset, row in enumerate(rows, start=2):
+        target = f"{action_col}{row_offset}"
+        if str(row.get("STATUS_DECISAO") or "").strip().upper() == "BLOQUEADO":
+            blocked_validation.add(target)
+        else:
+            default_validation.add(target)
 
 
 def _add_account_formulas(sheet, headers: list[str], row_count: int) -> None:
@@ -808,6 +845,7 @@ def _suggested_width(header: str) -> int:
         "DESCRICAO_EXEMPLO": 44,
         "DESCRICAO_NORMALIZADA": 38,
         "FORNECEDORES": 34,
+        "CNPJS_ORIGEM": 32,
         "CONTA_ESCOLHIDA": 42,
         "CONTA_ID_APROVADA": 18,
         "CONTA_NOME_APROVADA": 34,

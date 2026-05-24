@@ -258,6 +258,50 @@ def test_special_operations_not_strong_enter_as_blocked(tmp_path):
     assert {row["NIVEL_RISCO_REGRA"] for row in rows} == {"ALTO"}
 
 
+def test_blocked_rows_have_restricted_action_validation(tmp_path):
+    env = _make_env(tmp_path)
+    _write_csv(
+        env.run_dir,
+        [
+            _row(
+                descricao_normalizada="comodato provavel",
+                tipo_operacao_especial="COMODATO",
+                confianca_operacao_especial="PROVAVEL",
+            ),
+            _row(descricao_normalizada="produto normal"),
+        ],
+    )
+
+    importar_revisao_xml(
+        run_reports_dir=env.run_dir,
+        output_dir=env.output_dir,
+        regras_path=env.regras_path,
+        plano_contas_path=env.plano_path,
+    )
+
+    workbook = load_workbook(env.output_dir / EXCEL_NAME, data_only=False)
+    sheet = workbook[DECISOES_SHEET]
+    rows = _decision_rows(env.output_dir / EXCEL_NAME)
+    blocked_index = next(
+        index
+        for index, row in enumerate(rows, start=2)
+        if row["STATUS_DECISAO"] == "BLOQUEADO"
+    )
+    headers = [cell.value for cell in sheet[1]]
+    action_column = chr(ord("A") + headers.index("ACAO_REGRA"))
+    blocked_cell = f"{action_column}{blocked_index}"
+
+    blocked_validations = [
+        validation
+        for validation in sheet.data_validations.dataValidation
+        if validation.formula1 == '"IGNORAR,BLOQUEADO,REVISAR"'
+    ]
+    assert blocked_validations
+    assert any(blocked_cell in str(validation.sqref) for validation in blocked_validations)
+    assert "CRIAR_ALIAS" not in blocked_validations[0].formula1
+    assert "CRIAR_REGRA" not in blocked_validations[0].formula1
+
+
 def test_output_sheet_and_required_columns_are_compatible(tmp_path):
     env = _make_env(tmp_path)
     _write_csv(env.run_dir, [_row()])
@@ -280,6 +324,7 @@ def test_output_sheet_and_required_columns_are_compatible(tmp_path):
     headers = [cell.value for cell in workbook[DECISOES_SHEET][1]]
     assert "CHAVE_ESTAVEL" in headers
     assert "FORNECEDORES" in headers
+    assert "CNPJS_ORIGEM" in headers
     assert "CONTA_ESCOLHIDA" in headers
     assert "CONTA_ID_APROVADA" in headers
     assert "CONTA_NOME_APROVADA" in headers
@@ -346,6 +391,7 @@ def test_same_stable_key_across_multiple_cnpjs_groups_into_one_decision(tmp_path
     assert result.linhas_operacionais_geradas == 1
     assert rows[0]["QTD_OCORRENCIAS"] == 2
     assert rows[0]["VALOR_TOTAL"] == 20
+    assert rows[0]["CNPJS_ORIGEM"] == "08884180000123; 55746722000181"
 
     workbook = load_workbook(env.output_dir / EXCEL_NAME, data_only=False)
     tecnico = workbook["tecnico_xml"]
@@ -356,6 +402,31 @@ def test_same_stable_key_across_multiple_cnpjs_groups_into_one_decision(tmp_path
         "08884180000123",
         "55746722000181",
     }
+
+
+def test_manifest_keeps_critical_fields(tmp_path):
+    env = _make_env(tmp_path)
+    _write_csv(env.run_dir, [_row()])
+
+    importar_revisao_xml(
+        run_reports_dir=env.run_dir,
+        output_dir=env.output_dir,
+        regras_path=env.regras_path,
+        plano_contas_path=env.plano_path,
+    )
+
+    manifest = json.loads((env.output_dir / MANIFEST_NAME).read_text(encoding="utf-8"))
+    for field in [
+        "hash_yaml_run",
+        "hash_yaml_atual",
+        "hash_yaml_run_assente",
+        "stale_run",
+        "allow_stale_run",
+        "comodato_forte_esclusi",
+        "bonificacao_forte_esclusa",
+        "candidatos_bloqueados_operacao_especial",
+    ]:
+        assert field in manifest
 
 
 def test_cli_run_id_imports_xml_review(tmp_path):
