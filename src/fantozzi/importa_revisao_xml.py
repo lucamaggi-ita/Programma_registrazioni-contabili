@@ -78,19 +78,8 @@ MANUAL_COLUMNS = {
 }
 
 SPECIAL_TYPES = {"COMODATO", "BONIFICACAO_RECEBIDA"}
-GENERIC_SUPPLIERS = {
-    "",
-    "SEM FORNECEDOR",
-    "FORNECEDOR",
-    "FORNECEDORES",
-    "DIVERSOS",
-    "VARIOS",
-    "NAO INFORMADO",
-    "N/A",
-}
 GENERIC_SUPPLIERS_NORMALIZED = frozenset(
     {
-        "",
         "SEM FORNECEDOR",
         "FORNECEDOR",
         "FORNECEDORES",
@@ -602,7 +591,6 @@ def _write_workbook(
         row[0].alignment = Alignment(wrap_text=True, vertical="top")
     instrucoes["A1"].font = Font(bold=True, size=14)
 
-    path.parent.mkdir(parents=True, exist_ok=True)
     workbook.save(path)
 
 
