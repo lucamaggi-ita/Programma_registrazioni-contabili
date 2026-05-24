@@ -27,16 +27,12 @@ from fantozzi.relatorios_gerenciais_ok import (
 
 CSV_HEADERS = [
     "data",
-    "historico",
-    "documento",
-    "fornecedor_ou_contraparte",
+    "descricao_da_despesa",
     "conta_debito_id",
     "conta_debito_nome",
     "conta_credito_id",
     "conta_credito_nome",
     "valor",
-    "cnpj_origem_opcional",
-    "centro_custo_opcional",
     "observacao",
 ]
 
@@ -65,10 +61,10 @@ def test_aceita_decimal_com_ponto(tmp_path):
 def test_rejeita_coluna_obrigatoria_ausente(tmp_path):
     paths = _save_config(tmp_path)
     csv_path = tmp_path / "manual.csv"
-    headers = [header for header in CSV_HEADERS if header != "historico"]
+    headers = [header for header in CSV_HEADERS if header != "descricao_da_despesa"]
     _write_csv(csv_path, headers, [_row()])
 
-    with pytest.raises(LancamentosManuaisGerenciaisError, match="historico"):
+    with pytest.raises(LancamentosManuaisGerenciaisError, match="descricao_da_despesa"):
         carregar_lancamentos_manuais_gerenciais(csv_path, *paths)
 
 
@@ -76,11 +72,11 @@ def test_rejeita_coluna_duplicada(tmp_path):
     paths = _save_config(tmp_path)
     csv_path = tmp_path / "manual.csv"
     csv_path.write_text(
-        "data;data;historico;documento;fornecedor_ou_contraparte;"
+        "data;data;descricao_da_despesa;"
         "conta_debito_id;conta_debito_nome;conta_credito_id;"
         "conta_credito_nome;valor\n"
-        "2026-05-16;2026-05-16;Ajuste;DOC;Fornecedor;2.02.001;"
-        "Carnes Bovinas;10.01.001;Equipamentos de Cozinha;10,00\n",
+        "2026-05-16;2026-05-16;Ajuste;"
+        "2.02.001;Carnes Bovinas;10.01.001;Equipamentos de Cozinha;10,00\n",
         encoding="utf-8",
     )
 
@@ -392,16 +388,12 @@ def _write_csv(path: Path, headers: list[str], rows: list[dict[str, str]]) -> No
 def _row(**overrides) -> dict[str, str]:
     row = {
         "data": "2026-05-16",
-        "historico": "Ajuste manual gerencial",
-        "documento": "MAN-001",
-        "fornecedor_ou_contraparte": "Fornecedor Teste",
+        "descricao_da_despesa": "Ajuste manual gerencial",
         "conta_debito_id": "2.02.001",
         "conta_debito_nome": "Carnes Bovinas",
         "conta_credito_id": "10.01.001",
         "conta_credito_nome": "Equipamentos de Cozinha",
         "valor": "10,50",
-        "cnpj_origem_opcional": "",
-        "centro_custo_opcional": "CC-001",
         "observacao": "fixture sintetica",
     }
     row.update({key: str(value) for key, value in overrides.items()})

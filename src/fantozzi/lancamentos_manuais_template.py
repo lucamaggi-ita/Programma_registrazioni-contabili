@@ -31,13 +31,9 @@ INSTRUCTIONS_SHEET = "instrucoes"
 
 OPERATIVE_HEADERS = (
     "DATA",
-    "HISTORICO",
-    "DOCUMENTO",
-    "FORNECEDOR_OU_CONTRAPARTE",
-    "CATEGORIA_GERENCIAL",
+    "CONTA_ESCOLHIDA",
     "VALOR",
-    "CNPJ_ORIGEM",
-    "CENTRO_CUSTO",
+    "DESCRICAO_DA_DESPESA",
     "OBSERVACAO",
 )
 TECHNICAL_HEADERS = (
@@ -52,11 +48,8 @@ TECHNICAL_HEADERS = (
 ALL_TEMPLATE_HEADERS = (*OPERATIVE_HEADERS, *TECHNICAL_HEADERS)
 
 CATEGORY_HEADERS = (
-    "CATEGORIA_GERENCIAL",
-    "CONTA_DEBITO_ID",
-    "CONTA_DEBITO_NOME",
-    "DESCRICAO_OPERADOR",
-    "ATIVA",
+    "CONTA_NOME",
+    "CONTA_ID",
 )
 ACCOUNT_HEADERS = (
     "CONTA_ID",
@@ -70,15 +63,15 @@ ACCOUNT_HEADERS = (
 DEFAULT_TEMPLATE_ROWS = 500
 
 CATEGORY_CANDIDATES = (
-    ("Manutencao Predial", "8.01.001", "Reparos e manutencao predial confirmados pelo operador."),
-    ("Material de Escritorio", "6.01.005", "Materiais administrativos e de escritorio."),
-    ("Internet e Telefonia", "4.01.014", "Servicos de internet, telefonia e conectividade."),
-    ("Publicidade e Propaganda", "9.01.001", "Marketing e divulgacao aprovados pelo operador."),
-    ("Uniformes", "3.02.008", "Uniformes e itens de uso da equipe."),
-    ("Prestadores MEI", "3.04.007", "Servicos de prestadores MEI confirmados."),
-    ("Alugueis", "4.01.001", "Aluguel do imovel."),
-    ("Tarifas Bancarias", "7.01.001", "Tarifas bancarias sem origem automatica."),
-    ("Pequenas Despesas Operacionais", "12.01.001", "Pequenas despesas operacionais avulsas."),
+    "8.01.001",
+    "6.01.005",
+    "4.01.014",
+    "9.01.001",
+    "3.02.008",
+    "3.04.007",
+    "4.01.001",
+    "7.01.001",
+    "12.01.001",
 )
 
 TECHNICAL_COUNTERPART_CANDIDATES = (
@@ -113,10 +106,8 @@ class AccountInfo:
 
 @dataclass(frozen=True)
 class CategoryMapping:
-    categoria: str
     conta_debito_id: str
     conta_debito_nome: str
-    descricao_operador: str
     ativa: bool = True
 
 
@@ -307,15 +298,13 @@ def _load_entra_dre_map(mapeamento_dre_path: Path) -> dict[str, bool]:
 def _default_categories(accounts: tuple[AccountInfo, ...]) -> tuple[CategoryMapping, ...]:
     by_id = {account.id: account for account in accounts}
     categories: list[CategoryMapping] = []
-    for category, account_id, description in CATEGORY_CANDIDATES:
+    for account_id in CATEGORY_CANDIDATES:
         account = by_id.get(account_id)
         if account:
             categories.append(
                 CategoryMapping(
-                    categoria=category,
                     conta_debito_id=account.id,
                     conta_debito_nome=account.nome,
-                    descricao_operador=description,
                 )
             )
     return tuple(categories)
@@ -373,41 +362,37 @@ def _build_operative_sheet(
         cell.font = Font(color="FFFFFF", bold=True)
     widths = {
         "A": 14,
-        "B": 36,
-        "C": 20,
-        "D": 32,
-        "E": 28,
-        "F": 14,
-        "G": 18,
+        "B": 32,
+        "C": 14,
+        "D": 44,
+        "E": 44,
+        "F": 18,
+        "G": 34,
         "H": 18,
-        "I": 44,
+        "I": 36,
         "J": 18,
-        "K": 34,
-        "L": 18,
-        "M": 36,
-        "N": 18,
-        "O": 44,
-        "P": 24,
+        "K": 44,
+        "L": 24,
     }
     for column, width in widths.items():
         sheet.column_dimensions[column].width = width
-    for column in range(10, 17):
+    for column in range(6, 13):
         sheet.column_dimensions[get_column_letter(column)].hidden = True
     sheet.freeze_panes = "A2"
 
     for row in range(2, DEFAULT_TEMPLATE_ROWS + 2):
-        sheet[f"J{row}"] = f'=IFERROR(VLOOKUP(E{row},{CATEGORIES_SHEET}!$A:$C,2,FALSE),"")'
-        sheet[f"K{row}"] = f'=IFERROR(VLOOKUP(E{row},{CATEGORIES_SHEET}!$A:$C,3,FALSE),"")'
-        sheet[f"L{row}"] = technical_counterpart.conta_id if technical_counterpart else ""
-        sheet[f"M{row}"] = technical_counterpart.conta_nome if technical_counterpart else ""
-        sheet[f"N{row}"] = '=IF(COUNTA(A{0}:I{0})=0,"","PENDENTE")'.format(row)
+        sheet[f"F{row}"] = f'=IFERROR(VLOOKUP(B{row},{CATEGORIES_SHEET}!$A:$B,2,FALSE),"")'
+        sheet[f"G{row}"] = f'=IF(B{row}<>"",B{row},"")'
+        sheet[f"H{row}"] = technical_counterpart.conta_id if technical_counterpart else ""
+        sheet[f"I{row}"] = technical_counterpart.conta_nome if technical_counterpart else ""
+        sheet[f"J{row}"] = '=IF(COUNTA(A{0}:E{0})=0,"","PENDENTE")'.format(row)
         if blockers:
-            sheet[f"O{row}"] = "BLOCKER: " + " | ".join(blockers)
+            sheet[f"K{row}"] = "BLOCKER: " + " | ".join(blockers)
         else:
-            sheet[f"O{row}"] = '=IF(N{0}="","",IF(J{0}<>"","OK","REVISAR"))'.format(row)
-        sheet[f"P{row}"] = (
-            f'=IF(COUNTA(A{row}:I{row})=0,"",'
-            f'TEXT(A{row},"yyyy-mm-dd")&"|"&C{row}&"|"&B{row}&"|"&F{row})'
+            sheet[f"K{row}"] = '=IF(J{0}="","",IF(F{0}<>"","OK","REVISAR"))'.format(row)
+        sheet[f"L{row}"] = (
+            f'=IF(COUNTA(A{row}:E{row})=0,"",'
+            f'TEXT(A{row},"yyyy-mm-dd")&"|"&B{row}&"|"&D{row}&"|"&C{row})'
         )
 
     if categories:
@@ -417,21 +402,13 @@ def _build_operative_sheet(
             allow_blank=True,
         )
         sheet.add_data_validation(dv_categories)
-        dv_categories.add(f"E2:E{DEFAULT_TEMPLATE_ROWS + 1}")
+        dv_categories.add(f"B2:B{DEFAULT_TEMPLATE_ROWS + 1}")
 
 
 def _build_categories_sheet(sheet, categories: tuple[CategoryMapping, ...]) -> None:
     sheet.append(list(CATEGORY_HEADERS))
     for category in categories:
-        sheet.append(
-            [
-                category.categoria,
-                category.conta_debito_id,
-                category.conta_debito_nome,
-                category.descricao_operador,
-                "SIM" if category.ativa else "NAO",
-            ]
-        )
+        sheet.append([category.conta_debito_nome, category.conta_debito_id])
     _format_lookup_sheet(sheet)
 
 
@@ -524,14 +501,11 @@ def _read_categories_sheet(workbook) -> tuple[CategoryMapping, ...]:
     rows = _read_lookup_rows(workbook[CATEGORIES_SHEET], CATEGORY_HEADERS)
     return tuple(
         CategoryMapping(
-            categoria=row["CATEGORIA_GERENCIAL"],
-            conta_debito_id=row["CONTA_DEBITO_ID"],
-            conta_debito_nome=row["CONTA_DEBITO_NOME"],
-            descricao_operador=row["DESCRICAO_OPERADOR"],
-            ativa=_is_active(row["ATIVA"]),
+            conta_debito_id=row["CONTA_ID"],
+            conta_debito_nome=row["CONTA_NOME"],
         )
         for row in rows
-        if row["CATEGORIA_GERENCIAL"]
+        if row["CONTA_NOME"]
     )
 
 
@@ -577,7 +551,7 @@ def _validate_operator_rows(
     accounts: tuple[AccountInfo, ...],
     technical_counterpart: TechnicalCounterpart | None,
 ) -> tuple[tuple[dict[str, str], ...], list[str], list[str]]:
-    active_categories = {item.categoria: item for item in categories if item.ativa}
+    active_categories = {item.conta_debito_nome: item for item in categories if item.ativa}
     account_ids = {account.id for account in accounts}
     technical_rows: list[dict[str, str]] = []
     warnings: list[str] = []
@@ -609,11 +583,11 @@ def _validate_operator_rows(
         if row_errors:
             continue
 
-        category = active_categories.get(row["CATEGORIA_GERENCIAL"])
+        category = active_categories.get(row["CONTA_ESCOLHIDA"])
         if not category:
             errors.append(
-                f"Linha {line}: CATEGORIA_GERENCIAL inexistente ou inativa: "
-                f"{row['CATEGORIA_GERENCIAL']}"
+                f"Linha {line}: CONTA_ESCOLHIDA inexistente ou inativa: "
+                f"{row['CONTA_ESCOLHIDA']}"
             )
             continue
         if category.conta_debito_id not in account_ids:
@@ -629,16 +603,12 @@ def _validate_operator_rows(
 
         technical = {
             "data": parsed_date.isoformat(),
-            "historico": row["HISTORICO"],
-            "documento": row["DOCUMENTO"],
-            "fornecedor_ou_contraparte": row["FORNECEDOR_OU_CONTRAPARTE"],
+            "descricao_da_despesa": row["DESCRICAO_DA_DESPESA"],
             "conta_debito_id": category.conta_debito_id,
             "conta_debito_nome": category.conta_debito_nome,
             "conta_credito_id": technical_counterpart.conta_id,
             "conta_credito_nome": technical_counterpart.conta_nome,
             "valor": _decimal_text(value),
-            "cnpj_origem_opcional": row["CNPJ_ORIGEM"],
-            "centro_custo_opcional": row["CENTRO_CUSTO"],
             "observacao": row.get("OBSERVACAO", ""),
         }
         key = _technical_preview_key(technical)
@@ -660,26 +630,12 @@ def _validate_required_operator_fields(
 ) -> tuple[list[str], list[str]]:
     errors: list[str] = []
     warnings: list[str] = []
-    required = (
-        "DATA",
-        "HISTORICO",
-        "FORNECEDOR_OU_CONTRAPARTE",
-        "CATEGORIA_GERENCIAL",
-        "VALOR",
-    )
+    required = ("DATA", "CONTA_ESCOLHIDA", "VALOR", "DESCRICAO_DA_DESPESA")
     for header in required:
         if not row.get(header):
             errors.append(f"Linha {line}: campo obrigatorio vazio: {header}.")
-    if not row.get("DOCUMENTO"):
-        warnings.append(f"Linha {line}: DOCUMENTO vazio.")
-    if not row.get("CNPJ_ORIGEM"):
-        warnings.append(f"Linha {line}: CNPJ_ORIGEM vazio.")
-    if not row.get("OBSERVACAO"):
-        warnings.append(f"Linha {line}: OBSERVACAO vazia.")
-    if _normalize_text(row.get("HISTORICO")) in GENERIC_TERMS:
-        warnings.append(f"Linha {line}: HISTORICO muito generico.")
-    if _normalize_text(row.get("FORNECEDOR_OU_CONTRAPARTE")) in GENERIC_TERMS:
-        warnings.append(f"Linha {line}: fornecedor/contraparte muito generico.")
+    if _normalize_text(row.get("DESCRICAO_DA_DESPESA")) in GENERIC_TERMS:
+        warnings.append(f"Linha {line}: DESCRICAO_DA_DESPESA muito generica.")
     return errors, warnings
 
 
@@ -755,14 +711,7 @@ def _parse_positive_decimal(value: str, line: str, errors: list[str]) -> Decimal
 def _technical_preview_key(row: Mapping[str, str]) -> str:
     payload = "|".join(
         row.get(key, "")
-        for key in (
-            "data",
-            "documento",
-            "historico",
-            "conta_debito_id",
-            "valor",
-            "fornecedor_ou_contraparte",
-        )
+        for key in ("data", "descricao_da_despesa", "conta_debito_id", "valor")
     )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 

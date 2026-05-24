@@ -825,16 +825,12 @@ def _save_manual_csv_9n(path: Path) -> None:
             file,
             fieldnames=[
                 "data",
-                "historico",
-                "documento",
-                "fornecedor_ou_contraparte",
+                "descricao_da_despesa",
                 "conta_debito_id",
                 "conta_debito_nome",
                 "conta_credito_id",
                 "conta_credito_nome",
                 "valor",
-                "cnpj_origem_opcional",
-                "centro_custo_opcional",
                 "observacao",
             ],
             delimiter=";",
@@ -843,16 +839,12 @@ def _save_manual_csv_9n(path: Path) -> None:
         writer.writerow(
             {
                 "data": "2026-05-16",
-                "historico": "Ajuste manual gerencial",
-                "documento": "MAN-001",
-                "fornecedor_ou_contraparte": "Fornecedor Teste",
+                "descricao_da_despesa": "Ajuste manual gerencial",
                 "conta_debito_id": "2.02.001",
                 "conta_debito_nome": "Carnes Bovinas",
                 "conta_credito_id": "10.01.001",
                 "conta_credito_nome": "Equipamentos de Cozinha",
                 "valor": "10,50",
-                "cnpj_origem_opcional": "",
-                "centro_custo_opcional": "CC-001",
                 "observacao": "fixture sintetica",
             }
         )

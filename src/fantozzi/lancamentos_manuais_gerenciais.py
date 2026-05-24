@@ -21,20 +21,14 @@ NOME_EMPRESA_MANUAL_GERENCIAL = "Fantozzi Consolidado Gerencial"
 
 CSV_REQUIRED_HEADERS = (
     "data",
-    "historico",
-    "documento",
-    "fornecedor_ou_contraparte",
+    "descricao_da_despesa",
     "conta_debito_id",
     "conta_debito_nome",
     "conta_credito_id",
     "conta_credito_nome",
     "valor",
 )
-CSV_OPTIONAL_HEADERS = (
-    "cnpj_origem_opcional",
-    "centro_custo_opcional",
-    "observacao",
-)
+CSV_OPTIONAL_HEADERS = ("observacao",)
 CSV_APLICADO_HEADERS = (
     *CSV_REQUIRED_HEADERS,
     *CSV_OPTIONAL_HEADERS,
@@ -53,16 +47,12 @@ class LancamentosManuaisGerenciaisError(Exception):
 @dataclass(frozen=True)
 class LancamentoManualGerencial:
     data: date
-    historico: str
-    documento: str
-    fornecedor_ou_contraparte: str
+    descricao_da_despesa: str
     conta_debito_id: str
     conta_debito_nome: str
     conta_credito_id: str
     conta_credito_nome: str
     valor: Decimal
-    cnpj_origem_opcional: str
-    centro_custo_opcional: str
     observacao: str
     chave_deduplicacao: str
     linha_origem_csv: int
@@ -276,9 +266,7 @@ def _parse_row(
     dre_account_ids: frozenset[str],
 ) -> LancamentoManualGerencial:
     data = _parse_date(_required(raw_row, "data", line_number), line_number)
-    historico = _required(raw_row, "historico", line_number)
-    documento = _text(raw_row.get("documento"))
-    fornecedor = _required(raw_row, "fornecedor_ou_contraparte", line_number)
+    descricao = _required(raw_row, "descricao_da_despesa", line_number)
     conta_debito_id = _required(raw_row, "conta_debito_id", line_number)
     conta_debito_nome = _required(raw_row, "conta_debito_nome", line_number)
     conta_credito_id = _required(raw_row, "conta_credito_id", line_number)
@@ -308,30 +296,22 @@ def _parse_row(
             "a v1 aceita no maximo uma conta de resultado por lancamento manual."
         )
 
-    cnpj = _text(raw_row.get("cnpj_origem_opcional"))
-    centro_custo = _text(raw_row.get("centro_custo_opcional"))
     observacao = _text(raw_row.get("observacao"))
     chave = _dedupe_key(
         data=data,
-        documento=documento,
-        historico=historico,
+        descricao=descricao,
         conta_debito_id=conta_debito_id,
         conta_credito_id=conta_credito_id,
         valor=valor,
-        fornecedor=fornecedor,
     )
     return LancamentoManualGerencial(
         data=data,
-        historico=historico,
-        documento=documento,
-        fornecedor_ou_contraparte=fornecedor,
+        descricao_da_despesa=descricao,
         conta_debito_id=conta_debito_id,
         conta_debito_nome=conta_debito_nome,
         conta_credito_id=conta_credito_id,
         conta_credito_nome=conta_credito_nome,
         valor=valor,
-        cnpj_origem_opcional=cnpj,
-        centro_custo_opcional=centro_custo,
         observacao=observacao,
         chave_deduplicacao=chave,
         linha_origem_csv=line_number,
@@ -373,16 +353,16 @@ def _technical_lancamento(
     return Lancamento(
         data_documento=manual.data,
         competencia=manual.data.strftime("%Y-%m"),
-        cnpj_empresa=manual.cnpj_origem_opcional or IDENTIFICADOR_MANUAL_GERENCIAL,
+        cnpj_empresa=IDENTIFICADOR_MANUAL_GERENCIAL,
         nome_empresa=NOME_EMPRESA_MANUAL_GERENCIAL,
-        fornecedor_ou_favorecido=manual.fornecedor_ou_contraparte,
+        fornecedor_ou_favorecido=manual.descricao_da_despesa,
         cnpj_cpf_favorecido="",
-        documento=manual.documento,
+        documento="",
         tipo_documento=FONTE_MANUAL_GERENCIAL,
         conta_id=conta_id,
         conta_nome=conta_nome,
         grupo_conta=conta.grupo,
-        descricao_itens=manual.historico,
+        descricao_itens=manual.descricao_da_despesa,
         valor=manual.valor,
         origem=FONTE_MANUAL_GERENCIAL,
         arquivo_origem=str(csv_path),
@@ -391,7 +371,7 @@ def _technical_lancamento(
         status_revisao="OK",
         alertas="",
         observacoes=observacoes,
-        centro_custo=manual.centro_custo_opcional,
+        centro_custo="",
         tipo_lancamento=tipo_lancamento,
     )
 
@@ -408,16 +388,12 @@ def _write_csv_aplicado(
             writer.writerow(
                 {
                     "data": item.data.isoformat(),
-                    "historico": item.historico,
-                    "documento": item.documento,
-                    "fornecedor_ou_contraparte": item.fornecedor_ou_contraparte,
+                    "descricao_da_despesa": item.descricao_da_despesa,
                     "conta_debito_id": item.conta_debito_id,
                     "conta_debito_nome": item.conta_debito_nome,
                     "conta_credito_id": item.conta_credito_id,
                     "conta_credito_nome": item.conta_credito_nome,
                     "valor": _decimal_text(item.valor),
-                    "cnpj_origem_opcional": item.cnpj_origem_opcional,
-                    "centro_custo_opcional": item.centro_custo_opcional,
                     "observacao": item.observacao,
                     "fonte": FONTE_MANUAL_GERENCIAL,
                     "status": "OK",
@@ -552,22 +528,18 @@ def _required(row: Mapping[str, str], header: str, line_number: int) -> str:
 def _dedupe_key(
     *,
     data: date,
-    documento: str,
-    historico: str,
+    descricao: str,
     conta_debito_id: str,
     conta_credito_id: str,
     valor: Decimal,
-    fornecedor: str,
 ) -> str:
     payload = "|".join(
         [
             data.isoformat(),
-            _normalize_text(documento),
-            _normalize_text(historico),
+            _normalize_text(descricao),
             conta_debito_id,
             conta_credito_id,
             _decimal_text(valor),
-            _normalize_text(fornecedor),
         ]
     )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
