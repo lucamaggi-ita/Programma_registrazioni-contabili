@@ -260,6 +260,42 @@ def test_parser_accepts_gerar_pre_livro_diario_teste_command():
     assert args.saida == "reports/pre_livro_diario_teste.xlsx"
 
 
+def test_parser_accepts_gerar_template_lancamentos_manuais_gerenciais_command():
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "gerar-template-lancamentos-manuais-gerenciais",
+            "--saida",
+            "Database_Dev/_templates/lancamentos_manuais.xlsx",
+        ]
+    )
+
+    assert args.command == "gerar-template-lancamentos-manuais-gerenciais"
+    assert args.saida == "Database_Dev/_templates/lancamentos_manuais.xlsx"
+
+
+def test_parser_accepts_validar_lancamentos_manuais_gerenciais_command():
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "validar-lancamentos-manuais-gerenciais",
+            "--entrada",
+            "Database_Dev/_templates/lancamentos_manuais.xlsx",
+            "--saida-csv",
+            "reports/lancamentos_manuais.csv",
+            "--relatorio",
+            "reports/lancamentos_manuais.txt",
+        ]
+    )
+
+    assert args.command == "validar-lancamentos-manuais-gerenciais"
+    assert args.entrada == "Database_Dev/_templates/lancamentos_manuais.xlsx"
+    assert args.saida_csv == "reports/lancamentos_manuais.csv"
+    assert args.relatorio == "reports/lancamentos_manuais.txt"
+
+
 def test_parser_accepts_gerar_pacote_revisao_contabil_command():
     parser = build_parser()
 
@@ -433,6 +469,8 @@ def test_general_help_returns_zero_and_lists_commands(capsys):
     assert "gerar-planilha-revisao-classificacao" in captured.out
     assert "importar-planilha-revisao-classificacao" in captured.out
     assert "gerar-pre-livro-diario-teste" in captured.out
+    assert "gerar-template-lancamentos-manuais-gerenciais" in captured.out
+    assert "validar-lancamentos-manuais-gerenciais" in captured.out
     assert "gerar-pacote-revisao-contabil" in captured.out
     assert "gerar-relatorios-gerenciais-ok-provisorios" in captured.out
     assert "auditar-relatorios-gerenciais-ok-provisorios" in captured.out
@@ -591,6 +629,30 @@ def test_gerar_pre_livro_diario_teste_help_returns_zero_and_lists_options(capsys
     assert "--saida" in captured.out
     assert "--pasta-operacoes-especiais" in captured.out
     assert "--relatorio-auditoria" in captured.out
+
+
+def test_gerar_template_lancamentos_manuais_gerenciais_help_lists_options(capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        main(["gerar-template-lancamentos-manuais-gerenciais", "--help"])
+
+    captured = capsys.readouterr()
+    assert exc_info.value.code == 0
+    assert "--saida" in captured.out
+    assert "--plano-contas" in captured.out
+    assert "--mapeamento-dre" in captured.out
+
+
+def test_validar_lancamentos_manuais_gerenciais_help_lists_options(capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        main(["validar-lancamentos-manuais-gerenciais", "--help"])
+
+    captured = capsys.readouterr()
+    assert exc_info.value.code == 0
+    assert "--entrada" in captured.out
+    assert "--saida-csv" in captured.out
+    assert "--relatorio" in captured.out
+    assert "--plano-contas" in captured.out
+    assert "--mapeamento-dre" in captured.out
 
 
 def test_gerar_pacote_revisao_contabil_help_returns_zero_and_lists_options(capsys):

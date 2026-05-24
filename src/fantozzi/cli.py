@@ -102,6 +102,11 @@ from fantozzi.importa_revisao_xml import (
     importar_revisao_xml,
     resolve_run_reports_dir,
 )
+from fantozzi.lancamentos_manuais_template import (
+    LancamentosManuaisTemplateError,
+    gerar_template_lancamentos_manuais_gerenciais,
+    validar_lancamentos_manuais_gerenciais_operador,
+)
 from fantozzi.logging_utils import error, info, warning
 from fantozzi.nfe_importer import parse_nfe
 from fantozzi.operation_classifier import (
@@ -830,6 +835,75 @@ def build_parser() -> argparse.ArgumentParser:
         help="Arquivo TXT opcional para salvar os indicadores da aba Auditoria.",
     )
     gerar_pre_livro.set_defaults(func=gerar_pre_livro_diario_teste_command)
+
+    template_manuais = subparsers.add_parser(
+        "gerar-template-lancamentos-manuais-gerenciais",
+        help="Gera template XLSX para lancamentos manuais gerenciais.",
+        description=(
+            "Gera uma planilha operacional para despesas manuais que nao vieram "
+            "de XML ou comprovantes automaticos. O comando consulta plano de "
+            "contas e mapeamento DRE em modo leitura e sinaliza blockers quando "
+            "nao ha conta tecnica neutra fora DRE para contrapartida."
+        ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    template_manuais.add_argument(
+        "--saida",
+        required=True,
+        help="Arquivo XLSX de saida do template operacional.",
+    )
+    template_manuais.add_argument(
+        "--plano-contas",
+        default=str(DEFAULT_PLANO_CONTAS),
+        help="Arquivo YAML do plano de contas gerencial consultado em modo leitura.",
+    )
+    template_manuais.add_argument(
+        "--mapeamento-dre",
+        default=str(DEFAULT_MAPEAMENTO_DRE_PATH),
+        help="Arquivo YAML de mapeamento DRE consultado em modo leitura.",
+    )
+    template_manuais.set_defaults(
+        func=gerar_template_lancamentos_manuais_gerenciais_command
+    )
+
+    validar_manuais = subparsers.add_parser(
+        "validar-lancamentos-manuais-gerenciais",
+        help="Valida template/CSV operacional e gera CSV tecnico para pipeline.",
+        description=(
+            "Le XLSX ou CSV operacional de lancamentos manuais gerenciais, "
+            "resolve categoria e forma de pagamento para contas debitadas e "
+            "creditadas, e grava CSV tecnico UTF-8-SIG separado por ponto e "
+            "virgula. Retorna erro quando ha blockers."
+        ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    validar_manuais.add_argument(
+        "--entrada",
+        required=True,
+        help="Arquivo XLSX/CSV operacional preenchido pelo operador.",
+    )
+    validar_manuais.add_argument(
+        "--saida-csv",
+        required=True,
+        help="Arquivo CSV tecnico de saida para reprocessamento.",
+    )
+    validar_manuais.add_argument(
+        "--relatorio",
+        help="Arquivo TXT opcional para salvar o relatorio de validacao.",
+    )
+    validar_manuais.add_argument(
+        "--plano-contas",
+        default=str(DEFAULT_PLANO_CONTAS),
+        help="Arquivo YAML do plano de contas gerencial consultado em modo leitura.",
+    )
+    validar_manuais.add_argument(
+        "--mapeamento-dre",
+        default=str(DEFAULT_MAPEAMENTO_DRE_PATH),
+        help="Arquivo YAML de mapeamento DRE consultado em modo leitura.",
+    )
+    validar_manuais.set_defaults(
+        func=validar_lancamentos_manuais_gerenciais_command
+    )
 
     gerar_pacote_revisao = subparsers.add_parser(
         "gerar-pacote-revisao-contabil",
@@ -1713,6 +1787,64 @@ def gerar_pre_livro_diario_teste_command(args: argparse.Namespace) -> int:
         print(line)
     if args.relatorio_auditoria:
         print(f"[OK] Relatorio de auditoria salvo em: {args.relatorio_auditoria}")
+    return 0
+
+
+def gerar_template_lancamentos_manuais_gerenciais_command(
+    args: argparse.Namespace,
+) -> int:
+    try:
+        result = gerar_template_lancamentos_manuais_gerenciais(
+            Path(args.saida),
+            Path(args.plano_contas),
+            Path(args.mapeamento_dre),
+        )
+    except LancamentosManuaisTemplateError as exc:
+        print(f"[ERRO] {exc}")
+        return 1
+    except Exception:
+        print(f"[ERRO] Nao foi possivel gerar template: {args.saida}")
+        return 1
+
+    print(f"[OK] Template gerado: {result.output_xlsx}")
+    print(f"[INFO] Categorias disponiveis: {len(result.categorias)}")
+    if result.conta_credito_tecnica:
+        print(
+            "[INFO] Contrapartida tecnica: "
+            f"{result.conta_credito_tecnica.conta_id} - "
+            f"{result.conta_credito_tecnica.conta_nome}"
+        )
+    else:
+        print("[BLOQUEIO] Contrapartida tecnica neutra fora DRE ausente.")
+    for blocker in result.blockers:
+        print(f"[BLOQUEIO] {blocker}")
+    return 1 if result.blockers else 0
+
+
+def validar_lancamentos_manuais_gerenciais_command(args: argparse.Namespace) -> int:
+    try:
+        result = validar_lancamentos_manuais_gerenciais_operador(
+            Path(args.entrada),
+            Path(args.saida_csv),
+            Path(args.relatorio) if args.relatorio else None,
+            Path(args.plano_contas),
+            Path(args.mapeamento_dre),
+        )
+    except LancamentosManuaisTemplateError as exc:
+        print(f"[ERRO] {exc}")
+        if args.relatorio:
+            print(f"[INFO] Relatorio salvo em: {args.relatorio}")
+        return 1
+    except Exception:
+        print(f"[ERRO] Nao foi possivel validar lancamentos manuais: {args.entrada}")
+        return 1
+
+    print(f"[OK] CSV tecnico gerado: {result.saida_csv}")
+    print(f"[INFO] Linhas lidas: {result.linhas_lidas}")
+    print(f"[INFO] Linhas validas: {result.linhas_validas}")
+    print(f"[INFO] Avisos: {len(result.avisos)}")
+    if result.relatorio:
+        print(f"[OK] Relatorio salvo em: {result.relatorio}")
     return 0
 
 
