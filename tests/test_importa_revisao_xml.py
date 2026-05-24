@@ -353,6 +353,114 @@ def test_manual_decisions_are_preserved_and_account_is_derived_from_choice(tmp_p
     assert row["OBSERVACAO_OPERADOR"] == "ok operador"
 
 
+def test_importar_revisao_xml_idempotente(tmp_path):
+    env = _make_env(tmp_path)
+    _write_csv(
+        env.run_dir,
+        [
+            _row(descricao_normalizada="queijo mussarela"),
+            _row(descricao_normalizada="cerveja lata"),
+        ],
+    )
+
+    importar_revisao_xml(
+        run_reports_dir=env.run_dir,
+        output_dir=env.output_dir,
+        regras_path=env.regras_path,
+        plano_contas_path=env.plano_path,
+    )
+    first_rows = _decision_rows(env.output_dir / EXCEL_NAME)
+
+    importar_revisao_xml(
+        run_reports_dir=env.run_dir,
+        output_dir=env.output_dir,
+        regras_path=env.regras_path,
+        plano_contas_path=env.plano_path,
+    )
+    second_rows = _decision_rows(env.output_dir / EXCEL_NAME)
+
+    assert second_rows == first_rows
+
+
+def test_importar_revisao_xml_aggiunge_nova_chave_sem_perder_decisoes(tmp_path):
+    env = _make_env(tmp_path)
+    _write_csv(env.run_dir, [_row(descricao_normalizada="queijo mussarela")])
+
+    importar_revisao_xml(
+        run_reports_dir=env.run_dir,
+        output_dir=env.output_dir,
+        regras_path=env.regras_path,
+        plano_contas_path=env.plano_path,
+    )
+    _set_cell_by_header(
+        env.output_dir / EXCEL_NAME,
+        row=2,
+        values={
+            "STATUS_DECISAO": "APROVADO",
+            "ACAO_REGRA": "CRIAR_ALIAS",
+            "CONTA_ESCOLHIDA": "2.02.006 - Laticinios e Queijos",
+            "PALAVRAS_CHAVE_SUGERIDAS": "queijo; mussarela",
+            "OBSERVACAO_OPERADOR": "decisao preservada",
+        },
+    )
+    _write_csv(
+        env.run_dir,
+        [
+            _row(descricao_normalizada="queijo mussarela"),
+            _row(descricao_normalizada="cerveja lata"),
+        ],
+    )
+
+    importar_revisao_xml(
+        run_reports_dir=env.run_dir,
+        output_dir=env.output_dir,
+        regras_path=env.regras_path,
+        plano_contas_path=env.plano_path,
+    )
+
+    rows = _decision_rows(env.output_dir / EXCEL_NAME)
+    assert len(rows) == 2
+    queijo = next(row for row in rows if row["DESCRICAO_NORMALIZADA"] == "queijo mussarela")
+    cerveja = next(row for row in rows if row["DESCRICAO_NORMALIZADA"] == "cerveja lata")
+    assert queijo["STATUS_DECISAO"] == "APROVADO"
+    assert queijo["ACAO_REGRA"] == "CRIAR_ALIAS"
+    assert queijo["CONTA_ESCOLHIDA"] == "2.02.006 - Laticinios e Queijos"
+    assert queijo["CONTA_ID_APROVADA"] == "2.02.006"
+    assert queijo["CONTA_NOME_APROVADA"] == "Laticinios e Queijos"
+    assert queijo["PALAVRAS_CHAVE_SUGERIDAS"] == "queijo; mussarela"
+    assert queijo["OBSERVACAO_OPERADOR"] == "decisao preservada"
+    assert cerveja["STATUS_DECISAO"] == "PENDENTE"
+
+
+def test_importar_revisao_xml_remove_chave_desaparecida_do_operacional(tmp_path):
+    env = _make_env(tmp_path)
+    _write_csv(
+        env.run_dir,
+        [
+            _row(descricao_normalizada="queijo mussarela"),
+            _row(descricao_normalizada="cerveja lata"),
+        ],
+    )
+
+    importar_revisao_xml(
+        run_reports_dir=env.run_dir,
+        output_dir=env.output_dir,
+        regras_path=env.regras_path,
+        plano_contas_path=env.plano_path,
+    )
+    _write_csv(env.run_dir, [_row(descricao_normalizada="queijo mussarela")])
+
+    importar_revisao_xml(
+        run_reports_dir=env.run_dir,
+        output_dir=env.output_dir,
+        regras_path=env.regras_path,
+        plano_contas_path=env.plano_path,
+    )
+
+    rows = _decision_rows(env.output_dir / EXCEL_NAME)
+    assert [row["DESCRICAO_NORMALIZADA"] for row in rows] == ["queijo mussarela"]
+
+
 def test_status_ok_is_excluded_from_operational_sheet(tmp_path):
     env = _make_env(tmp_path)
     _write_csv(env.run_dir, [_row(status_revisao="OK")])
@@ -427,6 +535,72 @@ def test_manifest_keeps_critical_fields(tmp_path):
         "candidatos_bloqueados_operacao_especial",
     ]:
         assert field in manifest
+
+
+def test_importar_revisao_xml_escreve_manifest_historico_por_run(tmp_path):
+    env = _make_env(tmp_path)
+    _write_csv(env.run_dir, [_row()])
+
+    result = importar_revisao_xml(
+        run_reports_dir=env.run_dir,
+        output_dir=env.output_dir,
+        regras_path=env.regras_path,
+        plano_contas_path=env.plano_path,
+    )
+
+    current = env.output_dir / MANIFEST_NAME
+    historic = env.output_dir / "manifest_importa_revisao_xml_2026-05-23_001.json"
+    assert result.manifest_path == current
+    assert result.manifest_historico_path == historic
+    assert current.exists()
+    assert historic.exists()
+    current_payload = json.loads(current.read_text(encoding="utf-8"))
+    historic_payload = json.loads(historic.read_text(encoding="utf-8"))
+    assert current_payload == historic_payload
+    assert current_payload["run_id_origem"] == "2026-05-23_001"
+    assert current_payload["manifest_corrente"] == str(current)
+    assert current_payload["manifest_historico"] == str(historic)
+
+
+def test_importar_revisao_xml_preserva_decisoes_e_atualiza_cnpjs_origem_entre_runs(
+    tmp_path,
+):
+    env = _make_env(tmp_path)
+    row = _row(descricao_normalizada="queijo mussarela", fornecedores="Fornecedor Teste")
+    _write_csv(env.run_dir, [row], cnpj="08884180000123")
+
+    importar_revisao_xml(
+        run_reports_dir=env.run_dir,
+        output_dir=env.output_dir,
+        regras_path=env.regras_path,
+        plano_contas_path=env.plano_path,
+    )
+    _set_cell_by_header(
+        env.output_dir / EXCEL_NAME,
+        row=2,
+        values={
+            "STATUS_DECISAO": "APROVADO",
+            "ACAO_REGRA": "CRIAR_ALIAS",
+            "CONTA_ESCOLHIDA": "2.02.006 - Laticinios e Queijos",
+            "OBSERVACAO_OPERADOR": "preservar entre cnpjs",
+        },
+    )
+    _write_csv(env.run_dir, [row], cnpj="55746722000181")
+
+    importar_revisao_xml(
+        run_reports_dir=env.run_dir,
+        output_dir=env.output_dir,
+        regras_path=env.regras_path,
+        plano_contas_path=env.plano_path,
+    )
+
+    rows = _decision_rows(env.output_dir / EXCEL_NAME)
+    assert len(rows) == 1
+    assert rows[0]["STATUS_DECISAO"] == "APROVADO"
+    assert rows[0]["ACAO_REGRA"] == "CRIAR_ALIAS"
+    assert rows[0]["CONTA_ID_APROVADA"] == "2.02.006"
+    assert rows[0]["OBSERVACAO_OPERADOR"] == "preservar entre cnpjs"
+    assert rows[0]["CNPJS_ORIGEM"] == "08884180000123; 55746722000181"
 
 
 def test_cli_run_id_imports_xml_review(tmp_path):
@@ -585,6 +759,20 @@ def _write_existing_excel(path: Path, key: str) -> None:
             "ok operador",
         ]
     )
+    workbook.save(path)
+
+
+def _set_cell_by_header(
+    path: Path,
+    *,
+    row: int,
+    values: dict[str, object],
+) -> None:
+    workbook = load_workbook(path, data_only=False)
+    sheet = workbook[DECISOES_SHEET]
+    headers = [cell.value for cell in sheet[1]]
+    for header, value in values.items():
+        sheet.cell(row=row, column=headers.index(header) + 1).value = value
     workbook.save(path)
 
 

@@ -21,6 +21,7 @@ from fantozzi.csv_utils import sniff_delimiter
 
 EXCEL_NAME = "Analisi_regole_registrazioni_xml_prodotti.xlsx"
 MANIFEST_NAME = "manifest_importa_revisao_xml.json"
+MANIFEST_HISTORICO_TEMPLATE = "manifest_importa_revisao_xml_{run_id}.json"
 
 DECISOES_SHEET = "decisoes_xml"
 TECNICO_SHEET = "tecnico_xml"
@@ -104,6 +105,7 @@ class ImportaRevisaoXmlResult:
     csvs_lidos: tuple[str, ...]
     excel_path: Path
     manifest_path: Path
+    manifest_historico_path: Path
     hash_yaml_run: str
     hash_yaml_atual: str
     hash_yaml_run_assente: bool
@@ -198,6 +200,9 @@ def importar_revisao_xml(
     output_dir.mkdir(parents=True, exist_ok=True)
     excel_path = output_dir / EXCEL_NAME
     manifest_path = output_dir / MANIFEST_NAME
+    manifest_historico_path = output_dir / MANIFEST_HISTORICO_TEMPLATE.format(
+        run_id=run_id
+    )
     existing = _load_existing_decisions(excel_path)
 
     groups: dict[str, _Group] = {}
@@ -314,6 +319,7 @@ def importar_revisao_xml(
         csvs_lidos=tuple(csvs_lidos),
         excel_path=excel_path,
         manifest_path=manifest_path,
+        manifest_historico_path=manifest_historico_path,
         hash_yaml_run=hash_yaml_run,
         hash_yaml_atual=hash_yaml_atual,
         hash_yaml_run_assente=hash_yaml_run_assente,
@@ -346,6 +352,7 @@ def console_lines(result: ImportaRevisaoXmlResult) -> list[str]:
         f"Operacoes especiais bloqueadas: {result.candidatos_bloqueados_operacao_especial}",
         f"Excel: {result.excel_path}",
         f"Manifest: {result.manifest_path}",
+        f"Manifest historico: {result.manifest_historico_path}",
     ]
 
 
@@ -734,15 +741,16 @@ def _write_manifest(result: ImportaRevisaoXmlResult) -> None:
             result.candidatos_bloqueados_operacao_especial
         ),
         "excel": str(result.excel_path),
+        "manifest_corrente": str(result.manifest_path),
+        "manifest_historico": str(result.manifest_historico_path),
         "avisos": list(result.avisos),
         "bloqueios": list(result.bloqueios),
         "yaml_modificado": False,
         "reports_importacao_real_modificados": False,
     }
-    result.manifest_path.write_text(
-        json.dumps(payload, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    text = json.dumps(payload, indent=2, ensure_ascii=False)
+    result.manifest_path.write_text(text, encoding="utf-8")
+    result.manifest_historico_path.write_text(text, encoding="utf-8")
 
 
 def _instructions() -> list[str]:
