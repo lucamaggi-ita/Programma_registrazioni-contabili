@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 from pathlib import Path
 
 from fantozzi.allocation import allocate_nfe_to_lancamentos
@@ -152,6 +153,9 @@ DEFAULT_TEMPLATE_MANUAIS_PATH = (
 DEFAULT_TEMPLATE_MANUAIS_SAIDA_CSV = (
     PROJECT_ROOT / "Database_Dev" / "_templates" / "lancamentos_manuais_gerenciais_tecnico.csv"
 )
+DEFAULT_XML_BASE = PROJECT_ROOT / "Database_Dev" / "XML_fatture_acquisto"
+DEFAULT_OUTPUT_IMPORTACAO_REAL = PROJECT_ROOT / "output" / "importacao_real"
+DEFAULT_REPORTS_IMPORTACAO_REAL = PROJECT_ROOT / "reports" / "importacao_real"
 DEFAULT_BANK_DECISOES_DIR = PROJECT_ROOT / "bank_raw" / "_decisoes_regras"
 DEFAULT_XML_DECISOES_DIR = PROJECT_ROOT / "Database_Dev" / "_decisoes_regras" / "xml"
 DEFAULT_REPORTS_RUNS_ROOT = PROJECT_ROOT / "reports" / "importacao_real" / "runs"
@@ -909,6 +913,62 @@ def build_parser() -> argparse.ArgumentParser:
     )
     validar_manuais.set_defaults(
         func=validar_lancamentos_manuais_gerenciais_command
+    )
+
+    executar_manuais = subparsers.add_parser(
+        "executar-lancamentos-manuais-gerenciais",
+        help="Valida template XLSX, gera CSV tecnico e executa run completa com pacote.",
+        description=(
+            "Skill operativa 6G: valida o template de lancamentos manuais preenchido "
+            "pelo operador, gera o CSV tecnico e executa a pipeline provisoria com "
+            "XML reais + lancamentos manuais + pacote contabil gerencial. "
+            "Para se houver erros de validacao. Nao requer CNPJ, fornecedor, "
+            "documento, centro_custo, forma_pagamento nem categoria gerencial antiga."
+        ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    executar_manuais.add_argument(
+        "--template",
+        default=str(DEFAULT_TEMPLATE_MANUAIS_PATH),
+        help="Template XLSX preenchido pelo operador.",
+    )
+    executar_manuais.add_argument(
+        "--saida-csv",
+        default=str(DEFAULT_TEMPLATE_MANUAIS_SAIDA_CSV),
+        help="CSV tecnico intermediario gerado pela validacao.",
+    )
+    executar_manuais.add_argument(
+        "--xml-base",
+        default=str(DEFAULT_XML_BASE),
+        help="Pasta raiz com subpastas de XML NF-e por CNPJ.",
+    )
+    executar_manuais.add_argument(
+        "--saida-output",
+        default=str(DEFAULT_OUTPUT_IMPORTACAO_REAL),
+        help="Pasta raiz de output onde sera criada runs/{run_id}/.",
+    )
+    executar_manuais.add_argument(
+        "--saida-reports",
+        default=str(DEFAULT_REPORTS_IMPORTACAO_REAL),
+        help="Pasta raiz de reports onde sera criada runs/{run_id}/.",
+    )
+    executar_manuais.add_argument(
+        "--plano-contas",
+        default=str(DEFAULT_PLANO_CONTAS),
+        help="Arquivo YAML do plano de contas gerencial.",
+    )
+    executar_manuais.add_argument(
+        "--mapeamento-dre",
+        default=str(DEFAULT_MAPEAMENTO_DRE_PATH),
+        help="Arquivo YAML de mapeamento DRE.",
+    )
+    executar_manuais.add_argument(
+        "--relatorio-validacao",
+        default=None,
+        help="Arquivo TXT opcional para salvar o relatorio de validacao.",
+    )
+    executar_manuais.set_defaults(
+        func=executar_lancamentos_manuais_gerenciais_command
     )
 
     gerar_pacote_revisao = subparsers.add_parser(
@@ -1851,6 +1911,113 @@ def validar_lancamentos_manuais_gerenciais_command(args: argparse.Namespace) -> 
     print(f"[INFO] Avisos: {len(result.avisos)}")
     if result.relatorio:
         print(f"[OK] Relatorio salvo em: {result.relatorio}")
+    return 0
+
+
+def executar_lancamentos_manuais_gerenciais_command(args: argparse.Namespace) -> int:
+    template_path = Path(args.template)
+    csv_path = Path(args.saida_csv)
+    plano_path = Path(args.plano_contas)
+    dre_path = Path(args.mapeamento_dre)
+    relatorio_val = Path(args.relatorio_validacao) if args.relatorio_validacao else None
+
+    print(f"[INFO] Template: {template_path}")
+    print(f"[INFO] Validando lancamentos manuais gerenciais...")
+    try:
+        val_result = validar_lancamentos_manuais_gerenciais_operador(
+            template_path,
+            csv_path,
+            relatorio_val,
+            plano_path,
+            dre_path,
+        )
+    except LancamentosManuaisTemplateError as exc:
+        print(f"[ERRO] Validacao bloqueada: {exc}")
+        if relatorio_val:
+            print(f"[INFO] Relatorio de erros: {relatorio_val}")
+        return 1
+    except Exception as exc:
+        print(f"[ERRO] Nao foi possivel validar lancamentos manuais: {exc}")
+        return 1
+
+    print(f"[OK] Validacao: {val_result.linhas_validas} linha(s) valida(s)")
+    for aviso in val_result.avisos:
+        print(f"[AVISO] {aviso}")
+
+    print("[INFO] Executando run provisoria com lancamentos manuais gerenciais...")
+    try:
+        run_result = reprocessamento_pipeline.reprocessar_importacao_real_provisoria(
+            xml_base=Path(args.xml_base),
+            saida_output=Path(args.saida_output),
+            saida_reports=Path(args.saida_reports),
+            lancamentos_manuais_gerenciais_csv_path=csv_path,
+            gerar_pacote_contabil_gerencial=True,
+        )
+    except reprocessamento_pipeline.ReprocessamentoPipelineError as exc:
+        print(f"[ERRO] {exc}")
+        return 1
+    except RunManagerError as exc:
+        print(f"[ERRO] {exc}")
+        return 1
+    except Exception as exc:
+        print(f"[ERRO] Pipeline falhou: {exc}")
+        return 1
+
+    try:
+        with run_result.manifest_path.open(encoding="utf-8") as _f:
+            manifest = json.load(_f)
+    except Exception as exc:
+        print(f"[ERRO] Manifest nao pode ser lido: {exc}")
+        return 1
+
+    totais = manifest.get("totais", {})
+    manuais = manifest.get("lancamentos_manuais_gerenciais", {})
+    pacote = manifest.get("pacote_contabil_gerencial", {})
+
+    print()
+    print("=" * 60)
+    print("FANTOZZI - EXECUTAR LANCAMENTOS MANUAIS GERENCIAIS")
+    print("=" * 60)
+    print(f"run_id            : {run_result.run_id}")
+    print(f"status_run        : {run_result.status_run}")
+    print()
+    print("MANUAIS GERENCIAIS:")
+    print(f"  linhas_validas        : {val_result.linhas_validas}")
+    print(f"  lancamentos_aceitos   : {manuais.get('lancamentos_aceitos')}")
+    print(f"  linhas_tecnicas       : {manuais.get('linhas_tecnicas_geradas')}")
+    print(f"  total_manual          : R$ {manuais.get('total_manual')}")
+    print()
+    print("TOTAIS RUN:")
+    print(f"  xml_processados       : {totais.get('xml_processados')}")
+    print(f"  lancamentos_ok        : {totais.get('lancamentos_ok')}")
+    print(f"  lancamentos_revisar   : {totais.get('lancamentos_revisar')}")
+    print(f"  valor_total_ok        : R$ {totais.get('valor_total_incluido_ok')}")
+    print()
+    print("VERIFICACOES:")
+    avisos_finais: list[str] = []
+    if manuais.get("executado"):
+        print("  [OK] MANUAL_GERENCIAL aplicado na run")
+    else:
+        avisos_finais.append("MANUAL_GERENCIAL NAO foi aplicado")
+    if pacote.get("executado") and pacote.get("status") == "OK":
+        print("  [OK] Pacote contabil gerencial gerado")
+        print(f"       -> {pacote.get('diretorio')}")
+    else:
+        avisos_finais.append(f"Pacote contabil gerencial: {pacote.get('status')}")
+    for aviso in run_result.avisos:
+        print(f"  [INFO] {aviso}")
+    for item in avisos_finais:
+        print(f"  [ATENCAO] {item}")
+    print()
+    print(f"Manifest  : {run_result.manifest_path}")
+    print(f"CSV tecnico: {csv_path}")
+    print()
+    if manifest.get("erros"):
+        print("RESULTADO: ERRO")
+        for err in manifest["erros"]:
+            print(f"  - {err}")
+        return 1
+    print("RESULTADO: OK")
     return 0
 
 
