@@ -22,6 +22,8 @@ from fantozzi.lancamentos_manuais_template import (
 OPERATIVE_HEADERS = [
     "DATA",
     "CONTA_ESCOLHIDA",
+    "CONTA_ID_APROVADA",
+    "CONTA_NOME_APROVADA",
     "VALOR",
     "DESCRICAO_DA_DESPESA",
     "OBSERVACAO",
@@ -53,9 +55,9 @@ def test_gera_template_com_abas_e_colunas_operacionais(tmp_path):
         "instrucoes",
     ]
     sheet = workbook["lancamentos_manuais"]
-    assert [cell.value for cell in sheet[1]][:5] == OPERATIVE_HEADERS
+    assert [cell.value for cell in sheet[1]][:7] == OPERATIVE_HEADERS
     assert "FORMA_PAGAMENTO" not in [cell.value for cell in sheet[1]]
-    assert sheet.column_dimensions["F"].hidden is True
+    assert sheet.column_dimensions["H"].hidden is True
     assert sheet.column_dimensions["L"].hidden is True
 
 
@@ -260,7 +262,9 @@ def _fill_template_row(path: Path, row_index: int = 2, **overrides: str) -> None
 def _operator_row(**overrides: str) -> dict[str, str]:
     row = {
         "DATA": "2026-05-20",
-        "CONTA_ESCOLHIDA": "Manutencao Predial",
+        "CONTA_ESCOLHIDA": "8.01.001 - Manutencao Predial",
+        "CONTA_ID_APROVADA": "8.01.001",
+        "CONTA_NOME_APROVADA": "Manutencao Predial",
         "VALOR": "10,50",
         "DESCRICAO_DA_DESPESA": "Conserto pia cozinha",
         "OBSERVACAO": "despesa manual de teste",

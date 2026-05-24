@@ -32,13 +32,13 @@ INSTRUCTIONS_SHEET = "instrucoes"
 OPERATIVE_HEADERS = (
     "DATA",
     "CONTA_ESCOLHIDA",
+    "CONTA_ID_APROVADA",
+    "CONTA_NOME_APROVADA",
     "VALOR",
     "DESCRICAO_DA_DESPESA",
     "OBSERVACAO",
 )
 TECHNICAL_HEADERS = (
-    "CONTA_DEBITO_ID",
-    "CONTA_DEBITO_NOME",
     "CONTA_CREDITO_ID",
     "CONTA_CREDITO_NOME",
     "STATUS_VALIDACAO",
@@ -48,8 +48,9 @@ TECHNICAL_HEADERS = (
 ALL_TEMPLATE_HEADERS = (*OPERATIVE_HEADERS, *TECHNICAL_HEADERS)
 
 CATEGORY_HEADERS = (
-    "CONTA_NOME",
+    "CONTA_DISPLAY",
     "CONTA_ID",
+    "CONTA_NOME",
 )
 ACCOUNT_HEADERS = (
     "CONTA_ID",
@@ -62,17 +63,7 @@ ACCOUNT_HEADERS = (
 
 DEFAULT_TEMPLATE_ROWS = 500
 
-CATEGORY_CANDIDATES = (
-    "8.01.001",
-    "6.01.005",
-    "4.01.014",
-    "9.01.001",
-    "3.02.008",
-    "3.04.007",
-    "4.01.001",
-    "7.01.001",
-    "12.01.001",
-)
+NON_SELECTABLE_TIPOS = frozenset({"tecnico", "revisao"})
 
 TECHNICAL_COUNTERPART_CANDIDATES = (
     ("99.99.998", "Contrapartida Tecnica Lancamentos Manuais"),
@@ -296,18 +287,11 @@ def _load_entra_dre_map(mapeamento_dre_path: Path) -> dict[str, bool]:
 
 
 def _default_categories(accounts: tuple[AccountInfo, ...]) -> tuple[CategoryMapping, ...]:
-    by_id = {account.id: account for account in accounts}
-    categories: list[CategoryMapping] = []
-    for account_id in CATEGORY_CANDIDATES:
-        account = by_id.get(account_id)
-        if account:
-            categories.append(
-                CategoryMapping(
-                    conta_debito_id=account.id,
-                    conta_debito_nome=account.nome,
-                )
-            )
-    return tuple(categories)
+    return tuple(
+        CategoryMapping(conta_debito_id=account.id, conta_debito_nome=account.nome)
+        for account in accounts
+        if account.tipo not in NON_SELECTABLE_TIPOS
+    )
 
 
 def _find_technical_counterpart(
@@ -360,14 +344,15 @@ def _build_operative_sheet(
     for cell in sheet[1]:
         cell.fill = header_fill
         cell.font = Font(color="FFFFFF", bold=True)
+    # A-G visible operative; H-L hidden technical
     widths = {
         "A": 14,
-        "B": 32,
-        "C": 14,
-        "D": 44,
-        "E": 44,
-        "F": 18,
-        "G": 34,
+        "B": 38,
+        "C": 16,
+        "D": 40,
+        "E": 14,
+        "F": 44,
+        "G": 44,
         "H": 18,
         "I": 36,
         "J": 18,
@@ -376,23 +361,29 @@ def _build_operative_sheet(
     }
     for column, width in widths.items():
         sheet.column_dimensions[column].width = width
-    for column in range(6, 13):
+    for column in range(8, 13):
         sheet.column_dimensions[get_column_letter(column)].hidden = True
     sheet.freeze_panes = "A2"
 
     for row in range(2, DEFAULT_TEMPLATE_ROWS + 2):
-        sheet[f"F{row}"] = f'=IFERROR(VLOOKUP(B{row},{CATEGORIES_SHEET}!$A:$B,2,FALSE),"")'
-        sheet[f"G{row}"] = f'=IF(B{row}<>"",B{row},"")'
+        # C: CONTA_ID_APROVADA — derived from CONTA_ESCOLHIDA via VLOOKUP
+        sheet[f"C{row}"] = f'=IFERROR(VLOOKUP(B{row},{CATEGORIES_SHEET}!$A:$B,2,FALSE),"")'
+        # D: CONTA_NOME_APROVADA — derived from CONTA_ESCOLHIDA via VLOOKUP
+        sheet[f"D{row}"] = f'=IFERROR(VLOOKUP(B{row},{CATEGORIES_SHEET}!$A:$C,3,FALSE),"")'
+        # H-I: technical counterpart (hidden)
         sheet[f"H{row}"] = technical_counterpart.conta_id if technical_counterpart else ""
         sheet[f"I{row}"] = technical_counterpart.conta_nome if technical_counterpart else ""
-        sheet[f"J{row}"] = '=IF(COUNTA(A{0}:E{0})=0,"","PENDENTE")'.format(row)
+        # J: status (hidden)
+        sheet[f"J{row}"] = '=IF(COUNTA(A{0}:G{0})=0,"","PENDENTE")'.format(row)
+        # K: mensagem (hidden)
         if blockers:
             sheet[f"K{row}"] = "BLOCKER: " + " | ".join(blockers)
         else:
-            sheet[f"K{row}"] = '=IF(J{0}="","",IF(F{0}<>"","OK","REVISAR"))'.format(row)
+            sheet[f"K{row}"] = '=IF(J{0}="","",IF(C{0}<>"","OK","REVISAR"))'.format(row)
+        # L: chave preview — data|conta_escolhida|descricao|valor (hidden)
         sheet[f"L{row}"] = (
-            f'=IF(COUNTA(A{row}:E{row})=0,"",'
-            f'TEXT(A{row},"yyyy-mm-dd")&"|"&B{row}&"|"&D{row}&"|"&C{row})'
+            f'=IF(COUNTA(A{row}:G{row})=0,"",'
+            f'TEXT(A{row},"yyyy-mm-dd")&"|"&B{row}&"|"&F{row}&"|"&E{row})'
         )
 
     if categories:
@@ -408,7 +399,8 @@ def _build_operative_sheet(
 def _build_categories_sheet(sheet, categories: tuple[CategoryMapping, ...]) -> None:
     sheet.append(list(CATEGORY_HEADERS))
     for category in categories:
-        sheet.append([category.conta_debito_nome, category.conta_debito_id])
+        display = f"{category.conta_debito_id} - {category.conta_debito_nome}"
+        sheet.append([display, category.conta_debito_id, category.conta_debito_nome])
     _format_lookup_sheet(sheet)
 
 
@@ -505,7 +497,7 @@ def _read_categories_sheet(workbook) -> tuple[CategoryMapping, ...]:
             conta_debito_nome=row["CONTA_NOME"],
         )
         for row in rows
-        if row["CONTA_NOME"]
+        if row["CONTA_DISPLAY"]
     )
 
 
@@ -551,7 +543,11 @@ def _validate_operator_rows(
     accounts: tuple[AccountInfo, ...],
     technical_counterpart: TechnicalCounterpart | None,
 ) -> tuple[tuple[dict[str, str], ...], list[str], list[str]]:
-    active_categories = {item.conta_debito_nome: item for item in categories if item.ativa}
+    active_categories = {
+        f"{item.conta_debito_id} - {item.conta_debito_nome}": item
+        for item in categories
+        if item.ativa
+    }
     account_ids = {account.id for account in accounts}
     technical_rows: list[dict[str, str]] = []
     warnings: list[str] = []
@@ -593,6 +589,22 @@ def _validate_operator_rows(
         if category.conta_debito_id not in account_ids:
             errors.append(
                 f"Linha {line}: conta debito inexistente: {category.conta_debito_id}"
+            )
+            continue
+        conta_id_row = row.get("CONTA_ID_APROVADA", "")
+        conta_nome_row = row.get("CONTA_NOME_APROVADA", "")
+        if conta_id_row and conta_id_row != category.conta_debito_id:
+            errors.append(
+                f"Linha {line}: CONTA_ID_APROVADA '{conta_id_row}' "
+                f"inconsistente com CONTA_ESCOLHIDA (esperado: {category.conta_debito_id})."
+            )
+            continue
+        if conta_nome_row and _normalize_text(conta_nome_row) != _normalize_text(
+            category.conta_debito_nome
+        ):
+            errors.append(
+                f"Linha {line}: CONTA_NOME_APROVADA '{conta_nome_row}' "
+                f"inconsistente com CONTA_ESCOLHIDA (esperado: {category.conta_debito_nome})."
             )
             continue
 

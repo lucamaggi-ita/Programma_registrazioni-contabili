@@ -146,6 +146,12 @@ DEFAULT_REGRAS_COMPROVANTES = (
     PROJECT_ROOT / "config" / "regras_classificacao_comprovantes.yaml"
 )
 DEFAULT_MAPEAMENTO_DRE_PATH = PROJECT_ROOT / "config" / "mapeamento_dre.yaml"
+DEFAULT_TEMPLATE_MANUAIS_PATH = (
+    PROJECT_ROOT / "Database_Dev" / "_templates" / "lancamentos_manuais_gerenciais_template.xlsx"
+)
+DEFAULT_TEMPLATE_MANUAIS_SAIDA_CSV = (
+    PROJECT_ROOT / "Database_Dev" / "_templates" / "lancamentos_manuais_gerenciais_tecnico.csv"
+)
 DEFAULT_BANK_DECISOES_DIR = PROJECT_ROOT / "bank_raw" / "_decisoes_regras"
 DEFAULT_XML_DECISOES_DIR = PROJECT_ROOT / "Database_Dev" / "_decisoes_regras" / "xml"
 DEFAULT_REPORTS_RUNS_ROOT = PROJECT_ROOT / "reports" / "importacao_real" / "runs"
@@ -849,7 +855,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     template_manuais.add_argument(
         "--saida",
-        required=True,
+        default=str(DEFAULT_TEMPLATE_MANUAIS_PATH),
         help="Arquivo XLSX de saida do template operacional.",
     )
     template_manuais.add_argument(
@@ -884,7 +890,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     validar_manuais.add_argument(
         "--saida-csv",
-        required=True,
+        default=str(DEFAULT_TEMPLATE_MANUAIS_SAIDA_CSV),
         help="Arquivo CSV tecnico de saida para reprocessamento.",
     )
     validar_manuais.add_argument(
