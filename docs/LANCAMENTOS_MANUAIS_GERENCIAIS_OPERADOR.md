@@ -16,6 +16,12 @@ patrimonial.
 ## Gerar template
 
 ```powershell
+.\.venv\Scripts\python.exe -m fantozzi.cli gerar-template-lancamentos-manuais-gerenciais
+```
+
+Se a CLI `fantozzi` estiver instalada no PATH, tambem e possivel usar:
+
+```powershell
 fantozzi gerar-template-lancamentos-manuais-gerenciais
 ```
 
@@ -91,6 +97,12 @@ CARTAO
 Quando o template estiver preenchido, usar o comando one-shot:
 
 ```powershell
+.\.venv\Scripts\python.exe -m fantozzi.cli executar-lancamentos-manuais-gerenciais
+```
+
+Se a CLI `fantozzi` estiver instalada no PATH, tambem e possivel usar:
+
+```powershell
 fantozzi executar-lancamentos-manuais-gerenciais
 ```
 
@@ -123,9 +135,11 @@ fornecedor, documento, centro_custo, forma_pagamento nem categoria gerencial.
 ## Outputs produzidos
 
 ```text
-output\importacao_real\runs\{run_id}\     — pacote contabil gerencial
-reports\importacao_real\runs\{run_id}\    — reports e manifest
-Database_Dev\_templates\..._tecnico.csv  — CSV tecnico intermediario
+reports\importacao_real\runs\{run_id}\manifest_run.json                              - manifest da run
+reports\importacao_real\runs\{run_id}\dre_gerencial_ok_provisoria.xlsx               - DRE gerencial
+reports\importacao_real\runs\{run_id}\pre_livro_diario_gerencial_teste.xlsx          - pre-livro/giornale
+reports\importacao_real\runs\{run_id}\pacote_contabil_gerencial_provisorio\          - pacote contabil gerencial
+Database_Dev\_templates\..._tecnico.csv                                              - CSV tecnico intermediario
 ```
 
 ---
