@@ -129,6 +129,23 @@ MANUAL_COLUMNS = {
     "RISCO_DUPLICIDADE_XML",
     "ESCOPO_REGRA",
 }
+BANK_STATUS_DECISAO_VALUES = (
+    "PENDENTE",
+    "APROVADO",
+    "REVISAR",
+    "NAO_CRIAR_REGRA",
+    "BLOQUEADO",
+)
+BANK_ACAO_REGRA_VALUES = (
+    "CLASSIFICAR",
+    "ESCLUDERE",
+    "NAO_CRIAR_REGRA",
+    "REVISAR",
+    "BLOQUEADO",
+)
+RISCO_DUPLICIDADE_XML_VALUES = ("OK", "DUVIDA")
+ESCOPO_REGRA_VALUES = ("COMPROVANTE", "CONTA_CORRENTE")
+USAR_SOMENTE_SEM_COMPROVANTE_VALUES = ("SIM", "NAO")
 
 
 class ImportaRevisaoBancaError(ValueError):
@@ -814,6 +831,7 @@ def _write_decision_workbook(
     sheet.title = sheet_name
     _append_rows(sheet, headers, rows)
     _style_sheet(sheet, headers)
+    _add_decision_validations(sheet, headers, len(rows))
     _add_account_validation(sheet, headers, len(rows), len(account_options))
     _add_account_formulas(sheet, headers, len(rows))
 
@@ -833,22 +851,36 @@ def _write_decision_workbook(
         ["STATUS_DECISAO", "ACAO_REGRA", "RISCO_DUPLICIDADE_XML", "ESCOPO_REGRA", "USAR_SOMENTE_SEM_COMPROVANTE"],
         [
             {
-                "STATUS_DECISAO": "APROVADO",
+                "STATUS_DECISAO": "PENDENTE",
                 "ACAO_REGRA": "CLASSIFICAR",
                 "RISCO_DUPLICIDADE_XML": "OK",
                 "ESCOPO_REGRA": "COMPROVANTE",
                 "USAR_SOMENTE_SEM_COMPROVANTE": "SIM",
             },
             {
-                "STATUS_DECISAO": "PENDENTE",
+                "STATUS_DECISAO": "APROVADO",
                 "ACAO_REGRA": "ESCLUDERE",
                 "RISCO_DUPLICIDADE_XML": "DUVIDA",
                 "ESCOPO_REGRA": "CONTA_CORRENTE",
                 "USAR_SOMENTE_SEM_COMPROVANTE": "NAO",
             },
             {
-                "STATUS_DECISAO": "REJEITADO",
+                "STATUS_DECISAO": "REVISAR",
                 "ACAO_REGRA": "NAO_CRIAR_REGRA",
+                "RISCO_DUPLICIDADE_XML": "",
+                "ESCOPO_REGRA": "",
+                "USAR_SOMENTE_SEM_COMPROVANTE": "",
+            },
+            {
+                "STATUS_DECISAO": "NAO_CRIAR_REGRA",
+                "ACAO_REGRA": "REVISAR",
+                "RISCO_DUPLICIDADE_XML": "",
+                "ESCOPO_REGRA": "",
+                "USAR_SOMENTE_SEM_COMPROVANTE": "",
+            },
+            {
+                "STATUS_DECISAO": "BLOQUEADO",
+                "ACAO_REGRA": "BLOQUEADO",
                 "RISCO_DUPLICIDADE_XML": "",
                 "ESCOPO_REGRA": "",
                 "USAR_SOMENTE_SEM_COMPROVANTE": "",
@@ -908,6 +940,77 @@ def _add_account_validation(sheet, headers: list[str], row_count: int, account_c
     )
     validation.error = "Escolha uma conta da lista."
     validation.errorTitle = "Conta invalida"
+    sheet.add_data_validation(validation)
+    validation.add(f"{letter}2:{letter}{row_count + 1}")
+
+
+def _add_decision_validations(sheet, headers: list[str], row_count: int) -> None:
+    _add_list_validation(
+        sheet,
+        headers,
+        row_count,
+        "STATUS_DECISAO",
+        BANK_STATUS_DECISAO_VALUES,
+        "Escolha um status valido.",
+        "Status invalido",
+    )
+    _add_list_validation(
+        sheet,
+        headers,
+        row_count,
+        "ACAO_REGRA",
+        BANK_ACAO_REGRA_VALUES,
+        "Escolha uma acao valida.",
+        "Acao invalida",
+    )
+    _add_list_validation(
+        sheet,
+        headers,
+        row_count,
+        "RISCO_DUPLICIDADE_XML",
+        RISCO_DUPLICIDADE_XML_VALUES,
+        "Escolha um risco valido.",
+        "Risco invalido",
+    )
+    _add_list_validation(
+        sheet,
+        headers,
+        row_count,
+        "ESCOPO_REGRA",
+        ESCOPO_REGRA_VALUES,
+        "Escolha um escopo valido.",
+        "Escopo invalido",
+    )
+    _add_list_validation(
+        sheet,
+        headers,
+        row_count,
+        "USAR_SOMENTE_SEM_COMPROVANTE",
+        USAR_SOMENTE_SEM_COMPROVANTE_VALUES,
+        "Escolha SIM ou NAO.",
+        "Valor invalido",
+    )
+
+
+def _add_list_validation(
+    sheet,
+    headers: list[str],
+    row_count: int,
+    column_name: str,
+    values: tuple[str, ...],
+    error: str,
+    error_title: str,
+) -> None:
+    if row_count < 1 or column_name not in headers:
+        return
+    letter = get_column_letter(headers.index(column_name) + 1)
+    validation = DataValidation(
+        type="list",
+        formula1=f'"{",".join(values)}"',
+        allow_blank=True,
+    )
+    validation.error = error
+    validation.errorTitle = error_title
     sheet.add_data_validation(validation)
     validation.add(f"{letter}2:{letter}{row_count + 1}")
 

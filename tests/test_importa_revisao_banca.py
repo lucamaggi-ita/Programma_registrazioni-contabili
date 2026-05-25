@@ -113,6 +113,58 @@ def test_importa_revisao_banca_preserves_existing_decisions_and_ignores_missing_
     assert manifest["yaml_modificado"] is False
 
 
+def test_importa_revisao_banca_adds_decision_dropdown_validations(
+    monkeypatch,
+    tmp_path,
+):
+    bank_raw_dir, cnpj_dir = _make_bank_raw_month(tmp_path)
+    (cnpj_dir / "ConsultaPagamentos.xls").write_bytes(b"placeholder")
+    (cnpj_dir / "Extrato_Lancamentos.xlsx").write_bytes(b"placeholder")
+    output_dir = tmp_path / "bank_raw" / "_decisoes_regras"
+    _patch_bank_sources(
+        monkeypatch,
+        [_receipt("Fornecedor Teste", raw_hash="receipt-1")],
+        [_launch("PIX enviado", "Fornecedor Teste", raw_hash="launch-1")],
+    )
+
+    importar_revisao_banca(**_import_kwargs(tmp_path, bank_raw_dir, output_dir))
+
+    comprovantes_workbook = load_workbook(output_dir / COMPROVANTES_XLSX, data_only=False)
+    comprovantes = comprovantes_workbook[COMPROVANTES_SHEET]
+    _assert_dropdown(
+        comprovantes,
+        "STATUS_DECISAO",
+        '"PENDENTE,APROVADO,REVISAR,NAO_CRIAR_REGRA,BLOQUEADO"',
+    )
+    _assert_dropdown(
+        comprovantes,
+        "ACAO_REGRA",
+        '"CLASSIFICAR,ESCLUDERE,NAO_CRIAR_REGRA,REVISAR,BLOQUEADO"',
+    )
+    _assert_dropdown(comprovantes, "RISCO_DUPLICIDADE_XML", '"OK,DUVIDA"')
+    _assert_dropdown(comprovantes, "ESCOPO_REGRA", '"COMPROVANTE,CONTA_CORRENTE"')
+    _assert_dropdown_prefix(comprovantes, "CONTA_ESCOLHIDA", "=plano_contas!")
+
+    conta_workbook = load_workbook(output_dir / CONTA_CORRENTE_XLSX, data_only=False)
+    conta = conta_workbook[CONTA_CORRENTE_SHEET]
+    conta_headers = [cell.value for cell in conta[1]]
+    assert "POSSIVEL_COMPROVANTE_RELACIONADO" in conta_headers
+    _assert_dropdown(
+        conta,
+        "STATUS_DECISAO",
+        '"PENDENTE,APROVADO,REVISAR,NAO_CRIAR_REGRA,BLOQUEADO"',
+    )
+    _assert_dropdown(
+        conta,
+        "ACAO_REGRA",
+        '"CLASSIFICAR,ESCLUDERE,NAO_CRIAR_REGRA,REVISAR,BLOQUEADO"',
+    )
+    _assert_dropdown(conta, "USAR_SOMENTE_SEM_COMPROVANTE", '"SIM,NAO"')
+    _assert_dropdown(conta, "RISCO_DUPLICIDADE_XML", '"OK,DUVIDA"')
+    _assert_dropdown(conta, "ESCOPO_REGRA", '"COMPROVANTE,CONTA_CORRENTE"')
+    _assert_dropdown_prefix(conta, "CONTA_ESCOLHIDA", "=plano_contas!")
+
+
 def test_importa_revisao_banca_filters_total_receipt_from_decision_sheets(
     monkeypatch,
     tmp_path,
@@ -777,6 +829,40 @@ def _set_cell_by_header(
     for header, value in values.items():
         sheet.cell(row=row, column=headers.index(header) + 1).value = value
     workbook.save(path)
+
+
+def _assert_dropdown(sheet, header: str, formula1: str, *, row: int = 2) -> None:
+    assert _has_dropdown(sheet, header, formula1, row=row)
+
+
+def _assert_dropdown_prefix(sheet, header: str, formula_prefix: str, *, row: int = 2) -> None:
+    assert _has_dropdown_prefix(sheet, header, formula_prefix, row=row)
+
+
+def _has_dropdown(sheet, header: str, formula1: str, *, row: int = 2) -> bool:
+    cell = _cell_ref(sheet, header, row)
+    return any(
+        validation.type == "list"
+        and validation.formula1 == formula1
+        and cell in str(validation.sqref)
+        for validation in sheet.data_validations.dataValidation
+    )
+
+
+def _has_dropdown_prefix(sheet, header: str, formula_prefix: str, *, row: int = 2) -> bool:
+    cell = _cell_ref(sheet, header, row)
+    return any(
+        validation.type == "list"
+        and str(validation.formula1).startswith(formula_prefix)
+        and cell in str(validation.sqref)
+        for validation in sheet.data_validations.dataValidation
+    )
+
+
+def _cell_ref(sheet, header: str, row: int) -> str:
+    headers = [cell.value for cell in sheet[1]]
+    column = chr(ord("A") + headers.index(header))
+    return f"{column}{row}"
 
 
 def _write_mapping(tmp_path: Path) -> Path:

@@ -91,6 +91,16 @@ GENERIC_SUPPLIERS_NORMALIZED = frozenset(
         "N A",
     }
 )
+STATUS_DECISAO_VALUES = ("PENDENTE", "APROVADO", "BLOQUEADO", "REVISAR", "IGNORAR")
+ACAO_REGRA_VALUES = (
+    "CRIAR_ALIAS",
+    "CRIAR_REGRA",
+    "CLASSIFICAR",
+    "IGNORAR",
+    "REVISAR",
+    "BLOQUEADO",
+)
+BLOCKED_ACAO_REGRA_VALUES = ("IGNORAR", "BLOQUEADO", "REVISAR")
 
 
 class ImportaRevisaoXmlError(ValueError):
@@ -555,6 +565,7 @@ def _write_workbook(
     sheet.title = DECISOES_SHEET
     _append_rows(sheet, DECISOES_HEADERS, decision_rows)
     _style_sheet(sheet, DECISOES_HEADERS)
+    _add_status_validation(sheet, DECISOES_HEADERS, len(decision_rows))
     _add_action_validation(sheet, DECISOES_HEADERS, decision_rows)
     _add_account_validation(sheet, DECISOES_HEADERS, len(decision_rows), len(account_options))
     _add_account_formulas(sheet, DECISOES_HEADERS, len(decision_rows))
@@ -576,18 +587,33 @@ def _write_workbook(
         [
             {
                 "STATUS_DECISAO": "PENDENTE",
-                "ACAO_REGRA": "CRIAR_REGRA",
+                "ACAO_REGRA": "CRIAR_ALIAS",
                 "NIVEL_RISCO_REGRA": "BAIXO",
             },
             {
                 "STATUS_DECISAO": "APROVADO",
-                "ACAO_REGRA": "CRIAR_ALIAS",
+                "ACAO_REGRA": "CRIAR_REGRA",
                 "NIVEL_RISCO_REGRA": "MEDIO",
             },
             {
                 "STATUS_DECISAO": "BLOQUEADO",
-                "ACAO_REGRA": "IGNORAR",
+                "ACAO_REGRA": "CLASSIFICAR",
                 "NIVEL_RISCO_REGRA": "ALTO",
+            },
+            {
+                "STATUS_DECISAO": "REVISAR",
+                "ACAO_REGRA": "IGNORAR",
+                "NIVEL_RISCO_REGRA": "",
+            },
+            {
+                "STATUS_DECISAO": "IGNORAR",
+                "ACAO_REGRA": "REVISAR",
+                "NIVEL_RISCO_REGRA": "",
+            },
+            {
+                "STATUS_DECISAO": "",
+                "ACAO_REGRA": "BLOQUEADO",
+                "NIVEL_RISCO_REGRA": "",
             },
         ],
     )
@@ -656,6 +682,21 @@ def _add_account_validation(
     validation.add(f"{letter}2:{letter}{row_count + 1}")
 
 
+def _add_status_validation(sheet, headers: list[str], row_count: int) -> None:
+    if row_count < 1 or "STATUS_DECISAO" not in headers:
+        return
+    column = get_column_letter(headers.index("STATUS_DECISAO") + 1)
+    validation = DataValidation(
+        type="list",
+        formula1=f'"{",".join(STATUS_DECISAO_VALUES)}"',
+        allow_blank=True,
+    )
+    validation.error = "Escolha um status valido."
+    validation.errorTitle = "Status invalido"
+    sheet.add_data_validation(validation)
+    validation.add(f"{column}2:{column}{row_count + 1}")
+
+
 def _add_action_validation(
     sheet,
     headers: list[str],
@@ -666,12 +707,12 @@ def _add_action_validation(
     action_col = get_column_letter(headers.index("ACAO_REGRA") + 1)
     default_validation = DataValidation(
         type="list",
-        formula1='"CRIAR_REGRA,CRIAR_ALIAS,IGNORAR,REVISAR"',
+        formula1=f'"{",".join(ACAO_REGRA_VALUES)}"',
         allow_blank=True,
     )
     blocked_validation = DataValidation(
         type="list",
-        formula1='"IGNORAR,BLOQUEADO,REVISAR"',
+        formula1=f'"{",".join(BLOCKED_ACAO_REGRA_VALUES)}"',
         allow_blank=True,
     )
     default_validation.error = "Escolha uma acao valida."

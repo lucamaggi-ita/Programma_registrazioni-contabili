@@ -302,6 +302,65 @@ def test_blocked_rows_have_restricted_action_validation(tmp_path):
     assert "CRIAR_REGRA" not in blocked_validations[0].formula1
 
 
+def test_decision_sheet_has_required_dropdown_validations(tmp_path):
+    env = _make_env(tmp_path)
+    _write_csv(
+        env.run_dir,
+        [
+            _row(
+                descricao_normalizada="comodato provavel",
+                tipo_operacao_especial="COMODATO",
+                confianca_operacao_especial="PROVAVEL",
+            ),
+            _row(descricao_normalizada="produto normal"),
+        ],
+    )
+
+    importar_revisao_xml(
+        run_reports_dir=env.run_dir,
+        output_dir=env.output_dir,
+        regras_path=env.regras_path,
+        plano_contas_path=env.plano_path,
+    )
+
+    workbook = load_workbook(env.output_dir / EXCEL_NAME, data_only=False)
+    sheet = workbook[DECISOES_SHEET]
+    headers = [cell.value for cell in sheet[1]]
+    rows = _decision_rows(env.output_dir / EXCEL_NAME)
+    blocked_index = next(
+        index
+        for index, row in enumerate(rows, start=2)
+        if row["STATUS_DECISAO"] == "BLOQUEADO"
+    )
+    normal_index = next(
+        index
+        for index, row in enumerate(rows, start=2)
+        if row["STATUS_DECISAO"] == "PENDENTE"
+    )
+
+    status_cell = _cell_ref(headers, "STATUS_DECISAO", normal_index)
+    normal_action_cell = _cell_ref(headers, "ACAO_REGRA", normal_index)
+    blocked_action_cell = _cell_ref(headers, "ACAO_REGRA", blocked_index)
+    account_cell = _cell_ref(headers, "CONTA_ESCOLHIDA", normal_index)
+
+    assert _has_validation(
+        sheet,
+        status_cell,
+        '"PENDENTE,APROVADO,BLOQUEADO,REVISAR,IGNORAR"',
+    )
+    assert _has_validation(
+        sheet,
+        normal_action_cell,
+        '"CRIAR_ALIAS,CRIAR_REGRA,CLASSIFICAR,IGNORAR,REVISAR,BLOQUEADO"',
+    )
+    assert _has_validation(
+        sheet,
+        blocked_action_cell,
+        '"IGNORAR,BLOQUEADO,REVISAR"',
+    )
+    assert _has_validation(sheet, account_cell, "=plano_contas!$A$2:$A$3")
+
+
 def test_output_sheet_and_required_columns_are_compatible(tmp_path):
     env = _make_env(tmp_path)
     _write_csv(env.run_dir, [_row()])
@@ -760,6 +819,18 @@ def _write_existing_excel(path: Path, key: str) -> None:
         ]
     )
     workbook.save(path)
+
+
+def _cell_ref(headers: list[str], header: str, row: int) -> str:
+    column = chr(ord("A") + headers.index(header))
+    return f"{column}{row}"
+
+
+def _has_validation(sheet, cell_ref: str, formula1: str) -> bool:
+    return any(
+        validation.formula1 == formula1 and cell_ref in str(validation.sqref)
+        for validation in sheet.data_validations.dataValidation
+    )
 
 
 def _set_cell_by_header(
