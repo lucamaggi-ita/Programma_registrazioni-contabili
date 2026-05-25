@@ -300,6 +300,16 @@ regras:
     beneficiario_favorecido_contem_algum:
     - NET INFO INFORMATICA LTDA
     referencia_empresa_contem_algum: []
+- regra_id: REGRA_4_01_014_FIBRANET_BA_TELECOM
+  conta_id: 4.01.014
+  conta_nome: Internet e Telefonia
+  dre_linha_id: '06.02'
+  entra_dre: true
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - FIBRANET BA TELECOM LTDA
+    referencia_empresa_contem_algum: []
 - regra_id: REGRA_9_01_001_ABRASEL_ASSOCIACAO_BRASILEIRA
   conta_id: 9.01.001
   conta_nome: Publicidade e Propaganda
@@ -389,6 +399,16 @@ regras:
     modo: TODAS_AS_CONDICOES_NAO_VAZIAS
     beneficiario_favorecido_contem_algum:
     - UNIMED COSTA DO DESCOBRIMENTO
+    referencia_empresa_contem_algum: []
+- regra_id: REGRA_8_02_003_JULIO_CESAR_RODRIGUES_DE_SOUZA
+  conta_id: 8.02.003
+  conta_nome: Manutencao de Geladeiras e Freezers
+  dre_linha_id: '10.01'
+  entra_dre: true
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - JULIO CESAR RODRIGUES DE SOUZA
     referencia_empresa_contem_algum: []
 
 exclusoes:
@@ -854,6 +874,13 @@ exclusoes:
     beneficiario_favorecido_contem_algum:
     - EMERSON PEREIRA SANTOS
     referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_EMBOX_BOCA_COMERCIO_EIRELI
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - EMBOX BOCA COMERCIO EIRELI
+    referencia_empresa_contem_algum: []
 - regra_id: EXCLUSAO_XML_ERGOS_DISTRIBUIDORA
   acao: XML
   match:
@@ -1127,3 +1154,11 @@ exclusoes:
     beneficiario_favorecido_contem_algum: []
     referencia_empresa_contem_algum:
     - INSS
+- regra_id: EXCLUSAO_XML_CONTA_CORRENTE_BOLETO_PAGO
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum: []
+    referencia_empresa_contem_algum: []
+    descricao_comprovante_contem_algum:
+    - BOLETO PAGO

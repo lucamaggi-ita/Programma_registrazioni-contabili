@@ -19,6 +19,8 @@ from fantozzi.banking.payment_receipt_parser import parse_payment_receipts
 from fantozzi.banking.payment_rules import (
     STATUS_CLASSIFICADO,
     STATUS_EXCLUIDO,
+    STATUS_SEM_REGRA,
+    PaymentClassificationResult,
     PaymentRulesError,
     classify_payment_receipt,
     load_payment_exclusion_rules,
@@ -78,6 +80,11 @@ CONTA_CORRENTE_HEADERS = [
     "CHAVE_REGRA_LANCAMENTO",
     "CHAVE_REGRA_RAZAO_SOCIAL",
     "POSSIVEL_COMPROVANTE_RELACIONADO",
+    "COMPROVANTE_RELACIONADO_BENEFICIARIO",
+    "COMPROVANTE_RELACIONADO_DOCUMENTO",
+    "COMPROVANTE_RELACIONADO_DATA",
+    "COMPROVANTE_RELACIONADO_VALOR",
+    "COMPROVANTE_RELACIONADO_REGRA_EXISTENTE",
     "USAR_SOMENTE_SEM_COMPROVANTE",
     "RISCO_DUPLICIDADE_XML",
     "ESCOPO_REGRA",
@@ -111,6 +118,11 @@ TECNICO_CONTA_CORRENTE_HEADERS = [
     "REGRA_EXISTENTE",
     "MOTIVO_REVISAO",
     "HASH_ORIGEM",
+    "COMPROVANTE_RELACIONADO_BENEFICIARIO",
+    "COMPROVANTE_RELACIONADO_DOCUMENTO",
+    "COMPROVANTE_RELACIONADO_DATA",
+    "COMPROVANTE_RELACIONADO_VALOR",
+    "COMPROVANTE_RELACIONADO_REGRA_EXISTENTE",
 ]
 
 MANUAL_COLUMNS = {
@@ -125,6 +137,11 @@ MANUAL_COLUMNS = {
     "CHAVE_REGRA_LANCAMENTO",
     "CHAVE_REGRA_RAZAO_SOCIAL",
     "POSSIVEL_COMPROVANTE_RELACIONADO",
+    "COMPROVANTE_RELACIONADO_BENEFICIARIO",
+    "COMPROVANTE_RELACIONADO_DOCUMENTO",
+    "COMPROVANTE_RELACIONADO_DATA",
+    "COMPROVANTE_RELACIONADO_VALOR",
+    "COMPROVANTE_RELACIONADO_REGRA_EXISTENTE",
     "USAR_SOMENTE_SEM_COMPROVANTE",
     "RISCO_DUPLICIDADE_XML",
     "ESCOPO_REGRA",
@@ -147,6 +164,7 @@ BANK_ACAO_REGRA_VALUES = (
 RISCO_DUPLICIDADE_XML_VALUES = ("OK", "DUVIDA")
 ESCOPO_REGRA_VALUES = ("COMPROVANTE", "CONTA_CORRENTE")
 USAR_SOMENTE_SEM_COMPROVANTE_VALUES = ("SIM", "NAO")
+BOLETO_PAGO_FALLBACK_REGRA_ID = "EXCLUSAO_XML_CONTA_CORRENTE_BOLETO_PAGO"
 
 
 class ImportaRevisaoBancaError(ValueError):
@@ -171,6 +189,16 @@ class ImportaRevisaoBancaResult:
     ofx_usado: bool
     decisoes_preservadas: int
     novas_chaves_adicionadas: int
+    conta_corrente_regras_yaml_aplicadas: int
+    conta_corrente_boleto_pago_fallback: int
+    conta_corrente_revisao_sem_regra: int
+    conta_corrente_pix_enviado: int
+    conta_corrente_pix_comprovante_exato: int
+    conta_corrente_pix_yaml_via_comprovante: int
+    conta_corrente_pix_revisao_sem_regra_comprovante: int
+    conta_corrente_pix_revisao_match_ambiguo: int
+    conta_corrente_pix_revisao_sem_comprovante: int
+    conta_corrente_pix_fallback_aplicado: int
     possiveis_comprovantes_relacionados: int
     alertas: tuple[str, ...]
 
@@ -181,6 +209,14 @@ class _Group:
     rows: list[dict[str, object]]
     tecnico_rows: list[dict[str, object]]
     preserved: dict[str, object] | None = None
+
+
+@dataclass(frozen=True)
+class _ReceiptBridge:
+    status: str
+    receipt: PaymentReceiptRaw | None
+    result: PaymentClassificationResult
+    candidate_count: int = 0
 
 
 def resolve_bank_raw_dir(
@@ -253,9 +289,21 @@ def importar_revisao_banca(
     ofx_found = False
     comprovantes_lidos = 0
     lancamentos_lidos = 0
+    conta_corrente_regras_yaml_aplicadas = 0
+    conta_corrente_boleto_pago_fallback = 0
+    conta_corrente_revisao_sem_regra = 0
+    conta_corrente_pix_enviado = 0
+    conta_corrente_pix_comprovante_exato = 0
+    conta_corrente_pix_yaml_via_comprovante = 0
+    conta_corrente_pix_revisao_sem_regra_comprovante = 0
+    conta_corrente_pix_revisao_match_ambiguo = 0
+    conta_corrente_pix_revisao_sem_comprovante = 0
+    conta_corrente_pix_fallback_aplicado = 0
     comprovante_groups: dict[str, _Group] = {}
     conta_groups: dict[str, _Group] = {}
-    receipt_beneficiaries_by_context: dict[tuple[str, str], set[str]] = {}
+    conta_tecnico_regra_existente: list[dict[str, object]] = []
+    receipts_by_exact_context: dict[tuple[str, str, str, str], list[PaymentReceiptRaw]] = {}
+    pix_receipt_hashes_usados: set[str] = set()
 
     for cnpj_dir in _cnpj_dirs(bank_raw_dir):
         cnpj = only_digits(cnpj_dir.name)
@@ -276,8 +324,8 @@ def importar_revisao_banca(
             for receipt in receipts:
                 if _is_non_operational_receipt(receipt):
                     continue
-                _register_receipt_beneficiary(
-                    receipt_beneficiaries_by_context,
+                _register_receipt_exact_context(
+                    receipts_by_exact_context,
                     cnpj=cnpj,
                     periodo=periodo,
                     receipt=receipt,
@@ -305,7 +353,70 @@ def importar_revisao_banca(
             for launch in launches:
                 if launch.amount is None or launch.amount >= 0:
                     continue
+                tipo_movimento = _tipo_movimento(launch)
+                bridge = _empty_receipt_bridge()
+                if tipo_movimento == "PIX_TRANSFERENCIA_SAIDA":
+                    conta_corrente_pix_enviado += 1
+                    bridge = _find_pix_receipt_bridge(
+                        launch,
+                        cnpj,
+                        periodo,
+                        receipts_by_exact_context,
+                        pix_receipt_hashes_usados,
+                        rules,
+                        exclusion_rules,
+                    )
+                    if bridge.receipt is not None:
+                        pix_receipt_hashes_usados.add(bridge.receipt.raw_hash)
+                    if bridge.status != "SEM_COMPROVANTE":
+                        conta_corrente_pix_comprovante_exato += 1
+                    if bridge.status == "MATCH_AMBIGUO":
+                        conta_corrente_pix_revisao_match_ambiguo += 1
+                        result = bridge.result
+                    elif bridge.status == "COMPROVANTE_SEM_REGRA":
+                        conta_corrente_pix_revisao_sem_regra_comprovante += 1
+                        result = bridge.result
+                    elif bridge.status == "CLASSIFICADO":
+                        conta_corrente_pix_yaml_via_comprovante += 1
+                        result = bridge.result
+                    else:
+                        result = _classify_conta_corrente(
+                            _conta_rule_input(launch),
+                            rules,
+                            exclusion_rules,
+                        )
+                else:
+                    result = _classify_conta_corrente(
+                        _conta_rule_input(launch),
+                        rules,
+                        exclusion_rules,
+                    )
                 key = _stable_key_conta_corrente(launch)
+                tecnico_row = _tecnico_conta_row(
+                    launch,
+                    cnpj,
+                    periodo,
+                    lancamentos_path,
+                    key,
+                    result,
+                    bridge,
+                )
+                if result.status_classificacao in {STATUS_CLASSIFICADO, STATUS_EXCLUIDO}:
+                    if result.regra_id == BOLETO_PAGO_FALLBACK_REGRA_ID:
+                        conta_corrente_boleto_pago_fallback += 1
+                        if tipo_movimento == "PIX_TRANSFERENCIA_SAIDA":
+                            conta_corrente_pix_fallback_aplicado += 1
+                    else:
+                        conta_corrente_regras_yaml_aplicadas += 1
+                    conta_tecnico_regra_existente.append(tecnico_row)
+                    continue
+                if result.status_classificacao == STATUS_SEM_REGRA:
+                    if (
+                        tipo_movimento == "PIX_TRANSFERENCIA_SAIDA"
+                        and bridge.status == "SEM_COMPROVANTE"
+                    ):
+                        conta_corrente_pix_revisao_sem_comprovante += 1
+                    conta_corrente_revisao_sem_regra += 1
                 group = conta_groups.setdefault(
                     key,
                     _Group(chave_estavel=key, rows=[], tecnico_rows=[]),
@@ -316,12 +427,11 @@ def importar_revisao_banca(
                         cnpj,
                         periodo,
                         lancamentos_path,
-                        receipt_beneficiaries_by_context,
+                        result,
+                        bridge,
                     )
                 )
-                group.tecnico_rows.append(
-                    _tecnico_conta_row(launch, cnpj, periodo, lancamentos_path, key)
-                )
+                group.tecnico_rows.append(tecnico_row)
 
     comprovante_rows, comprovante_tecnico, preserved_comprovantes, new_comprovantes = (
         _build_comprovante_output_rows(comprovante_groups, existing_comprovantes)
@@ -329,11 +439,12 @@ def importar_revisao_banca(
     conta_rows, conta_tecnico, preserved_conta, new_conta = _build_conta_output_rows(
         conta_groups,
         existing_conta,
+        conta_tecnico_regra_existente,
     )
     possiveis_comprovantes_relacionados = sum(
         1
         for row in conta_rows
-        if row.get("POSSIVEL_COMPROVANTE_RELACIONADO") in {"SIM", "INCERTO"}
+        if row.get("POSSIVEL_COMPROVANTE_RELACIONADO") in {"SIM", "MATCH_AMBIGUO"}
     )
     alertas = _build_alertas(possiveis_comprovantes_relacionados)
 
@@ -375,6 +486,16 @@ def importar_revisao_banca(
         ofx_usado=False,
         decisoes_preservadas=preserved_comprovantes + preserved_conta,
         novas_chaves_adicionadas=new_comprovantes + new_conta,
+        conta_corrente_regras_yaml_aplicadas=conta_corrente_regras_yaml_aplicadas,
+        conta_corrente_boleto_pago_fallback=conta_corrente_boleto_pago_fallback,
+        conta_corrente_revisao_sem_regra=conta_corrente_revisao_sem_regra,
+        conta_corrente_pix_enviado=conta_corrente_pix_enviado,
+        conta_corrente_pix_comprovante_exato=conta_corrente_pix_comprovante_exato,
+        conta_corrente_pix_yaml_via_comprovante=conta_corrente_pix_yaml_via_comprovante,
+        conta_corrente_pix_revisao_sem_regra_comprovante=conta_corrente_pix_revisao_sem_regra_comprovante,
+        conta_corrente_pix_revisao_match_ambiguo=conta_corrente_pix_revisao_match_ambiguo,
+        conta_corrente_pix_revisao_sem_comprovante=conta_corrente_pix_revisao_sem_comprovante,
+        conta_corrente_pix_fallback_aplicado=conta_corrente_pix_fallback_aplicado,
         possiveis_comprovantes_relacionados=possiveis_comprovantes_relacionados,
         alertas=alertas,
     )
@@ -391,6 +512,16 @@ def console_lines(result: ImportaRevisaoBancaResult) -> list[str]:
         f"Lancamentos lidos: {result.lancamentos_lidos}",
         f"Candidatos comprovantes: {result.comprovantes_candidatos}",
         f"Candidatos conta corrente: {result.conta_corrente_candidatos}",
+        f"Conta corrente com regra YAML aplicada: {result.conta_corrente_regras_yaml_aplicadas}",
+        f"Conta corrente excluida por fallback BOLETO PAGO: {result.conta_corrente_boleto_pago_fallback}",
+        f"Conta corrente sem regra para revisao: {result.conta_corrente_revisao_sem_regra}",
+        f"PIX ENVIADO no conta corrente: {result.conta_corrente_pix_enviado}",
+        f"PIX ENVIADO com comprovante exato: {result.conta_corrente_pix_comprovante_exato}",
+        f"PIX ENVIADO com regra YAML via comprovante: {result.conta_corrente_pix_yaml_via_comprovante}",
+        f"PIX ENVIADO em revisao por comprovante sem regra: {result.conta_corrente_pix_revisao_sem_regra_comprovante}",
+        f"PIX ENVIADO em revisao por match ambiguo: {result.conta_corrente_pix_revisao_match_ambiguo}",
+        f"PIX ENVIADO em revisao por ausencia de comprovante: {result.conta_corrente_pix_revisao_sem_comprovante}",
+        f"PIX ENVIADO classificados/excluidos por fallback: {result.conta_corrente_pix_fallback_aplicado}",
         f"Decisoes preservadas: {result.decisoes_preservadas}",
         f"Novas chaves adicionadas: {result.novas_chaves_adicionadas}",
         f"Excel comprovantes: {result.excel_comprovantes}",
@@ -456,17 +587,154 @@ def _receipt_dict(receipt: PaymentReceiptRaw, cnpj: str) -> dict[str, str]:
     }
 
 
-def _register_receipt_beneficiary(
-    receipt_beneficiaries_by_context: dict[tuple[str, str], set[str]],
+def _conta_rule_input(launch: BankLaunchEnrichment) -> dict[str, str]:
+    return {
+        "beneficiary_name": launch.counterparty_name,
+        "reference_id": launch.description,
+        "payment_type": _tipo_movimento(launch),
+        "description_receipt": launch.description,
+        "source_file": launch.source_file,
+        "raw_hash": launch.raw_hash,
+    }
+
+
+def _classify_conta_corrente(
+    row: dict[str, str],
+    rules,
+    exclusion_rules,
+):
+    specific_result = classify_payment_receipt(row, rules, [])
+    if specific_result.status_classificacao != STATUS_SEM_REGRA:
+        return specific_result
+    return classify_payment_receipt(row, [], exclusion_rules)
+
+
+def _register_receipt_exact_context(
+    receipts_by_exact_context: dict[tuple[str, str, str, str], list[PaymentReceiptRaw]],
     *,
     cnpj: str,
     periodo: str,
     receipt: PaymentReceiptRaw,
 ) -> None:
-    beneficiary = normalize_match_text(receipt.beneficiary_name)
-    if not beneficiary:
+    if not receipt.payment_date:
         return
-    receipt_beneficiaries_by_context.setdefault((cnpj, periodo), set()).add(beneficiary)
+    key = (
+        cnpj,
+        periodo,
+        _date_text(receipt.payment_date),
+        _decimal_text(receipt.amount),
+    )
+    receipts_by_exact_context.setdefault(key, []).append(receipt)
+
+
+def _find_pix_receipt_bridge(
+    launch: BankLaunchEnrichment,
+    cnpj: str,
+    periodo: str,
+    receipts_by_exact_context: dict[tuple[str, str, str, str], list[PaymentReceiptRaw]],
+    used_receipt_hashes: set[str],
+    rules,
+    exclusion_rules,
+) -> _ReceiptBridge:
+    if not launch.transaction_date or launch.amount is None:
+        return _empty_receipt_bridge()
+    key = (
+        cnpj,
+        periodo,
+        _date_text(launch.transaction_date),
+        _decimal_text(abs(launch.amount)),
+    )
+    exact_candidates = [
+        receipt
+        for receipt in receipts_by_exact_context.get(key, [])
+        if receipt.raw_hash not in used_receipt_hashes
+    ]
+    candidates = [
+        receipt
+        for receipt in exact_candidates
+        if _receipt_matches_launch_identity(launch, receipt)
+    ]
+    if not candidates:
+        return _empty_receipt_bridge()
+    if len(candidates) > 1:
+        return _ReceiptBridge(
+            status="MATCH_AMBIGUO",
+            receipt=None,
+            result=_review_result("MATCH_AMBIGUO_COMPROVANTE"),
+            candidate_count=len(candidates),
+        )
+
+    receipt = candidates[0]
+    result = classify_payment_receipt(_receipt_dict(receipt, cnpj), rules, exclusion_rules)
+    if result.status_classificacao in {STATUS_CLASSIFICADO, STATUS_EXCLUIDO}:
+        return _ReceiptBridge(
+            status="CLASSIFICADO",
+            receipt=receipt,
+            result=result,
+            candidate_count=1,
+        )
+    return _ReceiptBridge(
+        status="COMPROVANTE_SEM_REGRA",
+        receipt=receipt,
+        result=_review_result(
+            "COMPROVANTE_RELACIONADO_SEM_REGRA",
+            result.regras_candidatas,
+        ),
+        candidate_count=1,
+    )
+
+
+def _empty_receipt_bridge() -> _ReceiptBridge:
+    return _ReceiptBridge(
+        status="SEM_COMPROVANTE",
+        receipt=None,
+        result=_review_result("SEM_COMPROVANTE_EXATO"),
+    )
+
+
+def _review_result(
+    motivo: str,
+    regras_candidatas: tuple[str, ...] = (),
+) -> PaymentClassificationResult:
+    return PaymentClassificationResult(
+        status_classificacao=STATUS_SEM_REGRA,
+        conta_id="",
+        conta_nome="",
+        dre_linha_id="",
+        entra_dre=None,
+        regra_id="",
+        motivo=motivo,
+        regras_candidatas=regras_candidatas,
+    )
+
+
+def _receipt_matches_launch_identity(
+    launch: BankLaunchEnrichment,
+    receipt: PaymentReceiptRaw,
+) -> bool:
+    launch_document = only_digits(launch.counterparty_document)
+    receipt_document = only_digits(receipt.beneficiary_document)
+    if launch_document and receipt_document:
+        # Both sides have documents: strict match required.
+        return launch_document == receipt_document
+    receipt_name = normalize_match_text(receipt.beneficiary_name)
+    if not receipt_name:
+        return False
+    launch_name = normalize_match_text(launch.counterparty_name)
+    launch_description = normalize_match_text(launch.description)
+    if launch_name and _names_compatible(launch_name, receipt_name):
+        return True
+    if launch_description and receipt_name in launch_description:
+        return True
+    # One or both sides lack document; date+value+CNPJ (context key) already match.
+    # Accept the bridge: multiple candidates produce MATCH_AMBIGUO, not arbitrary picks.
+    return True
+
+
+def _names_compatible(left: str, right: str) -> bool:
+    if left == right:
+        return True
+    return len(left) >= 8 and len(right) >= 8 and (left in right or right in left)
 
 
 def _is_non_operational_receipt(receipt: PaymentReceiptRaw) -> bool:
@@ -522,7 +790,8 @@ def _conta_source_row(
     cnpj: str,
     periodo: str,
     source_path: Path,
-    receipt_beneficiaries_by_context: dict[tuple[str, str], set[str]],
+    result: object,
+    bridge: _ReceiptBridge,
 ) -> dict[str, object]:
     return {
         "CNPJ": cnpj,
@@ -533,32 +802,50 @@ def _conta_source_row(
         "RAZAO_SOCIAL": launch.counterparty_name,
         "CHAVE_REGRA_LANCAMENTO": normalize_match_text(launch.description),
         "CHAVE_REGRA_RAZAO_SOCIAL": normalize_match_text(launch.counterparty_name),
-        "POSSIVEL_COMPROVANTE_RELACIONADO": _possible_related_receipt(
-            launch,
-            receipt_beneficiaries_by_context.get((cnpj, periodo), set()),
+        "POSSIVEL_COMPROVANTE_RELACIONADO": _bridge_related_status(bridge),
+        "COMPROVANTE_RELACIONADO_BENEFICIARIO": _bridge_receipt_value(
+            bridge,
+            "beneficiary_name",
         ),
+        "COMPROVANTE_RELACIONADO_DOCUMENTO": _bridge_receipt_value(
+            bridge,
+            "beneficiary_document",
+        ),
+        "COMPROVANTE_RELACIONADO_DATA": _bridge_receipt_value(bridge, "payment_date"),
+        "COMPROVANTE_RELACIONADO_VALOR": _bridge_receipt_value(bridge, "amount"),
+        "COMPROVANTE_RELACIONADO_REGRA_EXISTENTE": _bridge_regra_existente(bridge),
         "USAR_SOMENTE_SEM_COMPROVANTE": "SIM",
+        "MOTIVO_REVISAO": getattr(result, "motivo", "SEM_REGRA"),
+        "REGRA_EXISTENTE": "|".join(getattr(result, "regras_candidatas", ()) or ()),
         "ORIGEM_ARQUIVO": str(source_path),
         "HASH_ORIGEM": launch.raw_hash,
         "TIPO_MOVIMENTO": _tipo_movimento(launch),
     }
 
 
-def _possible_related_receipt(
-    launch: BankLaunchEnrichment,
-    receipt_beneficiaries: set[str],
-) -> str:
-    if not receipt_beneficiaries:
-        return "NAO"
-    counterparty = normalize_match_text(launch.counterparty_name)
-    description = normalize_match_text(launch.description)
-    if counterparty and counterparty in receipt_beneficiaries:
+def _bridge_related_status(bridge: _ReceiptBridge) -> str:
+    if bridge.status == "MATCH_AMBIGUO":
+        return "MATCH_AMBIGUO"
+    if bridge.status in {"CLASSIFICADO", "COMPROVANTE_SEM_REGRA"}:
         return "SIM"
-    if description and any(
-        beneficiary and beneficiary in description for beneficiary in receipt_beneficiaries
-    ):
-        return "INCERTO"
     return "NAO"
+
+
+def _bridge_receipt_value(bridge: _ReceiptBridge, field_name: str) -> str:
+    if bridge.receipt is None:
+        return ""
+    value = getattr(bridge.receipt, field_name)
+    if field_name == "payment_date":
+        return _date_text(value)
+    if field_name == "amount":
+        return _decimal_text(value)
+    return str(value or "")
+
+
+def _bridge_regra_existente(bridge: _ReceiptBridge) -> str:
+    if bridge.status == "MATCH_AMBIGUO":
+        return f"MATCH_AMBIGUO:{bridge.candidate_count}"
+    return "|".join(bridge.result.regras_candidatas)
 
 
 def _tecnico_comprovante_row(
@@ -587,6 +874,8 @@ def _tecnico_conta_row(
     periodo: str,
     source_path: Path,
     key: str,
+    result: object,
+    bridge: _ReceiptBridge,
 ) -> dict[str, object]:
     return {
         "CHAVE_ESTAVEL": key,
@@ -597,9 +886,20 @@ def _tecnico_conta_row(
         "VALORES_EXEMPLO": _decimal_text(launch.amount),
         "DIRECAO": "SAIDA",
         "TIPO_MOVIMENTO": _tipo_movimento(launch),
-        "REGRA_EXISTENTE": "",
-        "MOTIVO_REVISAO": "SAIDA_CONTA_CORRENTE_SEM_REGRA_COMPROVANTE",
+        "REGRA_EXISTENTE": "|".join(getattr(result, "regras_candidatas", ()) or ()),
+        "MOTIVO_REVISAO": getattr(result, "motivo", "SEM_REGRA"),
         "HASH_ORIGEM": launch.raw_hash,
+        "COMPROVANTE_RELACIONADO_BENEFICIARIO": _bridge_receipt_value(
+            bridge,
+            "beneficiary_name",
+        ),
+        "COMPROVANTE_RELACIONADO_DOCUMENTO": _bridge_receipt_value(
+            bridge,
+            "beneficiary_document",
+        ),
+        "COMPROVANTE_RELACIONADO_DATA": _bridge_receipt_value(bridge, "payment_date"),
+        "COMPROVANTE_RELACIONADO_VALOR": _bridge_receipt_value(bridge, "amount"),
+        "COMPROVANTE_RELACIONADO_REGRA_EXISTENTE": _bridge_regra_existente(bridge),
     }
 
 
@@ -654,9 +954,10 @@ def _build_comprovante_output_rows(
 def _build_conta_output_rows(
     groups: dict[str, _Group],
     existing: dict[str, dict[str, object]],
+    applied_technical_rows: list[dict[str, object]] | None = None,
 ) -> tuple[list[dict[str, object]], list[dict[str, object]], int, int]:
     rows: list[dict[str, object]] = []
-    technical_rows: list[dict[str, object]] = []
+    technical_rows: list[dict[str, object]] = list(applied_technical_rows or [])
     preserved = 0
     new = 0
     for key in sorted(groups):
@@ -681,6 +982,21 @@ def _build_conta_output_rows(
             "CHAVE_REGRA_RAZAO_SOCIAL": first.get("CHAVE_REGRA_RAZAO_SOCIAL", ""),
             "POSSIVEL_COMPROVANTE_RELACIONADO": first.get(
                 "POSSIVEL_COMPROVANTE_RELACIONADO", "NAO"
+            ),
+            "COMPROVANTE_RELACIONADO_BENEFICIARIO": first.get(
+                "COMPROVANTE_RELACIONADO_BENEFICIARIO", ""
+            ),
+            "COMPROVANTE_RELACIONADO_DOCUMENTO": first.get(
+                "COMPROVANTE_RELACIONADO_DOCUMENTO", ""
+            ),
+            "COMPROVANTE_RELACIONADO_DATA": first.get(
+                "COMPROVANTE_RELACIONADO_DATA", ""
+            ),
+            "COMPROVANTE_RELACIONADO_VALOR": first.get(
+                "COMPROVANTE_RELACIONADO_VALOR", ""
+            ),
+            "COMPROVANTE_RELACIONADO_REGRA_EXISTENTE": first.get(
+                "COMPROVANTE_RELACIONADO_REGRA_EXISTENTE", ""
             ),
             "USAR_SOMENTE_SEM_COMPROVANTE": "SIM",
             "RISCO_DUPLICIDADE_XML": "",
@@ -713,6 +1029,11 @@ def _merge_technical_rows(rows: list[dict[str, object]], key: str) -> list[dict[
         "CNPJS_ENVOLVIDOS",
         "CNPJ",
         "DATA_MOVIMENTO",
+        "COMPROVANTE_RELACIONADO_BENEFICIARIO",
+        "COMPROVANTE_RELACIONADO_DOCUMENTO",
+        "COMPROVANTE_RELACIONADO_DATA",
+        "COMPROVANTE_RELACIONADO_VALOR",
+        "COMPROVANTE_RELACIONADO_REGRA_EXISTENTE",
     ):
         if column in merged:
             merged[column] = _joined_unique((row.get(column) for row in rows), limit=5)
@@ -1071,6 +1392,16 @@ def _write_manifest(result: ImportaRevisaoBancaResult) -> None:
         "ofx_usado": result.ofx_usado,
         "decisoes_preservadas": result.decisoes_preservadas,
         "novas_chaves_adicionadas": result.novas_chaves_adicionadas,
+        "conta_corrente_regras_yaml_aplicadas": result.conta_corrente_regras_yaml_aplicadas,
+        "conta_corrente_boleto_pago_fallback": result.conta_corrente_boleto_pago_fallback,
+        "conta_corrente_revisao_sem_regra": result.conta_corrente_revisao_sem_regra,
+        "conta_corrente_pix_enviado": result.conta_corrente_pix_enviado,
+        "conta_corrente_pix_comprovante_exato": result.conta_corrente_pix_comprovante_exato,
+        "conta_corrente_pix_yaml_via_comprovante": result.conta_corrente_pix_yaml_via_comprovante,
+        "conta_corrente_pix_revisao_sem_regra_comprovante": result.conta_corrente_pix_revisao_sem_regra_comprovante,
+        "conta_corrente_pix_revisao_match_ambiguo": result.conta_corrente_pix_revisao_match_ambiguo,
+        "conta_corrente_pix_revisao_sem_comprovante": result.conta_corrente_pix_revisao_sem_comprovante,
+        "conta_corrente_pix_fallback_aplicado": result.conta_corrente_pix_fallback_aplicado,
         "manifest_historico": str(result.manifest_historico_path),
         "possiveis_comprovantes_relacionados": result.possiveis_comprovantes_relacionados,
         "alertas": list(result.alertas),
@@ -1165,6 +1496,9 @@ def _suggested_width(header: str) -> int:
         "CONTA_ESCOLHIDA": 42,
         "CONTA_NOME_APROVADA": 34,
         "POSSIVEL_COMPROVANTE_RELACIONADO": 28,
+        "COMPROVANTE_RELACIONADO_BENEFICIARIO": 38,
+        "COMPROVANTE_RELACIONADO_DOCUMENTO": 24,
+        "COMPROVANTE_RELACIONADO_REGRA_EXISTENTE": 42,
         "EXEMPLOS": 70,
         "OBSERVACAO_OPERADOR": 45,
         "ORIGEM_ARQUIVO": 58,
@@ -1180,6 +1514,9 @@ def _wrap(header: str) -> bool:
         "LANCAMENTO",
         "RAZAO_SOCIAL",
         "POSSIVEL_COMPROVANTE_RELACIONADO",
+        "COMPROVANTE_RELACIONADO_BENEFICIARIO",
+        "COMPROVANTE_RELACIONADO_DOCUMENTO",
+        "COMPROVANTE_RELACIONADO_REGRA_EXISTENTE",
         "EXEMPLOS",
         "OBSERVACAO_OPERADOR",
         "ORIGEM_ARQUIVO",
@@ -1196,5 +1533,6 @@ def _instructions(sheet_name: str) -> list[str]:
         "CONTA_ESCOLHIDA e um dropdown operacional; CONTA_ID_APROVADA e o campo tecnico usado pela skill de regras.",
         "OFX nao e obrigatorio nesta fase e nao foi usado para gerar as linhas.",
         "As decisoes manuais existentes sao preservadas por CHAVE_ESTAVEL quando o arquivo e regenerado.",
-        "POSSIVEL_COMPROVANTE_RELACIONADO e informativo; nao classifica conta automaticamente.",
+        "Para PIX ENVIADO, POSSIVEL_COMPROVANTE_RELACIONADO=SIM exige mesmo CNPJ, data exata e valor exato.",
+        "MATCH_AMBIGUO sinaliza mais de um comprovante possivel; a linha fica para revisao.",
     ]

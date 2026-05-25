@@ -165,6 +165,80 @@ def test_importa_revisao_banca_adds_decision_dropdown_validations(
     _assert_dropdown_prefix(conta, "CONTA_ESCOLHIDA", "=plano_contas!")
 
 
+def test_importa_revisao_banca_reuses_yaml_rules_before_boleto_fallback(
+    monkeypatch,
+    tmp_path,
+):
+    bank_raw_dir, cnpj_dir = _make_bank_raw_month(tmp_path)
+    (cnpj_dir / "ConsultaPagamentos.xls").write_bytes(b"placeholder")
+    (cnpj_dir / "Extrato_Lancamentos.xlsx").write_bytes(b"placeholder")
+    output_dir = tmp_path / "bank_raw" / "_decisoes_regras"
+    _patch_bank_sources(
+        monkeypatch,
+        [],
+        [
+            _launch(
+                "BOLETO PAGO ABRASEL ASS",
+                "ABRASEL ASSOCIACAO BRASILEIRA DE BARES E RESTAUR",
+                raw_hash="launch-abrasel",
+            ),
+            _launch(
+                "BOLETO PAGO FORNECEDOR SEM REGRA",
+                "FORNECEDOR SEM REGRA",
+                raw_hash="launch-boleto",
+            ),
+            _launch(
+                "BOLETO PAGO FIBRANET BA",
+                "FIBRANET BA TELECOM LTDA",
+                raw_hash="launch-fibranet",
+            ),
+            _launch(
+                "PIX FORNECEDOR SEM REGRA",
+                "FORNECEDOR SEM REGRA",
+                raw_hash="launch-pix",
+            ),
+        ],
+    )
+
+    result = importar_revisao_banca(
+        **{
+            **_import_kwargs(tmp_path, bank_raw_dir, output_dir),
+            "regras_path": _write_rules_with_supplier_and_boleto_fallback(
+                tmp_path,
+                "ABRASEL ASSOCIACAO BRASILEIRA",
+            ),
+        }
+    )
+
+    assert result.conta_corrente_regras_yaml_aplicadas == 2
+    assert result.conta_corrente_boleto_pago_fallback == 1
+    assert result.conta_corrente_revisao_sem_regra == 1
+    assert result.conta_corrente_candidatos == 1
+
+    decisoes = _data_rows(output_dir / CONTA_CORRENTE_XLSX, CONTA_CORRENTE_SHEET)
+    assert [row["LANCAMENTO"] for row in decisoes] == ["PIX FORNECEDOR SEM REGRA"]
+
+    tecnico = _data_rows(
+        output_dir / CONTA_CORRENTE_XLSX,
+        "tecnico_conta_corrente",
+    )
+    by_hash = {row["HASH_ORIGEM"]: row for row in tecnico}
+    assert by_hash["launch-abrasel"]["REGRA_EXISTENTE"] == "REGRA_ABRASEL"
+    assert by_hash["launch-fibranet"]["REGRA_EXISTENTE"] == (
+        "REGRA_4_01_014_FIBRANET_BA_TELECOM"
+    )
+    assert by_hash["launch-boleto"]["REGRA_EXISTENTE"] == (
+        "EXCLUSAO_XML_CONTA_CORRENTE_BOLETO_PAGO"
+    )
+    assert by_hash["launch-pix"]["REGRA_EXISTENTE"] in (None, "")
+    assert by_hash["launch-boleto"]["MOTIVO_REVISAO"] == "EXCLUSAO_OPERADOR_REGRA"
+
+    manifest = json.loads((output_dir / "manifest_importa_revisao_banca.json").read_text())
+    assert manifest["conta_corrente_regras_yaml_aplicadas"] == 2
+    assert manifest["conta_corrente_boleto_pago_fallback"] == 1
+    assert manifest["conta_corrente_revisao_sem_regra"] == 1
+
+
 def test_importa_revisao_banca_filters_total_receipt_from_decision_sheets(
     monkeypatch,
     tmp_path,
@@ -550,6 +624,575 @@ def test_importar_revisao_banca_indica_possivel_comprovante_relacionado(
     assert manifest["alertas"]
 
 
+def test_pix_enviado_uses_exact_receipt_beneficiary_rule_as_bridge(
+    monkeypatch,
+    tmp_path,
+):
+    bank_raw_dir, cnpj_dir = _make_bank_raw_month(tmp_path)
+    (cnpj_dir / "ConsultaPagamentos.xls").write_bytes(b"placeholder")
+    (cnpj_dir / "Extrato_Lancamentos.xlsx").write_bytes(b"placeholder")
+    output_dir = tmp_path / "bank_raw" / "_decisoes_regras"
+    _patch_bank_sources(
+        monkeypatch,
+        [
+            _receipt(
+                "Beneficiario Com Regra",
+                raw_hash="receipt-bridge",
+                amount="100.00",
+                payment_date=date(2026, 4, 10),
+                document="12.345.678/0001-90",
+            )
+        ],
+        [
+            _launch(
+                "PIX ENVIADO",
+                "Nome Banco Diferente",
+                raw_hash="launch-bridge",
+                amount="-100.00",
+                transaction_date=date(2026, 4, 10),
+                document="12.345.678/0001-90",
+            )
+        ],
+    )
+
+    result = importar_revisao_banca(
+        **{
+            **_import_kwargs(tmp_path, bank_raw_dir, output_dir),
+            "regras_path": _write_rules_with_supplier(tmp_path, "BENEFICIARIO COM REGRA"),
+        }
+    )
+
+    assert result.conta_corrente_pix_enviado == 1
+    assert result.conta_corrente_pix_comprovante_exato == 1
+    assert result.conta_corrente_pix_yaml_via_comprovante == 1
+    assert result.conta_corrente_candidatos == 0
+
+    tecnico = _data_rows(output_dir / CONTA_CORRENTE_XLSX, "tecnico_conta_corrente")
+    by_hash = {row["HASH_ORIGEM"]: row for row in tecnico}
+    assert by_hash["launch-bridge"]["REGRA_EXISTENTE"] == "REGRA_FORNECEDOR_TESTE"
+    assert by_hash["launch-bridge"]["COMPROVANTE_RELACIONADO_BENEFICIARIO"] == (
+        "Beneficiario Com Regra"
+    )
+    assert by_hash["launch-bridge"]["COMPROVANTE_RELACIONADO_DATA"] == "2026-04-10"
+    assert by_hash["launch-bridge"]["COMPROVANTE_RELACIONADO_VALOR"] == "100.00"
+
+
+def test_pix_enviado_does_not_bridge_receipt_with_different_date(
+    monkeypatch,
+    tmp_path,
+):
+    bank_raw_dir, cnpj_dir = _make_bank_raw_month(tmp_path)
+    (cnpj_dir / "ConsultaPagamentos.xls").write_bytes(b"placeholder")
+    (cnpj_dir / "Extrato_Lancamentos.xlsx").write_bytes(b"placeholder")
+    output_dir = tmp_path / "bank_raw" / "_decisoes_regras"
+    _patch_bank_sources(
+        monkeypatch,
+        [
+            _receipt(
+                "Beneficiario Com Regra",
+                raw_hash="receipt-date-off",
+                amount="175.00",
+                payment_date=date(2026, 4, 21),
+                document="12.345.678/0001-90",
+            )
+        ],
+        [
+            _launch(
+                "PIX ENVIADO",
+                "Nome Banco Diferente",
+                raw_hash="launch-date-off",
+                amount="-175.00",
+                transaction_date=date(2026, 4, 23),
+                document="12.345.678/0001-90",
+            )
+        ],
+    )
+
+    result = importar_revisao_banca(
+        **{
+            **_import_kwargs(tmp_path, bank_raw_dir, output_dir),
+            "regras_path": _write_rules_with_supplier(tmp_path, "BENEFICIARIO COM REGRA"),
+        }
+    )
+
+    assert result.conta_corrente_pix_comprovante_exato == 0
+    assert result.conta_corrente_pix_revisao_sem_comprovante == 1
+    assert result.conta_corrente_candidatos == 1
+    row = _row_by_index(output_dir / CONTA_CORRENTE_XLSX, CONTA_CORRENTE_SHEET, row=2)
+    assert row["POSSIVEL_COMPROVANTE_RELACIONADO"] == "NAO"
+    tecnico = _data_rows(output_dir / CONTA_CORRENTE_XLSX, "tecnico_conta_corrente")
+    by_hash = {item["HASH_ORIGEM"]: item for item in tecnico}
+    assert by_hash["launch-date-off"]["REGRA_EXISTENTE"] in (None, "")
+
+
+def test_pix_enviado_does_not_reuse_exact_receipt_for_duplicate_launch(
+    monkeypatch,
+    tmp_path,
+):
+    bank_raw_dir, cnpj_dir = _make_bank_raw_month(tmp_path)
+    (cnpj_dir / "ConsultaPagamentos.xls").write_bytes(b"placeholder")
+    (cnpj_dir / "Extrato_Lancamentos.xlsx").write_bytes(b"placeholder")
+    output_dir = tmp_path / "bank_raw" / "_decisoes_regras"
+    _patch_bank_sources(
+        monkeypatch,
+        [
+            _receipt(
+                "OS MORENOS DO COCO LTDA",
+                raw_hash="receipt-os-morenos-exact",
+                amount="175.00",
+                payment_date=date(2026, 4, 23),
+                document="12.345.678/0001-90",
+            ),
+            _receipt(
+                "OS MORENOS DO COCO LTDA",
+                raw_hash="receipt-os-morenos-date-off",
+                amount="175.00",
+                payment_date=date(2026, 4, 21),
+                document="12.345.678/0001-90",
+            ),
+        ],
+        [
+            _launch(
+                "PIX ENVIADO",
+                "OS MORENOS DO COCO",
+                raw_hash="launch-os-morenos-exact",
+                amount="-175.00",
+                transaction_date=date(2026, 4, 23),
+                document="12.345.678/0001-90",
+            ),
+            _launch(
+                "PIX ENVIADO",
+                "OS MORENOS DO COCO",
+                raw_hash="launch-os-morenos-review",
+                amount="-175.00",
+                transaction_date=date(2026, 4, 23),
+                document="12.345.678/0001-90",
+            ),
+        ],
+    )
+
+    result = importar_revisao_banca(
+        **{
+            **_import_kwargs(tmp_path, bank_raw_dir, output_dir),
+            "regras_path": _write_rules_with_supplier(tmp_path, "OS MORENOS DO COCO LTDA"),
+        }
+    )
+
+    assert result.conta_corrente_pix_enviado == 2
+    assert result.conta_corrente_pix_comprovante_exato == 1
+    assert result.conta_corrente_pix_yaml_via_comprovante == 1
+    assert result.conta_corrente_pix_revisao_sem_comprovante == 1
+    assert result.conta_corrente_candidatos == 1
+
+    tecnico = _data_rows(output_dir / CONTA_CORRENTE_XLSX, "tecnico_conta_corrente")
+    by_hash = {item["HASH_ORIGEM"]: item for item in tecnico}
+    assert by_hash["launch-os-morenos-exact"]["REGRA_EXISTENTE"] == "REGRA_FORNECEDOR_TESTE"
+    assert by_hash["launch-os-morenos-review"]["REGRA_EXISTENTE"] in (None, "")
+    assert by_hash["launch-os-morenos-review"]["COMPROVANTE_RELACIONADO_DATA"] in (None, "")
+
+
+def test_pix_enviado_exact_receipt_without_yaml_rule_stays_review(
+    monkeypatch,
+    tmp_path,
+):
+    bank_raw_dir, cnpj_dir = _make_bank_raw_month(tmp_path)
+    (cnpj_dir / "ConsultaPagamentos.xls").write_bytes(b"placeholder")
+    (cnpj_dir / "Extrato_Lancamentos.xlsx").write_bytes(b"placeholder")
+    output_dir = tmp_path / "bank_raw" / "_decisoes_regras"
+    _patch_bank_sources(
+        monkeypatch,
+        [
+            _receipt(
+                "Beneficiario Sem Regra",
+                raw_hash="receipt-no-rule",
+                amount="100.00",
+                payment_date=date(2026, 4, 10),
+                document="12.345.678/0001-90",
+            )
+        ],
+        [
+            _launch(
+                "PIX ENVIADO",
+                "Nome Banco Diferente",
+                raw_hash="launch-no-rule",
+                amount="-100.00",
+                transaction_date=date(2026, 4, 10),
+                document="12.345.678/0001-90",
+            )
+        ],
+    )
+
+    result = importar_revisao_banca(**_import_kwargs(tmp_path, bank_raw_dir, output_dir))
+
+    assert result.conta_corrente_pix_comprovante_exato == 1
+    assert result.conta_corrente_pix_revisao_sem_regra_comprovante == 1
+    assert result.conta_corrente_candidatos == 1
+    row = _row_by_index(output_dir / CONTA_CORRENTE_XLSX, CONTA_CORRENTE_SHEET, row=2)
+    assert row["POSSIVEL_COMPROVANTE_RELACIONADO"] == "SIM"
+    assert row["COMPROVANTE_RELACIONADO_BENEFICIARIO"] == "Beneficiario Sem Regra"
+    assert row["COMPROVANTE_RELACIONADO_REGRA_EXISTENTE"] in (None, "")
+    tecnico = _data_rows(output_dir / CONTA_CORRENTE_XLSX, "tecnico_conta_corrente")
+    by_hash = {item["HASH_ORIGEM"]: item for item in tecnico}
+    assert by_hash["launch-no-rule"]["REGRA_EXISTENTE"] in (None, "")
+
+
+def test_pix_enviado_ambiguous_exact_receipts_stay_review(
+    monkeypatch,
+    tmp_path,
+):
+    bank_raw_dir, cnpj_dir = _make_bank_raw_month(tmp_path)
+    (cnpj_dir / "ConsultaPagamentos.xls").write_bytes(b"placeholder")
+    (cnpj_dir / "Extrato_Lancamentos.xlsx").write_bytes(b"placeholder")
+    output_dir = tmp_path / "bank_raw" / "_decisoes_regras"
+    _patch_bank_sources(
+        monkeypatch,
+        [
+            _receipt(
+                "Beneficiario A",
+                raw_hash="receipt-amb-a",
+                amount="100.00",
+                payment_date=date(2026, 4, 10),
+                document="12.345.678/0001-90",
+            ),
+            _receipt(
+                "Beneficiario B",
+                raw_hash="receipt-amb-b",
+                amount="100.00",
+                payment_date=date(2026, 4, 10),
+                document="12.345.678/0001-90",
+            ),
+        ],
+        [
+            _launch(
+                "PIX ENVIADO",
+                "Nome Banco Diferente",
+                raw_hash="launch-amb",
+                amount="-100.00",
+                transaction_date=date(2026, 4, 10),
+                document="12.345.678/0001-90",
+            )
+        ],
+    )
+
+    result = importar_revisao_banca(
+        **{
+            **_import_kwargs(tmp_path, bank_raw_dir, output_dir),
+            "regras_path": _write_rules_with_supplier(tmp_path, "BENEFICIARIO A"),
+        }
+    )
+
+    assert result.conta_corrente_pix_comprovante_exato == 1
+    assert result.conta_corrente_pix_revisao_match_ambiguo == 1
+    assert result.conta_corrente_pix_yaml_via_comprovante == 0
+    assert result.conta_corrente_candidatos == 1
+    row = _row_by_index(output_dir / CONTA_CORRENTE_XLSX, CONTA_CORRENTE_SHEET, row=2)
+    assert row["POSSIVEL_COMPROVANTE_RELACIONADO"] == "MATCH_AMBIGUO"
+    assert row["COMPROVANTE_RELACIONADO_REGRA_EXISTENTE"] == "MATCH_AMBIGUO:2"
+    tecnico = _data_rows(output_dir / CONTA_CORRENTE_XLSX, "tecnico_conta_corrente")
+    by_hash = {item["HASH_ORIGEM"]: item for item in tecnico}
+    assert by_hash["launch-amb"]["REGRA_EXISTENTE"] in (None, "")
+
+
+def test_pix_enviado_xml_exclusion_bridge_exact_match_closes_movement(
+    monkeypatch,
+    tmp_path,
+):
+    """PIX ENVIADO com comprovante exato cujo beneficiario tem regra XML deve fechar o movimento."""
+    bank_raw_dir, cnpj_dir = _make_bank_raw_month(tmp_path)
+    (cnpj_dir / "ConsultaPagamentos.xls").write_bytes(b"placeholder")
+    (cnpj_dir / "Extrato_Lancamentos.xlsx").write_bytes(b"placeholder")
+    output_dir = tmp_path / "bank_raw" / "_decisoes_regras"
+    _patch_bank_sources(
+        monkeypatch,
+        [
+            _receipt(
+                "ATTC COMERCIO DE BEBIDAS LTDA",
+                raw_hash="receipt-attc",
+                amount="350.00",
+                payment_date=date(2026, 4, 15),
+                document="",
+            )
+        ],
+        [
+            _launch(
+                "PIX ENVIADO",
+                "VINHO VERITAS",
+                raw_hash="launch-vinho-veritas",
+                amount="-350.00",
+                transaction_date=date(2026, 4, 15),
+                document="",
+            )
+        ],
+    )
+
+    result = importar_revisao_banca(
+        **{
+            **_import_kwargs(tmp_path, bank_raw_dir, output_dir),
+            "regras_path": _write_rules_with_xml_exclusion(tmp_path, "ATTC COMERCIO DE BEBIDAS LTDA"),
+        }
+    )
+
+    assert result.conta_corrente_pix_enviado == 1
+    assert result.conta_corrente_pix_comprovante_exato == 1
+    assert result.conta_corrente_pix_yaml_via_comprovante == 1
+    assert result.conta_corrente_candidatos == 0
+
+    tecnico = _data_rows(output_dir / CONTA_CORRENTE_XLSX, "tecnico_conta_corrente")
+    by_hash = {row["HASH_ORIGEM"]: row for row in tecnico}
+    assert "EXCLUSAO_XML_TEST_ATTC_COMERCIO_DE_BEBIDAS_LTDA" in (
+        by_hash["launch-vinho-veritas"]["REGRA_EXISTENTE"] or ""
+    )
+    assert by_hash["launch-vinho-veritas"]["COMPROVANTE_RELACIONADO_BENEFICIARIO"] == (
+        "ATTC COMERCIO DE BEBIDAS LTDA"
+    )
+
+
+def test_pix_enviado_xml_exclusion_bridge_different_date_stays_review(
+    monkeypatch,
+    tmp_path,
+):
+    """PIX ENVIADO com comprovante de data diferente NAO deve fechar pelo bridge XML."""
+    bank_raw_dir, cnpj_dir = _make_bank_raw_month(tmp_path)
+    (cnpj_dir / "ConsultaPagamentos.xls").write_bytes(b"placeholder")
+    (cnpj_dir / "Extrato_Lancamentos.xlsx").write_bytes(b"placeholder")
+    output_dir = tmp_path / "bank_raw" / "_decisoes_regras"
+    _patch_bank_sources(
+        monkeypatch,
+        [
+            _receipt(
+                "ATTC COMERCIO DE BEBIDAS LTDA",
+                raw_hash="receipt-attc-date-off",
+                amount="350.00",
+                payment_date=date(2026, 4, 13),
+                document="",
+            )
+        ],
+        [
+            _launch(
+                "PIX ENVIADO",
+                "VINHO VERITAS",
+                raw_hash="launch-vinho-veritas-date-off",
+                amount="-350.00",
+                transaction_date=date(2026, 4, 15),
+                document="",
+            )
+        ],
+    )
+
+    result = importar_revisao_banca(
+        **{
+            **_import_kwargs(tmp_path, bank_raw_dir, output_dir),
+            "regras_path": _write_rules_with_xml_exclusion(tmp_path, "ATTC COMERCIO DE BEBIDAS LTDA"),
+        }
+    )
+
+    assert result.conta_corrente_pix_comprovante_exato == 0
+    assert result.conta_corrente_pix_yaml_via_comprovante == 0
+    assert result.conta_corrente_pix_revisao_sem_comprovante == 1
+    assert result.conta_corrente_candidatos == 1
+
+    row = _row_by_index(output_dir / CONTA_CORRENTE_XLSX, CONTA_CORRENTE_SHEET, row=2)
+    assert row["POSSIVEL_COMPROVANTE_RELACIONADO"] == "NAO"
+
+
+def test_pix_enviado_embox_xml_exclusion_bridge_exact_match(
+    monkeypatch,
+    tmp_path,
+):
+    """BOCA RESTAURANTE / EMBOX BOCA COMERCIO EIRELI: bridge XML com data e valor exatos."""
+    bank_raw_dir, cnpj_dir = _make_bank_raw_month(tmp_path)
+    (cnpj_dir / "ConsultaPagamentos.xls").write_bytes(b"placeholder")
+    (cnpj_dir / "Extrato_Lancamentos.xlsx").write_bytes(b"placeholder")
+    output_dir = tmp_path / "bank_raw" / "_decisoes_regras"
+    _patch_bank_sources(
+        monkeypatch,
+        [
+            _receipt(
+                "EMBOX BOCA COMERCIO EIRELI",
+                raw_hash="receipt-embox",
+                amount="480.00",
+                payment_date=date(2026, 4, 18),
+                document="",
+            )
+        ],
+        [
+            _launch(
+                "PIX ENVIADO",
+                "BOCA RESTAURANTE E LANCHONETE",
+                raw_hash="launch-boca",
+                amount="-480.00",
+                transaction_date=date(2026, 4, 18),
+                document="",
+            )
+        ],
+    )
+
+    result = importar_revisao_banca(
+        **{
+            **_import_kwargs(tmp_path, bank_raw_dir, output_dir),
+            "regras_path": _write_rules_with_xml_exclusion(tmp_path, "EMBOX BOCA COMERCIO EIRELI"),
+        }
+    )
+
+    assert result.conta_corrente_pix_yaml_via_comprovante == 1
+    assert result.conta_corrente_candidatos == 0
+
+    tecnico = _data_rows(output_dir / CONTA_CORRENTE_XLSX, "tecnico_conta_corrente")
+    by_hash = {row["HASH_ORIGEM"]: row for row in tecnico}
+    assert "EXCLUSAO_XML_TEST_EMBOX_BOCA_COMERCIO_EIRELI" in (
+        by_hash["launch-boca"]["REGRA_EXISTENTE"] or ""
+    )
+
+
+def test_pix_enviado_e_santos_xml_exclusion_bridge_exact_match(
+    monkeypatch,
+    tmp_path,
+):
+    """RAINHA DO FATO / E SANTOS DE OLIVEIRA - CARNES: bridge XML normaliza o hifen."""
+    bank_raw_dir, cnpj_dir = _make_bank_raw_month(tmp_path)
+    (cnpj_dir / "ConsultaPagamentos.xls").write_bytes(b"placeholder")
+    (cnpj_dir / "Extrato_Lancamentos.xlsx").write_bytes(b"placeholder")
+    output_dir = tmp_path / "bank_raw" / "_decisoes_regras"
+    _patch_bank_sources(
+        monkeypatch,
+        [
+            _receipt(
+                "E SANTOS DE OLIVEIRA - CARNES",
+                raw_hash="receipt-e-santos",
+                amount="600.00",
+                payment_date=date(2026, 4, 20),
+                document="",
+            )
+        ],
+        [
+            _launch(
+                "PIX ENVIADO",
+                "RAINHA DO FATO",
+                raw_hash="launch-rainha",
+                amount="-600.00",
+                transaction_date=date(2026, 4, 20),
+                document="",
+            )
+        ],
+    )
+
+    result = importar_revisao_banca(
+        **{
+            **_import_kwargs(tmp_path, bank_raw_dir, output_dir),
+            "regras_path": _write_rules_with_xml_exclusion(tmp_path, "E SANTOS DE OLIVEIRA CARNES"),
+        }
+    )
+
+    assert result.conta_corrente_pix_yaml_via_comprovante == 1
+    assert result.conta_corrente_candidatos == 0
+
+    tecnico = _data_rows(output_dir / CONTA_CORRENTE_XLSX, "tecnico_conta_corrente")
+    by_hash = {row["HASH_ORIGEM"]: row for row in tecnico}
+    assert by_hash["launch-rainha"]["COMPROVANTE_RELACIONADO_BENEFICIARIO"] == (
+        "E SANTOS DE OLIVEIRA - CARNES"
+    )
+
+
+def test_pix_enviado_julio_cesar_positive_rule_bridge_exact_match(
+    monkeypatch,
+    tmp_path,
+):
+    """LITORAL REFRIGERACAO / JULIO CESAR RODRIGUES DE SOUZA: classifica em 8.02.003."""
+    bank_raw_dir, cnpj_dir = _make_bank_raw_month(tmp_path)
+    (cnpj_dir / "ConsultaPagamentos.xls").write_bytes(b"placeholder")
+    (cnpj_dir / "Extrato_Lancamentos.xlsx").write_bytes(b"placeholder")
+    output_dir = tmp_path / "bank_raw" / "_decisoes_regras"
+    _patch_bank_sources(
+        monkeypatch,
+        [
+            _receipt(
+                "JULIO CESAR RODRIGUES DE SOUZA",
+                raw_hash="receipt-julio",
+                amount="250.00",
+                payment_date=date(2026, 4, 22),
+                document="",
+            )
+        ],
+        [
+            _launch(
+                "PIX ENVIADO",
+                "LITORAL REFRIGERACAO E MANUTENCAO",
+                raw_hash="launch-litoral",
+                amount="-250.00",
+                transaction_date=date(2026, 4, 22),
+                document="",
+            )
+        ],
+    )
+
+    result = importar_revisao_banca(
+        **{
+            **_import_kwargs(tmp_path, bank_raw_dir, output_dir),
+            "regras_path": _write_rules_with_positive_rule_julio_cesar(tmp_path),
+        }
+    )
+
+    assert result.conta_corrente_pix_yaml_via_comprovante == 1
+    assert result.conta_corrente_candidatos == 0
+
+    tecnico = _data_rows(output_dir / CONTA_CORRENTE_XLSX, "tecnico_conta_corrente")
+    by_hash = {row["HASH_ORIGEM"]: row for row in tecnico}
+    assert by_hash["launch-litoral"]["REGRA_EXISTENTE"] == (
+        "REGRA_8_02_003_JULIO_CESAR_RODRIGUES_DE_SOUZA"
+    )
+    assert by_hash["launch-litoral"]["COMPROVANTE_RELACIONADO_BENEFICIARIO"] == (
+        "JULIO CESAR RODRIGUES DE SOUZA"
+    )
+
+
+def test_pix_enviado_julio_cesar_different_date_stays_review(
+    monkeypatch,
+    tmp_path,
+):
+    """LITORAL / JULIO CESAR com data diferente NAO deve fechar automaticamente."""
+    bank_raw_dir, cnpj_dir = _make_bank_raw_month(tmp_path)
+    (cnpj_dir / "ConsultaPagamentos.xls").write_bytes(b"placeholder")
+    (cnpj_dir / "Extrato_Lancamentos.xlsx").write_bytes(b"placeholder")
+    output_dir = tmp_path / "bank_raw" / "_decisoes_regras"
+    _patch_bank_sources(
+        monkeypatch,
+        [
+            _receipt(
+                "JULIO CESAR RODRIGUES DE SOUZA",
+                raw_hash="receipt-julio-date-off",
+                amount="250.00",
+                payment_date=date(2026, 4, 20),
+                document="",
+            )
+        ],
+        [
+            _launch(
+                "PIX ENVIADO",
+                "LITORAL REFRIGERACAO E MANUTENCAO",
+                raw_hash="launch-litoral-date-off",
+                amount="-250.00",
+                transaction_date=date(2026, 4, 22),
+                document="",
+            )
+        ],
+    )
+
+    result = importar_revisao_banca(
+        **{
+            **_import_kwargs(tmp_path, bank_raw_dir, output_dir),
+            "regras_path": _write_rules_with_positive_rule_julio_cesar(tmp_path),
+        }
+    )
+
+    assert result.conta_corrente_pix_comprovante_exato == 0
+    assert result.conta_corrente_pix_yaml_via_comprovante == 0
+    assert result.conta_corrente_pix_revisao_sem_comprovante == 1
+    assert result.conta_corrente_candidatos == 1
+
+    row = _row_by_index(output_dir / CONTA_CORRENTE_XLSX, CONTA_CORRENTE_SHEET, row=2)
+    assert row["POSSIVEL_COMPROVANTE_RELACIONADO"] == "NAO"
+
+
 def _write_existing_comprovantes(path: Path) -> None:
     workbook = Workbook()
     sheet = workbook.active
@@ -709,12 +1352,94 @@ exclusoes: []
     return path
 
 
+def _write_rules_with_supplier_and_boleto_fallback(tmp_path: Path, supplier: str) -> Path:
+    path = tmp_path / "regras.yaml"
+    path.write_text(
+        f"""regras:
+- regra_id: REGRA_ABRASEL
+  conta_id: "4.01.012"
+  conta_nome: Agua e Esgoto
+  dre_linha_id: "06.02"
+  entra_dre: true
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - {supplier}
+    referencia_empresa_contem_algum: []
+- regra_id: REGRA_4_01_014_FIBRANET_BA_TELECOM
+  conta_id: "4.01.014"
+  conta_nome: Internet e Telefonia
+  dre_linha_id: "06.02"
+  entra_dre: true
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - FIBRANET BA TELECOM LTDA
+    referencia_empresa_contem_algum: []
+exclusoes:
+- regra_id: EXCLUSAO_XML_CONTA_CORRENTE_BOLETO_PAGO
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum: []
+    referencia_empresa_contem_algum: []
+    descricao_comprovante_contem_algum:
+    - BOLETO PAGO
+""",
+        encoding="utf-8",
+    )
+    return path
+
+
+def _write_rules_with_xml_exclusion(tmp_path: Path, beneficiary: str) -> Path:
+    path = tmp_path / "regras.yaml"
+    path.write_text(
+        f"""regras: []
+exclusoes:
+- regra_id: EXCLUSAO_XML_TEST_{beneficiary.replace(' ', '_')}
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - {beneficiary}
+    referencia_empresa_contem_algum: []
+""",
+        encoding="utf-8",
+    )
+    return path
+
+
+def _write_rules_with_positive_rule_julio_cesar(tmp_path: Path) -> Path:
+    path = tmp_path / "regras.yaml"
+    path.write_text(
+        """regras:
+- regra_id: REGRA_8_02_003_JULIO_CESAR_RODRIGUES_DE_SOUZA
+  conta_id: "8.02.003"
+  conta_nome: Manutencao de Geladeiras e Freezers
+  dre_linha_id: "10.01"
+  entra_dre: true
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - JULIO CESAR RODRIGUES DE SOUZA
+    referencia_empresa_contem_algum: []
+exclusoes: []
+""",
+        encoding="utf-8",
+    )
+    return path
+
+
 def _write_plan(tmp_path: Path) -> Path:
     path = tmp_path / "plano.yaml"
     path.write_text(
         """contas:
 - id: "4.01.012"
   nome: Agua e Esgoto
+- id: "4.01.014"
+  nome: Internet e Telefonia
+- id: "8.02.003"
+  nome: Manutencao de Geladeiras e Freezers
 """,
         encoding="utf-8",
     )
@@ -734,13 +1459,16 @@ def _receipt(
     raw_hash: str,
     reference: str = "-",
     amount: str = "20.00",
+    payment_date: date = date(2026, 4, 5),
+    document: str = "12.345.678/0001-90",
+    payment_type: str = "PIX Transferencias",
 ) -> PaymentReceiptRaw:
     return PaymentReceiptRaw(
-        payment_date=date(2026, 4, 5),
+        payment_date=payment_date,
         amount=Decimal(amount),
         beneficiary_name=beneficiary,
-        beneficiary_document="12.345.678/0001-90",
-        payment_type="PIX Transferencias",
+        beneficiary_document=document,
+        payment_type=payment_type,
         reference_id=reference,
         status="Efetuado",
         source_file="ConsultaPagamentos.xls",
@@ -754,13 +1482,15 @@ def _launch(
     *,
     raw_hash: str,
     amount: str = "-20.00",
+    transaction_date: date = date(2026, 4, 5),
+    document: str = "12.345.678/0001-90",
 ) -> BankLaunchEnrichment:
     return BankLaunchEnrichment(
-        transaction_date=date(2026, 4, 5),
+        transaction_date=transaction_date,
         amount=Decimal(amount),
         description=description,
         counterparty_name=counterparty,
-        counterparty_document="12.345.678/0001-90",
+        counterparty_document=document,
         row_balance=None,
         source_file="Extrato_Lancamentos.xlsx",
         raw_hash=raw_hash,
@@ -871,6 +1601,12 @@ def _write_mapping(tmp_path: Path) -> Path:
         """mapeamento:
   "4.01.012":
     dre_linha_id: "06.02"
+    entra_dre: true
+  "4.01.014":
+    dre_linha_id: "06.02"
+    entra_dre: true
+  "8.02.003":
+    dre_linha_id: "10.01"
     entra_dre: true
 """,
         encoding="utf-8",
