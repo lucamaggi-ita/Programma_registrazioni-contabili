@@ -139,6 +139,7 @@ BANK_STATUS_DECISAO_VALUES = (
 BANK_ACAO_REGRA_VALUES = (
     "CLASSIFICAR",
     "ESCLUDERE",
+    "XML",
     "NAO_CRIAR_REGRA",
     "REVISAR",
     "BLOQUEADO",
@@ -866,20 +867,27 @@ def _write_decision_workbook(
             },
             {
                 "STATUS_DECISAO": "REVISAR",
-                "ACAO_REGRA": "NAO_CRIAR_REGRA",
+                "ACAO_REGRA": "XML",
                 "RISCO_DUPLICIDADE_XML": "",
                 "ESCOPO_REGRA": "",
                 "USAR_SOMENTE_SEM_COMPROVANTE": "",
             },
             {
                 "STATUS_DECISAO": "NAO_CRIAR_REGRA",
-                "ACAO_REGRA": "REVISAR",
+                "ACAO_REGRA": "NAO_CRIAR_REGRA",
                 "RISCO_DUPLICIDADE_XML": "",
                 "ESCOPO_REGRA": "",
                 "USAR_SOMENTE_SEM_COMPROVANTE": "",
             },
             {
                 "STATUS_DECISAO": "BLOQUEADO",
+                "ACAO_REGRA": "REVISAR",
+                "RISCO_DUPLICIDADE_XML": "",
+                "ESCOPO_REGRA": "",
+                "USAR_SOMENTE_SEM_COMPROVANTE": "",
+            },
+            {
+                "STATUS_DECISAO": "",
                 "ACAO_REGRA": "BLOQUEADO",
                 "RISCO_DUPLICIDADE_XML": "",
                 "ESCOPO_REGRA": "",

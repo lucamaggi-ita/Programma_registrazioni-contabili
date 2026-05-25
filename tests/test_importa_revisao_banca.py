@@ -139,7 +139,7 @@ def test_importa_revisao_banca_adds_decision_dropdown_validations(
     _assert_dropdown(
         comprovantes,
         "ACAO_REGRA",
-        '"CLASSIFICAR,ESCLUDERE,NAO_CRIAR_REGRA,REVISAR,BLOQUEADO"',
+        '"CLASSIFICAR,ESCLUDERE,XML,NAO_CRIAR_REGRA,REVISAR,BLOQUEADO"',
     )
     _assert_dropdown(comprovantes, "RISCO_DUPLICIDADE_XML", '"OK,DUVIDA"')
     _assert_dropdown(comprovantes, "ESCOPO_REGRA", '"COMPROVANTE,CONTA_CORRENTE"')
@@ -157,7 +157,7 @@ def test_importa_revisao_banca_adds_decision_dropdown_validations(
     _assert_dropdown(
         conta,
         "ACAO_REGRA",
-        '"CLASSIFICAR,ESCLUDERE,NAO_CRIAR_REGRA,REVISAR,BLOQUEADO"',
+        '"CLASSIFICAR,ESCLUDERE,XML,NAO_CRIAR_REGRA,REVISAR,BLOQUEADO"',
     )
     _assert_dropdown(conta, "USAR_SOMENTE_SEM_COMPROVANTE", '"SIM,NAO"')
     _assert_dropdown(conta, "RISCO_DUPLICIDADE_XML", '"OK,DUVIDA"')
