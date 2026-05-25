@@ -410,6 +410,87 @@ regras:
     beneficiario_favorecido_contem_algum:
     - JULIO CESAR RODRIGUES DE SOUZA
     referencia_empresa_contem_algum: []
+- regra_id: REGRA_4_01_011_CONTA_CORRENTE_COELBA
+  conta_id: 4.01.011
+  conta_nome: Energia Eletrica
+  dre_linha_id: '06.02'
+  entra_dre: true
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum: []
+    referencia_empresa_contem_algum:
+    - COELBA
+- regra_id: REGRA_4_01_012_CONTA_CORRENTE_EMBASA
+  conta_id: 4.01.012
+  conta_nome: Agua e Esgoto
+  dre_linha_id: '06.02'
+  entra_dre: true
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum: []
+    referencia_empresa_contem_algum:
+    - EMBASA
+- regra_id: REGRA_4_01_014_CONTA_CORRENTE_VIVO
+  conta_id: 4.01.014
+  conta_nome: Internet e Telefonia
+  dre_linha_id: '06.02'
+  entra_dre: true
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum: []
+    referencia_empresa_contem_algum:
+    - VIVO
+- regra_id: REGRA_7_01_001_CONTA_CORRENTE_DEBITO_SEGURO
+  conta_id: 7.01.001
+  conta_nome: Tarifas Bancarias
+  dre_linha_id: '09.01'
+  entra_dre: true
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum: []
+    referencia_empresa_contem_algum:
+    - DEBITO SEGURO
+- regra_id: REGRA_5_01_001_CONTA_CORRENTE_SIMPLES_NACIONAL
+  conta_id: 5.01.001
+  conta_nome: Simples Nacional - DAS Mensal - Anexo I
+  dre_linha_id: '02.01'
+  entra_dre: true
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - SIMPLES NACIONAL
+    referencia_empresa_contem_algum: []
+- regra_id: REGRA_6_01_002_IZALTINO_JOSE_ZANI_JUNIOR
+  conta_id: 6.01.002
+  conta_nome: Honorarios Juridicos
+  dre_linha_id: '08.01'
+  entra_dre: true
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - IZALTINO JOSE ZANI JUNIOR
+    referencia_empresa_contem_algum: []
+- regra_id: REGRA_4_01_013_M_A_BRITO_COMERCIO_LTDA
+  conta_id: 4.01.013
+  conta_nome: Gas de Cozinha
+  dre_linha_id: '03.05'
+  entra_dre: true
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - M A BRITO COMERCIO LTDA
+    referencia_empresa_contem_algum: []
+- regra_id: REGRA_9_01_001_TOP_LEVEL_DIGITAL
+  conta_id: 9.01.001
+  conta_nome: Publicidade e Propaganda
+  dre_linha_id: '11.01'
+  entra_dre: true
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - TOP LEVEL DIGITAL
+    referencia_empresa_contem_algum:
+    - PIX ENVIADO
 
 exclusoes:
 - regra_id: EXCLUSAO_XML_OESA_COMERCIO_E_REPRESENTACOES
@@ -1154,6 +1235,15 @@ exclusoes:
     beneficiario_favorecido_contem_algum: []
     referencia_empresa_contem_algum:
     - INSS
+- regra_id: EXCLUSAO_ESCLUDERE_CONTA_CORRENTE_SISPAG_SALARIOS
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum: []
+    referencia_empresa_contem_algum:
+    - SISPAG SALARIOS
+    tipo_pagamento_contem_algum:
+    - SISPAG_AGREGADO
 - regra_id: EXCLUSAO_XML_CONTA_CORRENTE_BOLETO_PAGO
   acao: XML
   match:

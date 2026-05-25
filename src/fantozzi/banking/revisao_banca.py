@@ -123,6 +123,8 @@ TECNICO_CONTA_CORRENTE_HEADERS = [
     "COMPROVANTE_RELACIONADO_DATA",
     "COMPROVANTE_RELACIONADO_VALOR",
     "COMPROVANTE_RELACIONADO_REGRA_EXISTENTE",
+    "COMPETENCIA_REFERENCIA",
+    "OBSERVACAO_AUDIT",
 ]
 
 MANUAL_COLUMNS = {
@@ -603,10 +605,24 @@ def _classify_conta_corrente(
     rules,
     exclusion_rules,
 ):
-    specific_result = classify_payment_receipt(row, rules, [])
+    specific_exclusions, fallback_exclusions = _split_boleto_fallback_exclusions(
+        exclusion_rules
+    )
+    specific_result = classify_payment_receipt(row, rules, specific_exclusions)
     if specific_result.status_classificacao != STATUS_SEM_REGRA:
         return specific_result
-    return classify_payment_receipt(row, [], exclusion_rules)
+    return classify_payment_receipt(row, [], fallback_exclusions)
+
+
+def _split_boleto_fallback_exclusions(exclusion_rules):
+    specific_exclusions = []
+    fallback_exclusions = []
+    for rule in exclusion_rules:
+        if getattr(rule, "regra_id", "") == BOLETO_PAGO_FALLBACK_REGRA_ID:
+            fallback_exclusions.append(rule)
+        else:
+            specific_exclusions.append(rule)
+    return specific_exclusions, fallback_exclusions
 
 
 def _register_receipt_exact_context(
@@ -900,6 +916,11 @@ def _tecnico_conta_row(
         "COMPROVANTE_RELACIONADO_DATA": _bridge_receipt_value(bridge, "payment_date"),
         "COMPROVANTE_RELACIONADO_VALOR": _bridge_receipt_value(bridge, "amount"),
         "COMPROVANTE_RELACIONADO_REGRA_EXISTENTE": _bridge_regra_existente(bridge),
+        "COMPETENCIA_REFERENCIA": _competencia_referencia_conta_corrente(
+            launch,
+            result,
+        ),
+        "OBSERVACAO_AUDIT": _observacao_audit_conta_corrente(launch, result),
     }
 
 
@@ -1034,6 +1055,8 @@ def _merge_technical_rows(rows: list[dict[str, object]], key: str) -> list[dict[
         "COMPROVANTE_RELACIONADO_DATA",
         "COMPROVANTE_RELACIONADO_VALOR",
         "COMPROVANTE_RELACIONADO_REGRA_EXISTENTE",
+        "COMPETENCIA_REFERENCIA",
+        "OBSERVACAO_AUDIT",
     ):
         if column in merged:
             merged[column] = _joined_unique((row.get(column) for row in rows), limit=5)
@@ -1420,6 +1443,49 @@ def _build_alertas(possiveis_comprovantes_relacionados: int) -> tuple[str, ...]:
         "comprovantes. Verificar USAR_SOMENTE_SEM_COMPROVANTE para evitar "
         "duplicidade no DRE.",
     )
+
+
+def _competencia_referencia_conta_corrente(
+    launch: BankLaunchEnrichment,
+    result: object,
+) -> str:
+    if not _is_simples_nacional_result(launch, result):
+        return ""
+    movement_date = launch.transaction_date
+    if not hasattr(movement_date, "year") or not hasattr(movement_date, "month"):
+        return ""
+    year = int(movement_date.year)
+    month = int(movement_date.month) - 1
+    if month == 0:
+        year -= 1
+        month = 12
+    return f"{year:04d}-{month:02d}"
+
+
+def _observacao_audit_conta_corrente(
+    launch: BankLaunchEnrichment,
+    result: object,
+) -> str:
+    if not _is_simples_nacional_result(launch, result):
+        return ""
+    competencia = _competencia_referencia_conta_corrente(launch, result)
+    suffix = f"; competencia_referencia={competencia}" if competencia else ""
+    return (
+        "SIMPLES NACIONAL referente ao mes anterior ao pagamento "
+        f"(competencia M-1){suffix}"
+    )
+
+
+def _is_simples_nacional_result(launch: BankLaunchEnrichment, result: object) -> bool:
+    if getattr(result, "conta_id", "") != "5.01.001":
+        return False
+    text = " ".join(
+        (
+            normalize_match_text(launch.description),
+            normalize_match_text(launch.counterparty_name),
+        )
+    )
+    return "SIMPLES" in text
 
 
 def _tipo_movimento(launch: BankLaunchEnrichment) -> str:

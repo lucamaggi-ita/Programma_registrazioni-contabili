@@ -247,6 +247,130 @@ def test_normalization_removes_accents_case_and_punctuation():
     )
 
 
+def test_conta_corrente_recurring_rules_match_direct_fields(tmp_path):
+    rules_path = tmp_path / "regras.yaml"
+    rules_path.write_text(
+        """regras:
+- regra_id: REGRA_COELBA
+  conta_id: "4.01.011"
+  conta_nome: Energia Eletrica
+  dre_linha_id: "06.02"
+  entra_dre: true
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum: []
+    referencia_empresa_contem_algum:
+    - COELBA
+- regra_id: REGRA_EMBASA
+  conta_id: "4.01.012"
+  conta_nome: Agua e Esgoto
+  dre_linha_id: "06.02"
+  entra_dre: true
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum: []
+    referencia_empresa_contem_algum:
+    - EMBASA
+- regra_id: REGRA_VIVO
+  conta_id: "4.01.014"
+  conta_nome: Internet e Telefonia
+  dre_linha_id: "06.02"
+  entra_dre: true
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum: []
+    referencia_empresa_contem_algum:
+    - VIVO
+- regra_id: REGRA_DEBITO_SEGURO
+  conta_id: "7.01.001"
+  conta_nome: Tarifas Bancarias
+  dre_linha_id: "09.01"
+  entra_dre: true
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum: []
+    referencia_empresa_contem_algum:
+    - DEBITO SEGURO
+- regra_id: REGRA_SIMPLES_NACIONAL
+  conta_id: "5.01.001"
+  conta_nome: Simples Nacional - DAS Mensal - Anexo I
+  dre_linha_id: "02.01"
+  entra_dre: true
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - SIMPLES NACIONAL
+    referencia_empresa_contem_algum: []
+exclusoes:
+- regra_id: EXCLUSAO_SISPAG_SALARIOS
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum: []
+    referencia_empresa_contem_algum:
+    - SISPAG SALARIOS
+    tipo_pagamento_contem_algum:
+    - SISPAG_AGREGADO
+""",
+        encoding="utf-8",
+    )
+    rules = load_payment_rules(rules_path)
+    exclusions = load_payment_exclusion_rules(rules_path)
+
+    cases = [
+        ("DA COELBA 9999999999", "", "SAIDA_PAGAMENTO", "4.01.011"),
+        ("EMBASA 987654321", "", "SAIDA_PAGAMENTO", "4.01.012"),
+        ("DA VIVO-BA 20304230426", "", "SAIDA_PAGAMENTO", "4.01.014"),
+        ("DEBITO SEGURO 12/57", "", "SAIDA_PAGAMENTO", "7.01.001"),
+        (
+            "PAGAMENTOS TRIB COD BARRAS",
+            "SIMPLES NACIONAL",
+            "SAIDA_PAGAMENTO",
+            "5.01.001",
+        ),
+    ]
+    for lancamento, razao_social, tipo_movimento, conta_id in cases:
+        result = classify_payment_receipt(
+            {
+                "beneficiary_name": razao_social,
+                "reference_id": lancamento,
+                "payment_type": tipo_movimento,
+                "description_receipt": lancamento,
+            },
+            rules,
+            exclusions,
+        )
+
+        assert result.status_classificacao == STATUS_CLASSIFICADO
+        assert result.conta_id == conta_id
+
+    generic_simples = classify_payment_receipt(
+        {
+            "beneficiary_name": "",
+            "reference_id": "PAGAMENTOS TRIB COD BARRAS",
+            "payment_type": "SAIDA_PAGAMENTO",
+            "description_receipt": "PAGAMENTOS TRIB COD BARRAS",
+        },
+        rules,
+        exclusions,
+    )
+    sispag = classify_payment_receipt(
+        {
+            "beneficiary_name": "",
+            "reference_id": "SISPAG SALARIOS",
+            "payment_type": "SISPAG_AGREGADO",
+            "description_receipt": "SISPAG SALARIOS",
+        },
+        rules,
+        exclusions,
+    )
+
+    assert generic_simples.status_classificacao == STATUS_SEM_REGRA
+    assert sispag.status_classificacao == STATUS_EXCLUIDO
+    assert sispag.acao == "ESCLUDERE"
+    assert sispag.entra_dre is False
+
+
 def test_rule_with_only_origin_metadata_and_empty_match_is_rejected(tmp_path):
     rules_path = tmp_path / "regras.yaml"
     rules_path.write_text(

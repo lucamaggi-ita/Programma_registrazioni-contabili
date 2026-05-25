@@ -239,6 +239,164 @@ def test_importa_revisao_banca_reuses_yaml_rules_before_boleto_fallback(
     assert manifest["conta_corrente_revisao_sem_regra"] == 1
 
 
+def test_conta_corrente_specific_exclusion_preempts_boleto_fallback(
+    monkeypatch,
+    tmp_path,
+):
+    bank_raw_dir, cnpj_dir = _make_bank_raw_month(tmp_path)
+    (cnpj_dir / "ConsultaPagamentos.xls").write_bytes(b"placeholder")
+    (cnpj_dir / "Extrato_Lancamentos.xlsx").write_bytes(b"placeholder")
+    output_dir = tmp_path / "bank_raw" / "_decisoes_regras"
+    _patch_bank_sources(
+        monkeypatch,
+        [],
+        [
+            _launch(
+                "BOLETO PAGO SINTHOTESB",
+                "SINTHOTESB SIND TRAB BARES HOT",
+                raw_hash="launch-sinthotesb",
+            ),
+            _launch(
+                "BOLETO PAGO FORNECEDOR SEM REGRA",
+                "FORNECEDOR SEM REGRA",
+                raw_hash="launch-boleto",
+            ),
+        ],
+    )
+
+    result = importar_revisao_banca(
+        **{
+            **_import_kwargs(tmp_path, bank_raw_dir, output_dir),
+            "regras_path": _write_rules_with_sinthotesb_and_boleto_fallback(tmp_path),
+        }
+    )
+
+    assert result.conta_corrente_regras_yaml_aplicadas == 1
+    assert result.conta_corrente_boleto_pago_fallback == 1
+    assert result.conta_corrente_revisao_sem_regra == 0
+    assert result.conta_corrente_candidatos == 0
+
+    tecnico = _data_rows(output_dir / CONTA_CORRENTE_XLSX, "tecnico_conta_corrente")
+    by_hash = {row["HASH_ORIGEM"]: row for row in tecnico}
+    assert by_hash["launch-sinthotesb"]["REGRA_EXISTENTE"] == (
+        "EXCLUSAO_ESCLUDERE_SINTHOTESB_SIND_TRAB_BARES_HOT"
+    )
+    assert by_hash["launch-sinthotesb"]["MOTIVO_REVISAO"] == (
+        "EXCLUSAO_OPERADOR_REGRA"
+    )
+    assert "EXCLUSAO_XML_CONTA_CORRENTE_BOLETO_PAGO" not in (
+        by_hash["launch-sinthotesb"]["REGRA_EXISTENTE"] or ""
+    )
+    assert by_hash["launch-boleto"]["REGRA_EXISTENTE"] == (
+        "EXCLUSAO_XML_CONTA_CORRENTE_BOLETO_PAGO"
+    )
+
+
+def test_importa_revisao_banca_classifies_recurring_conta_corrente_directly(
+    monkeypatch,
+    tmp_path,
+):
+    bank_raw_dir, cnpj_dir = _make_bank_raw_month(tmp_path)
+    (cnpj_dir / "ConsultaPagamentos.xls").write_bytes(b"placeholder")
+    (cnpj_dir / "Extrato_Lancamentos.xlsx").write_bytes(b"placeholder")
+    output_dir = tmp_path / "bank_raw" / "_decisoes_regras"
+    _patch_bank_sources(
+        monkeypatch,
+        [],
+        [
+            _launch(
+                "DA COELBA 7014914336",
+                "",
+                raw_hash="launch-coelba",
+                amount="-9164.48",
+                transaction_date=date(2026, 4, 23),
+            ),
+            _launch(
+                "EMBASA 142698660",
+                "",
+                raw_hash="launch-embasa",
+                amount="-351.23",
+                transaction_date=date(2026, 4, 13),
+            ),
+            _launch(
+                "DA VIVO-BA 20304230426",
+                "",
+                raw_hash="launch-vivo",
+                amount="-380.97",
+                transaction_date=date(2026, 4, 6),
+            ),
+            _launch(
+                "DEBITO SEGURO 06/57",
+                "",
+                raw_hash="launch-debito-seguro",
+                amount="-138.04",
+                transaction_date=date(2026, 4, 20),
+            ),
+            _launch(
+                "PAGAMENTOS TRIB COD BARRAS",
+                "SIMPLES NACIONAL",
+                raw_hash="launch-simples",
+                amount="-1027.55",
+                transaction_date=date(2026, 4, 17),
+            ),
+            _launch(
+                "PAGAMENTOS TRIB COD BARRAS",
+                "",
+                raw_hash="launch-tributo-generico",
+                amount="-10.00",
+                transaction_date=date(2026, 4, 18),
+            ),
+            _launch(
+                "SISPAG SALARIOS",
+                "",
+                raw_hash="launch-sispag",
+                amount="-29641.68",
+                transaction_date=date(2026, 4, 6),
+            ),
+        ],
+    )
+
+    result = importar_revisao_banca(
+        **{
+            **_import_kwargs(tmp_path, bank_raw_dir, output_dir),
+            "regras_path": _write_rules_with_recurring_conta_corrente(tmp_path),
+        }
+    )
+
+    assert result.conta_corrente_regras_yaml_aplicadas == 6
+    assert result.conta_corrente_revisao_sem_regra == 1
+    assert result.conta_corrente_candidatos == 1
+
+    rows = _data_rows(output_dir / CONTA_CORRENTE_XLSX, CONTA_CORRENTE_SHEET)
+    assert [row["LANCAMENTO"] for row in rows] == ["PAGAMENTOS TRIB COD BARRAS"]
+
+    tecnico = _data_rows(output_dir / CONTA_CORRENTE_XLSX, "tecnico_conta_corrente")
+    by_hash = {row["HASH_ORIGEM"]: row for row in tecnico}
+    assert by_hash["launch-coelba"]["REGRA_EXISTENTE"] == (
+        "REGRA_4_01_011_CONTA_CORRENTE_COELBA"
+    )
+    assert by_hash["launch-embasa"]["REGRA_EXISTENTE"] == (
+        "REGRA_4_01_012_CONTA_CORRENTE_EMBASA"
+    )
+    assert by_hash["launch-vivo"]["REGRA_EXISTENTE"] == (
+        "REGRA_4_01_014_CONTA_CORRENTE_VIVO"
+    )
+    assert by_hash["launch-debito-seguro"]["REGRA_EXISTENTE"] == (
+        "REGRA_7_01_001_CONTA_CORRENTE_DEBITO_SEGURO"
+    )
+    assert by_hash["launch-simples"]["REGRA_EXISTENTE"] == (
+        "REGRA_5_01_001_CONTA_CORRENTE_SIMPLES_NACIONAL"
+    )
+    assert by_hash["launch-simples"]["COMPETENCIA_REFERENCIA"] == "2026-03"
+    assert "competencia M-1" in by_hash["launch-simples"]["OBSERVACAO_AUDIT"]
+    assert by_hash["launch-sispag"]["REGRA_EXISTENTE"] == (
+        "EXCLUSAO_ESCLUDERE_CONTA_CORRENTE_SISPAG_SALARIOS"
+    )
+    assert by_hash["launch-sispag"]["MOTIVO_REVISAO"] == "EXCLUSAO_OPERADOR_REGRA"
+    assert by_hash["launch-tributo-generico"]["REGRA_EXISTENTE"] in (None, "")
+    assert by_hash["launch-tributo-generico"]["MOTIVO_REVISAO"] == "SEM_REGRA"
+
+
 def test_importa_revisao_banca_filters_total_receipt_from_decision_sheets(
     monkeypatch,
     tmp_path,
@@ -1093,6 +1251,59 @@ def test_pix_enviado_e_santos_xml_exclusion_bridge_exact_match(
     )
 
 
+def test_pix_enviado_rainha_do_fato_without_exact_receipt_stays_review(
+    monkeypatch,
+    tmp_path,
+):
+    """RAINHA DO FATO sem comprovante exato nao recebe XML generico."""
+    bank_raw_dir, cnpj_dir = _make_bank_raw_month(tmp_path)
+    (cnpj_dir / "ConsultaPagamentos.xls").write_bytes(b"placeholder")
+    (cnpj_dir / "Extrato_Lancamentos.xlsx").write_bytes(b"placeholder")
+    output_dir = tmp_path / "bank_raw" / "_decisoes_regras"
+    _patch_bank_sources(
+        monkeypatch,
+        [
+            _receipt(
+                "E SANTOS DE OLIVEIRA - CARNES",
+                raw_hash="receipt-e-santos-date-off",
+                amount="600.00",
+                payment_date=date(2026, 4, 19),
+                document="",
+            )
+        ],
+        [
+            _launch(
+                "PIX ENVIADO",
+                "RAINHA DO FATO",
+                raw_hash="launch-rainha-date-off",
+                amount="-600.00",
+                transaction_date=date(2026, 4, 20),
+                document="",
+            )
+        ],
+    )
+
+    result = importar_revisao_banca(
+        **{
+            **_import_kwargs(tmp_path, bank_raw_dir, output_dir),
+            "regras_path": _write_rules_with_xml_exclusion(
+                tmp_path,
+                "E SANTOS DE OLIVEIRA CARNES",
+            ),
+        }
+    )
+
+    assert result.conta_corrente_pix_comprovante_exato == 0
+    assert result.conta_corrente_pix_yaml_via_comprovante == 0
+    assert result.conta_corrente_pix_revisao_sem_comprovante == 1
+    assert result.conta_corrente_candidatos == 1
+
+    row = _row_by_index(output_dir / CONTA_CORRENTE_XLSX, CONTA_CORRENTE_SHEET, row=2)
+    assert row["LANCAMENTO"] == "PIX ENVIADO"
+    assert row["RAZAO_SOCIAL"] == "RAINHA DO FATO"
+    assert row["POSSIVEL_COMPROVANTE_RELACIONADO"] == "NAO"
+
+
 def test_pix_enviado_julio_cesar_positive_rule_bridge_exact_match(
     monkeypatch,
     tmp_path,
@@ -1391,6 +1602,102 @@ exclusoes:
     return path
 
 
+def _write_rules_with_sinthotesb_and_boleto_fallback(tmp_path: Path) -> Path:
+    path = tmp_path / "regras.yaml"
+    path.write_text(
+        """regras: []
+exclusoes:
+- regra_id: EXCLUSAO_ESCLUDERE_SINTHOTESB_SIND_TRAB_BARES_HOT
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - SINTHOTESB SIND TRAB BARES HOT
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_CONTA_CORRENTE_BOLETO_PAGO
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum: []
+    referencia_empresa_contem_algum: []
+    descricao_comprovante_contem_algum:
+    - BOLETO PAGO
+""",
+        encoding="utf-8",
+    )
+    return path
+
+
+def _write_rules_with_recurring_conta_corrente(tmp_path: Path) -> Path:
+    path = tmp_path / "regras.yaml"
+    path.write_text(
+        """regras:
+- regra_id: REGRA_4_01_011_CONTA_CORRENTE_COELBA
+  conta_id: "4.01.011"
+  conta_nome: Energia Eletrica
+  dre_linha_id: "06.02"
+  entra_dre: true
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum: []
+    referencia_empresa_contem_algum:
+    - COELBA
+- regra_id: REGRA_4_01_012_CONTA_CORRENTE_EMBASA
+  conta_id: "4.01.012"
+  conta_nome: Agua e Esgoto
+  dre_linha_id: "06.02"
+  entra_dre: true
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum: []
+    referencia_empresa_contem_algum:
+    - EMBASA
+- regra_id: REGRA_4_01_014_CONTA_CORRENTE_VIVO
+  conta_id: "4.01.014"
+  conta_nome: Internet e Telefonia
+  dre_linha_id: "06.02"
+  entra_dre: true
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum: []
+    referencia_empresa_contem_algum:
+    - VIVO
+- regra_id: REGRA_7_01_001_CONTA_CORRENTE_DEBITO_SEGURO
+  conta_id: "7.01.001"
+  conta_nome: Tarifas Bancarias
+  dre_linha_id: "09.01"
+  entra_dre: true
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum: []
+    referencia_empresa_contem_algum:
+    - DEBITO SEGURO
+- regra_id: REGRA_5_01_001_CONTA_CORRENTE_SIMPLES_NACIONAL
+  conta_id: "5.01.001"
+  conta_nome: Simples Nacional - DAS Mensal - Anexo I
+  dre_linha_id: "02.01"
+  entra_dre: true
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - SIMPLES NACIONAL
+    referencia_empresa_contem_algum: []
+exclusoes:
+- regra_id: EXCLUSAO_ESCLUDERE_CONTA_CORRENTE_SISPAG_SALARIOS
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum: []
+    referencia_empresa_contem_algum:
+    - SISPAG SALARIOS
+    tipo_pagamento_contem_algum:
+    - SISPAG_AGREGADO
+""",
+        encoding="utf-8",
+    )
+    return path
+
+
 def _write_rules_with_xml_exclusion(tmp_path: Path, beneficiary: str) -> Path:
     path = tmp_path / "regras.yaml"
     path.write_text(
@@ -1434,10 +1741,16 @@ def _write_plan(tmp_path: Path) -> Path:
     path = tmp_path / "plano.yaml"
     path.write_text(
         """contas:
+- id: "4.01.011"
+  nome: Energia Eletrica
 - id: "4.01.012"
   nome: Agua e Esgoto
 - id: "4.01.014"
   nome: Internet e Telefonia
+- id: "5.01.001"
+  nome: Simples Nacional - DAS Mensal - Anexo I
+- id: "7.01.001"
+  nome: Tarifas Bancarias
 - id: "8.02.003"
   nome: Manutencao de Geladeiras e Freezers
 """,
@@ -1599,11 +1912,20 @@ def _write_mapping(tmp_path: Path) -> Path:
     path = tmp_path / "mapeamento.yaml"
     path.write_text(
         """mapeamento:
+  "4.01.011":
+    dre_linha_id: "06.02"
+    entra_dre: true
   "4.01.012":
     dre_linha_id: "06.02"
     entra_dre: true
   "4.01.014":
     dre_linha_id: "06.02"
+    entra_dre: true
+  "5.01.001":
+    dre_linha_id: "02.01"
+    entra_dre: true
+  "7.01.001":
+    dre_linha_id: "09.01"
     entra_dre: true
   "8.02.003":
     dre_linha_id: "10.01"
