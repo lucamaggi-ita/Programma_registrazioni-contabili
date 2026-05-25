@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+from datetime import date
 from pathlib import Path
 
 from fantozzi.allocation import allocate_nfe_to_lancamentos
@@ -27,6 +28,10 @@ from fantozzi.banking.payment_rules import (
     classify_payment_receipts_file,
     payment_rules_audit_console_lines,
     payment_rules_audit_report_text,
+)
+from fantozzi.banking.lancamentos_banca import (
+    LancamentosBancaError,
+    gerar_lancamentos_banca_aprovados,
 )
 from fantozzi.banking.revisao_banca import (
     ImportaRevisaoBancaError,
@@ -349,6 +354,45 @@ def build_parser() -> argparse.ArgumentParser:
         help="Arquivo YAML de mapeamento das contas para linhas DRE.",
     )
     importar_revisao.set_defaults(func=importar_revisao_banca_command)
+
+    gerar_lancamentos_banca = subparsers.add_parser(
+        "gerar-lancamentos-banca-aprovados",
+        help="Converte decisoes bancarias APROVADO em Excel de lancamentos.",
+        description=(
+            "Le os Excel decisorios de comprovantes e conta corrente, inclui "
+            "somente linhas APROVADO/CLASSIFICAR seguras no periodo informado "
+            "e gera um .xlsx compativel com Lancamentos."
+        ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    gerar_lancamentos_banca.add_argument(
+        "--comprovantes-xlsx",
+        default=str(DEFAULT_BANK_DECISOES_DIR / "Analisi_regole_registrazioni_banca_comprovanti.xlsx"),
+        help="Excel decisorio dos comprovantes.",
+    )
+    gerar_lancamentos_banca.add_argument(
+        "--conta-corrente-xlsx",
+        default=str(DEFAULT_BANK_DECISOES_DIR / "Analisi_regole_registrazioni_banca_conto_corrente.xlsx"),
+        help="Excel decisorio da conta corrente.",
+    )
+    gerar_lancamentos_banca.add_argument(
+        "--saida",
+        required=True,
+        help="Excel de lancamentos banca aprovados a gerar.",
+    )
+    gerar_lancamentos_banca.add_argument(
+        "--periodo-ini",
+        required=True,
+        help="Data inicial inclusiva no formato YYYY-MM-DD.",
+    )
+    gerar_lancamentos_banca.add_argument(
+        "--periodo-fim",
+        required=True,
+        help="Data final inclusiva no formato YYYY-MM-DD.",
+    )
+    gerar_lancamentos_banca.set_defaults(
+        func=gerar_lancamentos_banca_aprovados_command
+    )
 
     importar_revisao_xml_parser = subparsers.add_parser(
         "importar-revisao-xml",
@@ -1536,6 +1580,28 @@ def importar_revisao_banca_command(args: argparse.Namespace) -> int:
 
     for line in revisao_banca_console_lines(result):
         print(line)
+    return 0
+
+
+def gerar_lancamentos_banca_aprovados_command(args: argparse.Namespace) -> int:
+    try:
+        periodo_ini = date.fromisoformat(args.periodo_ini)
+        periodo_fim = date.fromisoformat(args.periodo_fim)
+        output_path = gerar_lancamentos_banca_aprovados(
+            Path(args.comprovantes_xlsx),
+            Path(args.conta_corrente_xlsx),
+            Path(args.saida),
+            periodo_ini,
+            periodo_fim,
+        )
+    except (OSError, LancamentosBancaError, ValueError) as exc:
+        print(f"[ERRO] Nao foi possivel gerar lancamentos banca aprovados: {exc}")
+        return 1
+
+    print("[OK] Lancamentos banca aprovados gerados.")
+    print(f"Saida: {output_path}")
+    print(f"Rejeitados: {output_path.with_name('lancamentos_banca_rejeitados.csv')}")
+    print(f"Manifest: {output_path.with_name('manifest_lancamentos_banca.json')}")
     return 0
 
 
