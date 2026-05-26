@@ -624,6 +624,120 @@ def test_conta_corrente_csv_entrada_positiva_nao_entra(tmp_path):
     assert _lancamentos(output) == []
     rejeitado = _rejeitados(tmp_path)[0]
     assert rejeitado["motivo"] == "ACAO_ESCLUIDA"
+    manifest = json.loads((tmp_path / MANIFEST_NAME).read_text(encoding="utf-8"))
+    assert manifest["linhas_excluidas_escludere"] == 1
+    assert manifest["linhas_rejeitadas_status"] == 0
+
+
+def test_excel_aprovado_com_acao_vazia_vai_para_rejeitados(tmp_path):
+    comprovantes = _write_comprovantes(
+        tmp_path / "comprovantes.xlsx",
+        [_comprovante_row("APROVADO", "", "2026-02-05", 100, "ACAO VAZIA LTDA")],
+    )
+    conta_corrente = _write_conta_corrente(tmp_path / "conta.xlsx", [])
+
+    output = gerar_lancamentos_banca_aprovados(
+        comprovantes,
+        conta_corrente,
+        tmp_path / "out.xlsx",
+        date(2026, 2, 1),
+        date(2026, 2, 28),
+    )
+
+    assert _lancamentos(output) == []
+    rejeitado = _rejeitados(tmp_path)[0]
+    assert rejeitado["motivo"] == "ACAO_REGRA_VAZIA"
+
+
+def test_excel_distingue_dados_obrigatorios_ausentes(tmp_path):
+    rows = []
+    for field in ("DATA_PAGAMENTO", "VALOR", "BENEFICIARIO_FAVORECIDO", "CONTA_ID_APROVADA"):
+        row = _comprovante_row("APROVADO", "CLASSIFICAR", "2026-02-05", 100, f"{field} LTDA")
+        row[field] = ""
+        rows.append(row)
+    comprovantes = _write_comprovantes(tmp_path / "comprovantes.xlsx", rows)
+    conta_corrente = _write_conta_corrente(tmp_path / "conta.xlsx", [])
+
+    output = gerar_lancamentos_banca_aprovados(
+        comprovantes,
+        conta_corrente,
+        tmp_path / "out.xlsx",
+        date(2026, 2, 1),
+        date(2026, 2, 28),
+    )
+
+    assert _lancamentos(output) == []
+    motivos = [row["motivo"] for row in _rejeitados(tmp_path)]
+    assert motivos == ["SEM_DATA", "SEM_VALOR", "SEM_BENEFICIARIO", "SEM_CONTA_ID"]
+
+
+def test_conta_corrente_csv_sem_beneficiario_nao_entra(tmp_path):
+    conta_corrente_csv = _write_conta_corrente_csv(
+        tmp_path / "conta_corrente_classificados.csv",
+        [_csv_conta_corrente_row("", "", "2026-02-05", "-100.00", "4.01.011", "Energia")],
+    )
+    comprovantes_xlsx, conta_corrente_xlsx = _empty_xlsx_pair(tmp_path)
+
+    output = gerar_lancamentos_banca_aprovados(
+        comprovantes_xlsx,
+        conta_corrente_xlsx,
+        tmp_path / "out.xlsx",
+        date(2026, 2, 1),
+        date(2026, 2, 28),
+        conta_corrente_csv=conta_corrente_csv,
+    )
+
+    assert _lancamentos(output) == []
+    rejeitado = _rejeitados(tmp_path)[0]
+    assert rejeitado["motivo"] == "SEM_BENEFICIARIO"
+    assert rejeitado["beneficiario"] == ""
+
+
+def test_comprovantes_banca_prevalece_sobre_conta_corrente_mesma_chave(tmp_path):
+    comprovantes = _write_comprovantes(
+        tmp_path / "comprovantes.xlsx",
+        [_comprovante_row("APROVADO", "CLASSIFICAR", "2026-02-05", 100, "DUPLICADO LTDA")],
+    )
+    conta_corrente = _write_conta_corrente(
+        tmp_path / "conta.xlsx",
+        [_conta_row("APROVADO", "CLASSIFICAR", "2026-02-05", -100, "PIX", "DUPLICADO LTDA")],
+    )
+
+    output = gerar_lancamentos_banca_aprovados(
+        comprovantes,
+        conta_corrente,
+        tmp_path / "out.xlsx",
+        date(2026, 2, 1),
+        date(2026, 2, 28),
+    )
+
+    rows = _lancamentos(output)
+    assert len(rows) == 1
+    assert rows[0]["origem"] == "COMPROVANTES_BANCA"
+    rejeitado = next(row for row in _rejeitados(tmp_path) if row["motivo"] == "DUPLICADO_FONTE_PRIORITARIA")
+    assert rejeitado["fonte"] == "CONTA_CORRENTE"
+    assert rejeitado["fonte_prioritaria"] == "COMPROVANTES_BANCA"
+
+
+def test_csv_somente_header_gera_zero_linhas(tmp_path):
+    comprovantes_csv = _write_comprovantes_csv(tmp_path / "comprovantes_classificados.csv", [])
+    conta_corrente_csv = _write_conta_corrente_csv(tmp_path / "conta_corrente_classificados.csv", [])
+    comprovantes_xlsx, conta_corrente_xlsx = _empty_xlsx_pair(tmp_path)
+
+    output = gerar_lancamentos_banca_aprovados(
+        comprovantes_xlsx,
+        conta_corrente_xlsx,
+        tmp_path / "out.xlsx",
+        date(2026, 2, 1),
+        date(2026, 2, 28),
+        comprovantes_csv=comprovantes_csv,
+        conta_corrente_csv=conta_corrente_csv,
+    )
+
+    assert _lancamentos(output) == []
+    manifest = json.loads((tmp_path / MANIFEST_NAME).read_text(encoding="utf-8"))
+    assert manifest["linhas_lidas_comprovantes_csv"] == 0
+    assert manifest["linhas_lidas_conta_corrente_csv"] == 0
 
 
 def _write_comprovantes_csv(path: Path, rows: list[dict[str, object]]) -> Path:

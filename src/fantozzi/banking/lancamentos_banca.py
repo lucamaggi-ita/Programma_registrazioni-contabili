@@ -355,8 +355,10 @@ def _read_conta_corrente_csv(
                     beneficiary_header="razao_social",
                 )
                 continue
+            # O bridge DRE recebe somente saidas economicas; entradas PIX no CSV
+            # de conta corrente ficam fora para evitar lancamento invertido.
             if valor_assinado > 0:
-                manifest["linhas_rejeitadas_status"] = int(manifest["linhas_rejeitadas_status"]) + 1
+                manifest["linhas_excluidas_escludere"] = int(manifest["linhas_excluidas_escludere"]) + 1
                 _reject_csv(
                     rejeitados,
                     manifest,
@@ -369,6 +371,20 @@ def _read_conta_corrente_csv(
                 )
                 continue
 
+            fornecedor = _text(row.get("razao_social")) or _text(row.get("lancamento"))
+            if not fornecedor:
+                manifest["linhas_rejeitadas_dados_obrigatorios"] = int(manifest["linhas_rejeitadas_dados_obrigatorios"]) + 1
+                _reject_csv(
+                    rejeitados,
+                    manifest,
+                    fonte="CONTA_CORRENTE_CSV",
+                    row_number=row_number,
+                    row=row,
+                    motivo="SEM_BENEFICIARIO",
+                    date_header="data_movimento",
+                    beneficiary_header="razao_social",
+                )
+                continue
             if not _text(row.get("conta_id")) or not _text(row.get("conta_nome")):
                 manifest["linhas_rejeitadas_dados_obrigatorios"] = int(manifest["linhas_rejeitadas_dados_obrigatorios"]) + 1
                 _reject_csv(
@@ -396,7 +412,6 @@ def _read_conta_corrente_csv(
                 )
                 continue
 
-            fornecedor = _text(row.get("razao_social")) or _text(row.get("lancamento"))
             chave_origem = _chave_origem(
                 "CONTA_CORRENTE_CSV",
                 row_number,
@@ -601,10 +616,7 @@ def _deduplicate_lancamentos(
 ) -> list[Lancamento]:
     accepted: list[Lancamento] = []
     by_key: dict[_DedupKey, Lancamento] = {}
-    ordered = sorted(
-        enumerate(lancamentos),
-        key=lambda item: (_source_priority(item[1].origem), item[0]),
-    )
+    ordered = sorted(enumerate(lancamentos), key=_dedup_sort_key)
 
     for _, lancamento in ordered:
         key = _dedup_key(lancamento)
@@ -664,13 +676,21 @@ def _dedup_key(lancamento: Lancamento) -> _DedupKey:
     )
 
 
+SOURCE_PRIORITY: dict[str, int] = {
+    "COMPROVANTES_CSV": 10,
+    "COMPROVANTES_BANCA": 20,
+    "CONTA_CORRENTE": 30,
+    "CONTA_CORRENTE_CSV": 40,
+}
+
+
+def _dedup_sort_key(item: tuple[int, Lancamento]) -> tuple[int, int]:
+    original_index, lancamento = item
+    return (SOURCE_PRIORITY.get(lancamento.origem, 99), original_index)
+
+
 def _source_priority(origem: str) -> int:
-    return {
-        "COMPROVANTES_CSV": 1,
-        "COMPROVANTES_BANCA": 2,
-        "CONTA_CORRENTE": 2,
-        "CONTA_CORRENTE_CSV": 3,
-    }.get(origem, 99)
+    return SOURCE_PRIORITY.get(origem, 99)
 
 
 def _source_manifest_key(fonte: str) -> str:
@@ -714,6 +734,8 @@ def _decision(
 
     if status != "APROVADO":
         return f"STATUS_{status or 'VAZIO'}"
+    if not acao:
+        return "ACAO_REGRA_VAZIA"
     if acao == "XML":
         return "ACAO_XML"
     if acao == "ESCLUDERE":
@@ -727,18 +749,25 @@ def _decision(
     if _duplication_risk(row.get("RISCO_DUPLICIDADE_XML")):
         return "RISCO_DUPLICIDADE_XML"
 
+    if not _text(row.get(date_header)):
+        return "SEM_DATA"
     try:
         data_documento = _parse_date(row.get(date_header))
+    except LancamentosBancaError:
+        return "SEM_DATA"
+    if not _text(row.get(value_header)):
+        return "SEM_VALOR"
+    try:
         valor = _parse_decimal(row.get(value_header))
     except LancamentosBancaError:
-        return "DADOS_OBRIGATORIOS_AUSENTES"
+        return "SEM_VALOR"
     if rejeitar_valor_positivo and valor > 0:
         return "ACAO_ESCLUIDA"
 
     if not _text(row.get(beneficiary_header)):
-        return "DADOS_OBRIGATORIOS_AUSENTES"
+        return "SEM_BENEFICIARIO"
     if not _text(row.get("CONTA_ID_APROVADA")) or not _text(row.get("CONTA_NOME_APROVADA")):
-        return "DADOS_OBRIGATORIOS_AUSENTES"
+        return "SEM_CONTA_ID"
     if data_documento < periodo_ini or data_documento > periodo_fim:
         return "FORA_PERIODO"
     return ""
@@ -825,9 +854,14 @@ def _reject(
         "ACAO_XML": "linhas_excluidas_xml",
         "ACAO_ESCLUDERE": "linhas_excluidas_escludere",
         "ACAO_SISPAG": "linhas_excluidas_sispag",
+        "ACAO_ESCLUIDA": "linhas_excluidas_escludere",
         "RISCO_DUPLICIDADE_XML": "linhas_rejeitadas_risco_duplicidade",
         "FORA_PERIODO": "linhas_fora_periodo",
         "DADOS_OBRIGATORIOS_AUSENTES": "linhas_rejeitadas_dados_obrigatorios",
+        "SEM_DATA": "linhas_rejeitadas_dados_obrigatorios",
+        "SEM_VALOR": "linhas_rejeitadas_dados_obrigatorios",
+        "SEM_BENEFICIARIO": "linhas_rejeitadas_dados_obrigatorios",
+        "SEM_CONTA_ID": "linhas_rejeitadas_dados_obrigatorios",
     }.get(motivo, "linhas_rejeitadas_status")
     manifest[counter] = int(manifest[counter]) + 1
     _bump_source_rejected(manifest, fonte)
@@ -923,6 +957,8 @@ def _bump_source_rejected(manifest: dict[str, object], fonte: str) -> None:
 def _canonical_rejection_motivo(motivo: str) -> str:
     if motivo.startswith("STATUS_"):
         return "STATUS_NAO_APROVADO"
+    if motivo == "ACAO_REGRA_VAZIA":
+        return motivo
     if motivo.startswith("ACAO_") or motivo == "RISCO_DUPLICIDADE_XML":
         return "ACAO_ESCLUIDA"
     if motivo == "DADOS_OBRIGATORIOS_AUSENTES":

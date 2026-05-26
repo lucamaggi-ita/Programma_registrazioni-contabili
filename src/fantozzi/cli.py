@@ -31,6 +31,8 @@ from fantozzi.banking.payment_rules import (
 )
 from fantozzi.banking.lancamentos_banca import (
     LancamentosBancaError,
+    MANIFEST_NAME,
+    REJEITADOS_CSV_NAME,
     gerar_lancamentos_banca_aprovados,
 )
 from fantozzi.banking.revisao_banca import (
@@ -1632,8 +1634,8 @@ def gerar_lancamentos_banca_aprovados_command(args: argparse.Namespace) -> int:
 
     print("[OK] Lancamentos banca aprovados gerados.")
     print(f"Saida: {output_path}")
-    print(f"Rejeitados: {output_path.with_name('lancamentos_banca_rejeitados.csv')}")
-    print(f"Manifest: {output_path.with_name('manifest_lancamentos_banca.json')}")
+    print(f"Rejeitados: {output_path.with_name(REJEITADOS_CSV_NAME)}")
+    print(f"Manifest: {output_path.with_name(MANIFEST_NAME)}")
     return 0
 
 
