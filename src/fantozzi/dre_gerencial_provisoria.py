@@ -17,6 +17,7 @@ from fantozzi.relatorios_gerenciais_ok import (
     _derive_identifier,
     _format_currency,
     _is_bonificacao_recebida_decidida,
+    _linha_bonificacao_recebida_ok,
     _lancamento_matches_special,
     _read_lancamentos,
     _read_operacoes_especiais,
@@ -118,7 +119,7 @@ def gerar_dre_gerencial_ok_provisoria(
     excluded_revisar: list[dict[str, object]] = []
     for row in all_rows:
         if _is_bonificacao_recebida_decidida(row):
-            base_ok.append(row)
+            base_ok.append(_linha_bonificacao_recebida_ok(row))
             continue
         if _status(row) == "OK" and not _lancamento_matches_special(row, special_keys):
             base_ok.append(row)

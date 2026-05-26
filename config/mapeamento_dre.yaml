@@ -78,6 +78,12 @@ linhas_dre:
   sinal: '-'
   ordem: 307
   calculada: false
+- id: '03.08'
+  nome: Bonificações Recebidas / Redução de CMV
+  grupo: Custos
+  sinal: +
+  ordem: 308
+  calculada: false
 - id: '04.01'
   nome: Lucro Bruto
   grupo: Lucro Bruto
@@ -295,7 +301,7 @@ mapeamento:
     dre_linha_id: '03.01'
     entra_dre: true
   2.05.003:
-    dre_linha_id: '03.01'
+    dre_linha_id: '03.08'
     entra_dre: true
   3.01.001:
     dre_linha_id: '05.01'

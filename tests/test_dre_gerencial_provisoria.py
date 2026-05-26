@@ -90,6 +90,10 @@ def test_inclui_bonificacao_decidida_e_exclui_comodato(tmp_path):
     assert result.lancamentos_revisar_excluidos == 1
     assert result.operacoes_especiais_excluidas == 2
     assert {row["conta_id"] for row in base_rows} == {"2.01.004", "2.05.003"}
+    bonif_row = next(row for row in base_rows if row["conta_id"] == "2.05.003")
+    assert bonif_row["status_revisao"] == "OK"
+    assert bonif_row["linha_dre"] == "Bonificacoes Recebidas / Reducao de CMV"
+    assert bonif_row["valor"] == Decimal("10.00")
     assert all(row["conta_id"] != "13.01.001" for row in base_rows)
 
 
@@ -172,10 +176,16 @@ linhas_dre:
     sinal: "-"
     ordem: 302
     calculada: false
+  - id: "03.08"
+    nome: "Bonificacoes Recebidas / Reducao de CMV"
+    grupo: "Custos"
+    sinal: "+"
+    ordem: 308
+    calculada: false
 mapeamento:
   "1.01.001": { dre_linha_id: "01.01", entra_dre: true }
   "2.01.004": { dre_linha_id: "03.02", entra_dre: true }
-  "2.05.003": { dre_linha_id: "03.02", entra_dre: true }
+  "2.05.003": { dre_linha_id: "03.08", entra_dre: true }
 """,
         encoding="utf-8",
     )

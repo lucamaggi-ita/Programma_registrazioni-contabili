@@ -15,7 +15,10 @@ from fantozzi.operation_classifier import (
     OperacaoEspecialAuditItem,
     auditar_operacoes_especiais,
 )
-from fantozzi.relatorios_gerenciais_ok import _is_bonificacao_recebida_decidida
+from fantozzi.relatorios_gerenciais_ok import (
+    _is_bonificacao_recebida_decidida,
+    _linha_bonificacao_recebida_ok,
+)
 
 
 LANCAMENTOS_OK_SHEET = "Lancamentos_OK"
@@ -133,6 +136,8 @@ def gerar_pre_livro_diario_teste(
             is_bonificacao_decidida = _is_bonificacao_recebida_decidida(row)
             enriched = {SOURCE_HEADER: str(excel_path), **row}
             if status == "OK" or is_bonificacao_decidida:
+                if is_bonificacao_decidida:
+                    enriched = _linha_bonificacao_recebida_ok(enriched)
                 lancamentos_ok.append(enriched)
             else:
                 lancamentos_revisar.append(enriched)

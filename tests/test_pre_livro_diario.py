@@ -144,7 +144,8 @@ def test_bonificacao_decidida_entra_em_ok_e_comodato_permanece_revisar(tmp_path)
     bonif_resumo = next(row for row in resumo_rows if row["conta_id"] == "2.05.003")
     assert result.lancamentos_ok == 2
     assert result.lancamentos_revisar == 1
-    assert any(row["conta_id"] == "2.05.003" for row in ok_rows)
+    bonif_row = next(row for row in ok_rows if row["conta_id"] == "2.05.003")
+    assert bonif_row["status_revisao"] == "OK"
     assert all(row["tipo_operacao_especial"] != "COMODATO" for row in ok_rows)
     assert [row["tipo_operacao_especial"] for row in revisar_rows] == ["COMODATO"]
     assert bonif_resumo["qtd_lancamentos_ok"] == 1

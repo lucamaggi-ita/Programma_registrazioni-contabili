@@ -131,7 +131,7 @@ def gerar_relatorios_gerenciais_ok_provisorios(
     for row in all_lancamentos:
         status = _text(row.get("status_revisao")).upper()
         if _is_bonificacao_recebida_decidida(row):
-            included_ok.append(row)
+            included_ok.append(_linha_bonificacao_recebida_ok(row))
             continue
         if status == "OK" and _lancamento_matches_special(row, special_keys):
             excluded_special_ok.append(row)
@@ -407,6 +407,12 @@ def _is_bonificacao_recebida_decidida(row: dict[str, object]) -> bool:
         and _text(row.get("tratamento_operacao_especial")).upper()
         == TRATAMENTO_REDUCAO_CUSTO
     )
+
+
+def _linha_bonificacao_recebida_ok(row: dict[str, object]) -> dict[str, object]:
+    normalized = dict(row)
+    normalized["status_revisao"] = "OK"
+    return normalized
 
 
 def _write_resumo_geral(

@@ -121,6 +121,7 @@ def test_inclui_bonificacao_decidida_mesmo_em_revisao(tmp_path):
     assert result.lancamentos_ok_incluidos == 1
     assert result.lancamentos_revisar_excluidos == 0
     assert ok_rows[0]["conta_id"] == "2.05.003"
+    assert ok_rows[0]["status_revisao"] == "OK"
     assert revisar_rows == []
     assert operacoes[0]["tipo_operacao_especial"] == "BONIFICACAO_RECEBIDA"
     assert operacoes[0]["lancamentos_ok_excluidos"] == 0
