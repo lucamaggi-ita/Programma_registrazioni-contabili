@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import json
 import re
 from dataclasses import dataclass
@@ -35,6 +36,22 @@ COMPROVANTES_XLSX = "Analisi_regole_registrazioni_banca_comprovanti.xlsx"
 CONTA_CORRENTE_XLSX = "Analisi_regole_registrazioni_banca_conto_corrente.xlsx"
 MANIFEST_NAME = "manifest_importa_revisao_banca.json"
 MANIFEST_HISTORICO_TEMPLATE = "manifest_importa_revisao_banca_{periodo}.json"
+CONTA_CORRENTE_CLASSIFICADOS_CSV = "conta_corrente_classificados.csv"
+CONTA_CORRENTE_CLASSIFICADOS_HEADERS = [
+    "cnpj",
+    "mes",
+    "data_movimento",
+    "lancamento",
+    "razao_social",
+    "valor",
+    "conta_id",
+    "conta_nome",
+    "regra_id",
+    "chave_estavel",
+    "hash_origem",
+    "arquivo_origem",
+    "tipo_movimento",
+]
 
 COMPROVANTES_SHEET = "decisoes_comprovantes"
 CONTA_CORRENTE_SHEET = "decisoes_conta_corrente"
@@ -203,6 +220,8 @@ class ImportaRevisaoBancaResult:
     conta_corrente_pix_fallback_aplicado: int
     possiveis_comprovantes_relacionados: int
     alertas: tuple[str, ...]
+    csv_conta_corrente_classificados: Path
+    conta_corrente_classificados_linhas: int
 
 
 @dataclass
@@ -304,6 +323,7 @@ def importar_revisao_banca(
     comprovante_groups: dict[str, _Group] = {}
     conta_groups: dict[str, _Group] = {}
     conta_tecnico_regra_existente: list[dict[str, object]] = []
+    conta_classificados_rows: list[dict[str, object]] = []
     receipts_by_exact_context: dict[tuple[str, str, str, str], list[PaymentReceiptRaw]] = {}
     pix_receipt_hashes_usados: set[str] = set()
 
@@ -410,6 +430,25 @@ def importar_revisao_banca(
                             conta_corrente_pix_fallback_aplicado += 1
                     else:
                         conta_corrente_regras_yaml_aplicadas += 1
+                        if result.status_classificacao == STATUS_CLASSIFICADO and not (
+                            tipo_movimento == "PIX_TRANSFERENCIA_SAIDA"
+                            and bridge.status == "CLASSIFICADO"
+                        ):
+                            conta_classificados_rows.append({
+                                "cnpj": cnpj,
+                                "mes": periodo,
+                                "data_movimento": _date_text(launch.transaction_date),
+                                "lancamento": str(launch.description or ""),
+                                "razao_social": str(launch.counterparty_name or ""),
+                                "valor": _decimal_text(launch.amount),
+                                "conta_id": result.conta_id,
+                                "conta_nome": result.conta_nome,
+                                "regra_id": result.regra_id,
+                                "chave_estavel": key,
+                                "hash_origem": launch.raw_hash,
+                                "arquivo_origem": str(lancamentos_path),
+                                "tipo_movimento": tipo_movimento,
+                            })
                     conta_tecnico_regra_existente.append(tecnico_row)
                     continue
                 if result.status_classificacao == STATUS_SEM_REGRA:
@@ -471,6 +510,9 @@ def importar_revisao_banca(
         account_options=account_options,
     )
 
+    conta_corrente_csv_path = output_dir / CONTA_CORRENTE_CLASSIFICADOS_CSV
+    _write_conta_corrente_classificados_csv(conta_corrente_csv_path, conta_classificados_rows)
+
     result = ImportaRevisaoBancaResult(
         bank_raw_dir=bank_raw_dir,
         periodo=periodo,
@@ -500,6 +542,8 @@ def importar_revisao_banca(
         conta_corrente_pix_fallback_aplicado=conta_corrente_pix_fallback_aplicado,
         possiveis_comprovantes_relacionados=possiveis_comprovantes_relacionados,
         alertas=alertas,
+        csv_conta_corrente_classificados=conta_corrente_csv_path,
+        conta_corrente_classificados_linhas=len(conta_classificados_rows),
     )
     _write_manifest(result)
     return result
@@ -528,6 +572,8 @@ def console_lines(result: ImportaRevisaoBancaResult) -> list[str]:
         f"Novas chaves adicionadas: {result.novas_chaves_adicionadas}",
         f"Excel comprovantes: {result.excel_comprovantes}",
         f"Excel conta corrente: {result.excel_conta_corrente}",
+        f"CSV conta corrente classificados: {result.csv_conta_corrente_classificados}",
+        f"Linhas classificadas no CSV: {result.conta_corrente_classificados_linhas}",
         f"Manifest: {result.manifest_path}",
         f"Manifest historico: {result.manifest_historico_path}",
         f"Possiveis comprovantes relacionados no conta corrente: {result.possiveis_comprovantes_relacionados}",
@@ -1399,6 +1445,23 @@ def _load_account_options(path: Path) -> list[tuple[str, str, str]]:
     return options
 
 
+def _write_conta_corrente_classificados_csv(
+    path: Path,
+    rows: list[dict[str, object]],
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8-sig", newline="") as f:
+        writer = csv.DictWriter(
+            f,
+            fieldnames=CONTA_CORRENTE_CLASSIFICADOS_HEADERS,
+            delimiter=";",
+            extrasaction="ignore",
+        )
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(row)
+
+
 def _write_manifest(result: ImportaRevisaoBancaResult) -> None:
     payload = {
         "bank_raw_dir": str(result.bank_raw_dir),
@@ -1429,6 +1492,8 @@ def _write_manifest(result: ImportaRevisaoBancaResult) -> None:
         "possiveis_comprovantes_relacionados": result.possiveis_comprovantes_relacionados,
         "alertas": list(result.alertas),
         "yaml_modificado": False,
+        "csv_conta_corrente_classificados": str(result.csv_conta_corrente_classificados),
+        "conta_corrente_classificados_linhas": result.conta_corrente_classificados_linhas,
     }
     text = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
     result.manifest_path.write_text(text, encoding="utf-8")

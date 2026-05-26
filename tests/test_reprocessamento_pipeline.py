@@ -6,7 +6,10 @@ from datetime import date
 from pathlib import Path
 
 import pytest
+from openpyxl import Workbook
 
+from fantozzi.cli import build_parser
+from fantozzi.excel_writer import HEADERS, LANCAMENTOS_SHEET
 from fantozzi.reprocessamento_pipeline import (
     MODO_DEFINITIVO_BLOQUEADO,
     ETAPAS_PREVISTAS,
@@ -93,7 +96,10 @@ def _fake_steps(calls: list[tuple[str, Path]], fail_at: str | None = None) -> Pi
         _record("gerar_pre_livro", context.output_run_dir)
         xlsx = context.reports_run_dir / "pre_livro_diario_gerencial_teste.xlsx"
         txt = context.reports_run_dir / "auditoria_pre_livro_diario_gerencial_teste.txt"
-        xlsx.write_text("pre", encoding="utf-8")
+        xlsx.write_text(
+            "\n".join(str(path) for path in context.lancamentos_xlsx),
+            encoding="utf-8",
+        )
         txt.write_text("audit", encoding="utf-8")
         return StepResult(
             arquivos_gerados=(xlsx, txt),
@@ -272,6 +278,96 @@ def test_pipeline_sem_csv_manual_registra_lancamentos_manuais_nao_executados(tmp
 
     manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
     assert manifest["lancamentos_manuais_gerenciais"] == {"executado": False}
+
+
+def test_pipeline_default_nao_inclui_lancamentos_banca_aprovados(tmp_path):
+    result, _, _, _ = _run_pipeline(tmp_path)
+
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    pre_livro_inputs = (
+        result.reports_run_dir / "pre_livro_diario_gerencial_teste.xlsx"
+    ).read_text(encoding="utf-8")
+
+    assert manifest["lancamentos_banca_aprovados"] == {"incluido": False}
+    assert "BANCA_APROVADA" not in pre_livro_inputs
+
+
+def test_pipeline_com_lancamentos_banca_aprovados_inclui_xlsx_e_manifest(tmp_path):
+    calls: list[tuple[str, Path]] = []
+    xml_base = _make_xml_base(tmp_path)
+    saida_output = tmp_path / "output" / "importacao_real"
+    saida_reports = tmp_path / "reports" / "importacao_real"
+    banca_xlsx = tmp_path / "lancamentos_banca_aprovados.xlsx"
+    _save_lancamentos_banca_xlsx(banca_xlsx)
+
+    result = reprocessar_importacao_real_provisoria(
+        xml_base,
+        saida_output,
+        saida_reports,
+        project_root=tmp_path,
+        steps=_fake_steps(calls),
+        lancamentos_banca_aprovados_path=banca_xlsx,
+    )
+
+    output_xlsx = (
+        result.output_run_dir / "BANCA_APROVADA" / "lancamentos_banca_aprovados.xlsx"
+    )
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    banca_manifest = manifest["lancamentos_banca_aprovados"]
+    pre_livro_inputs = (
+        result.reports_run_dir / "pre_livro_diario_gerencial_teste.xlsx"
+    ).read_text(encoding="utf-8")
+    checkpoints = [item["descricao"] for item in manifest["checkpoints"]]
+
+    assert output_xlsx.exists()
+    assert banca_manifest["incluido"] is True
+    assert banca_manifest["input_xlsx"] == str(banca_xlsx)
+    assert banca_manifest["output_xlsx_run"] == str(output_xlsx)
+    assert banca_manifest["linhas_lidas"] == 2
+    assert str(output_xlsx) in manifest["relatorios_gerados"]
+    assert str(output_xlsx) in pre_livro_inputs
+    assert checkpoints.index("LANCAMENTOS_BANCA_APROVADOS_INCLUIDOS") < (
+        checkpoints.index("PRE_LIVRO_GERADO")
+    )
+
+
+def test_pipeline_lancamentos_banca_aprovados_path_inexistente_bloqueia(tmp_path):
+    xml_base = _make_xml_base(tmp_path)
+
+    with pytest.raises(
+        ReprocessamentoPipelineError,
+        match="Excel de lancamentos banca aprovados nao encontrado",
+    ):
+        reprocessar_importacao_real_provisoria(
+            xml_base,
+            tmp_path / "output",
+            tmp_path / "reports",
+            project_root=tmp_path,
+            steps=_fake_steps([]),
+            lancamentos_banca_aprovados_path=tmp_path / "ausente.xlsx",
+        )
+
+
+def test_parser_accepts_lancamentos_banca_aprovados_flag():
+    args = build_parser().parse_args(
+        [
+            "reprocessar-importacao-real",
+            "--xml-base",
+            "Database_Dev/XML_fatture_acquisto",
+            "--saida-output",
+            "output/importacao_real",
+            "--saida-reports",
+            "reports/importacao_real",
+            "--lancamentos-banca-aprovados",
+            "output/lancamentos_banca_aprovados_bridge_001.xlsx",
+        ]
+    )
+
+    assert args.command == "reprocessar-importacao-real"
+    assert (
+        args.lancamentos_banca_aprovados
+        == "output/lancamentos_banca_aprovados_bridge_001.xlsx"
+    )
 
 
 def test_pipeline_com_csv_manual_gera_outputs_e_manifest(tmp_path):
@@ -848,6 +944,44 @@ def _save_manual_csv_9n(path: Path) -> None:
                 "observacao": "fixture sintetica",
             }
         )
+
+
+def _save_lancamentos_banca_xlsx(path: Path) -> None:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = LANCAMENTOS_SHEET
+    sheet.append(HEADERS)
+    base_row = {header: "" for header in HEADERS}
+    base_row.update(
+        {
+            "data_documento": date(2026, 2, 5),
+            "competencia": "2026-02",
+            "cnpj_empresa": "08884180000123",
+            "fornecedor_ou_favorecido": "IZALTINO JOSE ZANI JUNIOR",
+            "tipo_documento": "BANCA_COMPROVANTE",
+            "conta_id": "6.01.002",
+            "conta_nome": "Honorarios Juridicos",
+            "valor": 2000,
+            "origem": "COMPROVANTES_BANCA",
+            "status_revisao": "OK",
+            "tipo_lancamento": "custo",
+            "data_pagamento": date(2026, 2, 5),
+            "duplicatas_json": "[]",
+        }
+    )
+    second_row = {
+        **base_row,
+        "fornecedor_ou_favorecido": "TOP LEVEL DIGITAL",
+        "tipo_documento": "BANCA_CONTA_CORRENTE",
+        "conta_id": "9.01.001",
+        "conta_nome": "Publicidade e Propaganda",
+        "valor": 3290,
+        "origem": "CONTA_CORRENTE",
+    }
+    sheet.append([base_row[header] for header in HEADERS])
+    sheet.append([second_row[header] for header in HEADERS])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    workbook.save(path)
 
 
 def _fase9_row(**overrides: str) -> dict[str, str]:

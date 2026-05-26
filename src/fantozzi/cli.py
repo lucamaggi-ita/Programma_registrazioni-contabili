@@ -390,6 +390,24 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         help="Data final inclusiva no formato YYYY-MM-DD.",
     )
+    gerar_lancamentos_banca.add_argument(
+        "--comprovantes-csv",
+        default=None,
+        help=(
+            "CSV de comprovantes ja classificados via YAML "
+            "(reports/comprovantes_classificacao/runs/<RUN>/comprovantes_classificados.csv). "
+            "Opcional."
+        ),
+    )
+    gerar_lancamentos_banca.add_argument(
+        "--conta-corrente-csv",
+        default=None,
+        help=(
+            "CSV de conta corrente ja classificada via YAML "
+            "(bank_raw/_decisoes_regras/conta_corrente_classificados.csv). "
+            "Opcional."
+        ),
+    )
     gerar_lancamentos_banca.set_defaults(
         func=gerar_lancamentos_banca_aprovados_command
     )
@@ -1259,6 +1277,14 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     reprocessar_real.add_argument(
+        "--lancamentos-banca-aprovados",
+        metavar="PATH",
+        help=(
+            "Excel de lancamentos banca aprovados ja gerado pelo bridge. "
+            "Quando informado, e copiado para a run e incluido no pre-livro/DRE."
+        ),
+    )
+    reprocessar_real.add_argument(
         "--gerar-pacote-contabil-gerencial",
         action="store_true",
         default=False,
@@ -1593,6 +1619,12 @@ def gerar_lancamentos_banca_aprovados_command(args: argparse.Namespace) -> int:
             Path(args.saida),
             periodo_ini,
             periodo_fim,
+            comprovantes_csv=(
+                Path(args.comprovantes_csv) if args.comprovantes_csv else None
+            ),
+            conta_corrente_csv=(
+                Path(args.conta_corrente_csv) if args.conta_corrente_csv else None
+            ),
         )
     except (OSError, LancamentosBancaError, ValueError) as exc:
         print(f"[ERRO] Nao foi possivel gerar lancamentos banca aprovados: {exc}")
@@ -2226,6 +2258,7 @@ def reprocessar_importacao_real_command(args: argparse.Namespace) -> int:
             lancamentos_manuais_gerenciais_csv_path=(
                 args.lancamentos_manuais_gerenciais_csv
             ),
+            lancamentos_banca_aprovados_path=args.lancamentos_banca_aprovados,
             gerar_pacote_contabil_gerencial=args.gerar_pacote_contabil_gerencial,
         )
     except reprocessamento_pipeline.ReprocessamentoPipelineError as exc:
@@ -2262,6 +2295,8 @@ def reprocessar_importacao_real_command(args: argparse.Namespace) -> int:
         print("[INFO] Fase 9 nao executada; relatorios permanecem provisorios.")
     if args.lancamentos_manuais_gerenciais_csv:
         print("[INFO] Lancamentos manuais gerenciais aplicados na run.")
+    if args.lancamentos_banca_aprovados:
+        print("[INFO] Lancamentos banca aprovados incluidos na run.")
     if args.gerar_pacote_contabil_gerencial:
         print("[INFO] Pacote contabil gerencial provisorio gerado na run.")
     return 0

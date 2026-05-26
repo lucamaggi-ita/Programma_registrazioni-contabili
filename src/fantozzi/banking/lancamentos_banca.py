@@ -43,6 +43,25 @@ class _RejectedRow:
     beneficiario: str
     conta_id: str
     conta_nome: str
+    fonte_prioritaria: str = ""
+    chave_dedup: str = ""
+    incluido: str = "false"
+
+
+@dataclass(frozen=True)
+class _DedupKey:
+    data: str
+    valor_abs: str
+    beneficiario_normalizado: str
+
+    def as_text(self) -> str:
+        return "|".join(
+            [
+                f"data={self.data}",
+                f"valor_abs={self.valor_abs}",
+                f"beneficiario={self.beneficiario_normalizado}",
+            ]
+        )
 
 
 def gerar_lancamentos_banca_aprovados(
@@ -51,6 +70,9 @@ def gerar_lancamentos_banca_aprovados(
     output_xlsx: Path,
     periodo_ini: date,
     periodo_fim: date,
+    *,
+    comprovantes_csv: Path | None = None,
+    conta_corrente_csv: Path | None = None,
 ) -> Path:
     if periodo_ini > periodo_fim:
         raise LancamentosBancaError("periodo_ini nao pode ser maior que periodo_fim.")
@@ -71,6 +93,26 @@ def gerar_lancamentos_banca_aprovados(
         periodo_fim,
     )
 
+    if comprovantes_csv is not None:
+        lancamentos.extend(
+            _read_comprovantes_csv(
+                Path(comprovantes_csv),
+                periodo_ini=periodo_ini,
+                periodo_fim=periodo_fim,
+                manifest=manifest,
+                rejeitados=rejeitados,
+            )
+        )
+    if conta_corrente_csv is not None:
+        lancamentos.extend(
+            _read_conta_corrente_csv(
+                Path(conta_corrente_csv),
+                periodo_ini=periodo_ini,
+                periodo_fim=periodo_fim,
+                manifest=manifest,
+                rejeitados=rejeitados,
+            )
+        )
     lancamentos.extend(
         _read_comprovantes(
             comprovantes_xlsx,
@@ -89,6 +131,7 @@ def gerar_lancamentos_banca_aprovados(
             rejeitados=rejeitados,
         )
     )
+    lancamentos = _deduplicate_lancamentos(lancamentos, rejeitados, manifest)
 
     if output_xlsx.exists():
         output_xlsx.unlink()
@@ -107,6 +150,294 @@ def gerar_lancamentos_banca_aprovados(
     return output_xlsx
 
 
+def _read_comprovantes_csv(
+    path: Path,
+    *,
+    periodo_ini: date,
+    periodo_fim: date,
+    manifest: dict[str, object],
+    rejeitados: list[_RejectedRow],
+) -> list[Lancamento]:
+    lancamentos: list[Lancamento] = []
+    rows_lidas = 0
+
+    with path.open(encoding="utf-8-sig", newline="") as f:
+        reader = csv.DictReader(f, delimiter=";")
+        for row_number, row in enumerate(reader, start=2):
+            rows_lidas += 1
+
+            if row.get("status_classificacao") != "CLASSIFICADO_POR_REGRA":
+                manifest["linhas_rejeitadas_status"] = int(manifest["linhas_rejeitadas_status"]) + 1
+                _reject_csv(
+                    rejeitados,
+                    manifest,
+                    fonte="COMPROVANTES_CSV",
+                    row_number=row_number,
+                    row=row,
+                    motivo="STATUS_NAO_APROVADO",
+                    date_header="data_pagamento",
+                    beneficiary_header="beneficiario_normalizado",
+                )
+                continue
+            if str(row.get("entra_dre", "")).lower() != "true":
+                manifest["linhas_excluidas_escludere"] = int(manifest["linhas_excluidas_escludere"]) + 1
+                _reject_csv(
+                    rejeitados,
+                    manifest,
+                    fonte="COMPROVANTES_CSV",
+                    row_number=row_number,
+                    row=row,
+                    motivo="ENTRA_DRE_FALSE",
+                    date_header="data_pagamento",
+                    beneficiary_header="beneficiario_normalizado",
+                )
+                continue
+
+            try:
+                data_documento = _parse_date(row.get("data_pagamento"))
+            except LancamentosBancaError:
+                manifest["linhas_rejeitadas_dados_obrigatorios"] = int(manifest["linhas_rejeitadas_dados_obrigatorios"]) + 1
+                _reject_csv(
+                    rejeitados,
+                    manifest,
+                    fonte="COMPROVANTES_CSV",
+                    row_number=row_number,
+                    row=row,
+                    motivo="SEM_DATA",
+                    date_header="data_pagamento",
+                    beneficiary_header="beneficiario_normalizado",
+                )
+                continue
+            try:
+                valor_assinado = _parse_decimal(row.get("valor"))
+                valor = abs(valor_assinado)
+            except LancamentosBancaError:
+                manifest["linhas_rejeitadas_dados_obrigatorios"] = int(manifest["linhas_rejeitadas_dados_obrigatorios"]) + 1
+                _reject_csv(
+                    rejeitados,
+                    manifest,
+                    fonte="COMPROVANTES_CSV",
+                    row_number=row_number,
+                    row=row,
+                    motivo="SEM_VALOR",
+                    date_header="data_pagamento",
+                    beneficiary_header="beneficiario_normalizado",
+                )
+                continue
+
+            if not _text(row.get("beneficiario_normalizado")):
+                manifest["linhas_rejeitadas_dados_obrigatorios"] = int(manifest["linhas_rejeitadas_dados_obrigatorios"]) + 1
+                _reject_csv(
+                    rejeitados,
+                    manifest,
+                    fonte="COMPROVANTES_CSV",
+                    row_number=row_number,
+                    row=row,
+                    motivo="DADOS_OBRIGATORIOS_AUSENTES",
+                    date_header="data_pagamento",
+                    beneficiary_header="beneficiario_normalizado",
+                )
+                continue
+            if not _text(row.get("conta_id")) or not _text(row.get("conta_nome")):
+                manifest["linhas_rejeitadas_dados_obrigatorios"] = int(manifest["linhas_rejeitadas_dados_obrigatorios"]) + 1
+                _reject_csv(
+                    rejeitados,
+                    manifest,
+                    fonte="COMPROVANTES_CSV",
+                    row_number=row_number,
+                    row=row,
+                    motivo="SEM_CONTA_ID",
+                    date_header="data_pagamento",
+                    beneficiary_header="beneficiario_normalizado",
+                )
+                continue
+            if data_documento < periodo_ini or data_documento > periodo_fim:
+                manifest["linhas_fora_periodo"] = int(manifest["linhas_fora_periodo"]) + 1
+                _reject_csv(
+                    rejeitados,
+                    manifest,
+                    fonte="COMPROVANTES_CSV",
+                    row_number=row_number,
+                    row=row,
+                    motivo="FORA_PERIODO",
+                    date_header="data_pagamento",
+                    beneficiary_header="beneficiario_normalizado",
+                )
+                continue
+
+            raw_hash = _text(row.get("raw_hash") or row.get("payment_id"))
+            chave_origem = _chave_origem(
+                "COMPROVANTES_CSV",
+                row_number,
+                raw_hash,
+                _text(row.get("regra_id")),
+                data_documento,
+                valor,
+            )
+            lancamentos.append(
+                Lancamento(
+                    data_documento=data_documento,
+                    competencia=f"{data_documento.year:04d}-{data_documento.month:02d}",
+                    cnpj_empresa=_text(row.get("cnpj")),
+                    nome_empresa="",
+                    fornecedor_ou_favorecido=_text(row.get("beneficiario_normalizado")),
+                    cnpj_cpf_favorecido=_text(row.get("beneficiary_document")),
+                    documento=_text(row.get("referencia")),
+                    tipo_documento="BANCA_COMPROVANTE_CSV",
+                    conta_id=_text(row.get("conta_id")),
+                    conta_nome=_text(row.get("conta_nome")),
+                    grupo_conta="",
+                    descricao_itens=_descricao(
+                        row.get("beneficiario_normalizado"),
+                        row.get("referencia"),
+                        row.get("payment_type"),
+                    ),
+                    valor=valor,
+                    origem="COMPROVANTES_CSV",
+                    arquivo_origem=str(path),
+                    chave_origem=chave_origem,
+                    hash_registro=_hash_registro(chave_origem, row.get("conta_id"), valor),
+                    observacoes="",
+                    data_pagamento=data_documento,
+                )
+            )
+
+    manifest["linhas_lidas_comprovantes_csv"] = rows_lidas
+    manifest["linhas_aprovadas_comprovantes_csv"] = len(lancamentos)
+    manifest["fontes"]["comprovantes_csv"]["linhas_lidas"] = rows_lidas
+    return lancamentos
+
+
+def _read_conta_corrente_csv(
+    path: Path,
+    *,
+    periodo_ini: date,
+    periodo_fim: date,
+    manifest: dict[str, object],
+    rejeitados: list[_RejectedRow],
+) -> list[Lancamento]:
+    lancamentos: list[Lancamento] = []
+    rows_lidas = 0
+
+    with path.open(encoding="utf-8-sig", newline="") as f:
+        reader = csv.DictReader(f, delimiter=";")
+        for row_number, row in enumerate(reader, start=2):
+            rows_lidas += 1
+
+            try:
+                data_documento = _parse_date(row.get("data_movimento"))
+            except LancamentosBancaError:
+                manifest["linhas_rejeitadas_dados_obrigatorios"] = int(manifest["linhas_rejeitadas_dados_obrigatorios"]) + 1
+                _reject_csv(
+                    rejeitados,
+                    manifest,
+                    fonte="CONTA_CORRENTE_CSV",
+                    row_number=row_number,
+                    row=row,
+                    motivo="SEM_DATA",
+                    date_header="data_movimento",
+                    beneficiary_header="razao_social",
+                )
+                continue
+            try:
+                valor_assinado = _parse_decimal(row.get("valor"))
+                valor = abs(valor_assinado)
+            except LancamentosBancaError:
+                manifest["linhas_rejeitadas_dados_obrigatorios"] = int(manifest["linhas_rejeitadas_dados_obrigatorios"]) + 1
+                _reject_csv(
+                    rejeitados,
+                    manifest,
+                    fonte="CONTA_CORRENTE_CSV",
+                    row_number=row_number,
+                    row=row,
+                    motivo="SEM_VALOR",
+                    date_header="data_movimento",
+                    beneficiary_header="razao_social",
+                )
+                continue
+            if valor_assinado > 0:
+                manifest["linhas_rejeitadas_status"] = int(manifest["linhas_rejeitadas_status"]) + 1
+                _reject_csv(
+                    rejeitados,
+                    manifest,
+                    fonte="CONTA_CORRENTE_CSV",
+                    row_number=row_number,
+                    row=row,
+                    motivo="ACAO_ESCLUIDA",
+                    date_header="data_movimento",
+                    beneficiary_header="razao_social",
+                )
+                continue
+
+            if not _text(row.get("conta_id")) or not _text(row.get("conta_nome")):
+                manifest["linhas_rejeitadas_dados_obrigatorios"] = int(manifest["linhas_rejeitadas_dados_obrigatorios"]) + 1
+                _reject_csv(
+                    rejeitados,
+                    manifest,
+                    fonte="CONTA_CORRENTE_CSV",
+                    row_number=row_number,
+                    row=row,
+                    motivo="SEM_CONTA_ID",
+                    date_header="data_movimento",
+                    beneficiary_header="razao_social",
+                )
+                continue
+            if data_documento < periodo_ini or data_documento > periodo_fim:
+                manifest["linhas_fora_periodo"] = int(manifest["linhas_fora_periodo"]) + 1
+                _reject_csv(
+                    rejeitados,
+                    manifest,
+                    fonte="CONTA_CORRENTE_CSV",
+                    row_number=row_number,
+                    row=row,
+                    motivo="FORA_PERIODO",
+                    date_header="data_movimento",
+                    beneficiary_header="razao_social",
+                )
+                continue
+
+            fornecedor = _text(row.get("razao_social")) or _text(row.get("lancamento"))
+            chave_origem = _chave_origem(
+                "CONTA_CORRENTE_CSV",
+                row_number,
+                _text(row.get("hash_origem")),
+                _text(row.get("chave_estavel")),
+                data_documento,
+                valor,
+            )
+            lancamentos.append(
+                Lancamento(
+                    data_documento=data_documento,
+                    competencia=f"{data_documento.year:04d}-{data_documento.month:02d}",
+                    cnpj_empresa=_text(row.get("cnpj")),
+                    nome_empresa="",
+                    fornecedor_ou_favorecido=fornecedor,
+                    cnpj_cpf_favorecido="",
+                    documento=_text(row.get("chave_estavel")),
+                    tipo_documento="BANCA_CONTA_CORRENTE_CSV",
+                    conta_id=_text(row.get("conta_id")),
+                    conta_nome=_text(row.get("conta_nome")),
+                    grupo_conta="",
+                    descricao_itens=_descricao(
+                        row.get("lancamento"),
+                        row.get("razao_social"),
+                    ),
+                    valor=valor,
+                    origem="CONTA_CORRENTE_CSV",
+                    arquivo_origem=str(path),
+                    chave_origem=chave_origem,
+                    hash_registro=_hash_registro(chave_origem, row.get("conta_id"), valor),
+                    observacoes="",
+                    data_pagamento=data_documento,
+                )
+            )
+
+    manifest["linhas_lidas_conta_corrente_csv"] = rows_lidas
+    manifest["linhas_aprovadas_conta_corrente_csv"] = len(lancamentos)
+    manifest["fontes"]["conta_corrente_csv"]["linhas_lidas"] = rows_lidas
+    return lancamentos
+
+
 def _read_comprovantes(
     path: Path,
     *,
@@ -117,6 +448,7 @@ def _read_comprovantes(
 ) -> list[Lancamento]:
     rows = _load_rows(path, COMPROVANTES_SHEET)
     manifest["linhas_lidas_comprovantes"] = len(rows)
+    manifest["fontes"]["decisoes_comprovantes_aprovadas"]["linhas_lidas"] = len(rows)
     lancamentos: list[Lancamento] = []
 
     for row_number, row in rows:
@@ -193,6 +525,7 @@ def _read_conta_corrente(
     rows = _load_rows(path, CONTA_CORRENTE_SHEET)
     tecnico_by_key = _load_tecnico_conta_corrente(path)
     manifest["linhas_lidas_conta_corrente"] = len(rows)
+    manifest["fontes"]["decisoes_conta_corrente_aprovadas"]["linhas_lidas"] = len(rows)
     lancamentos: list[Lancamento] = []
 
     for row_number, row in rows:
@@ -203,6 +536,7 @@ def _read_conta_corrente(
             beneficiary_header="RAZAO_SOCIAL",
             periodo_ini=periodo_ini,
             periodo_fim=periodo_fim,
+            rejeitar_valor_positivo=True,
         )
         if decision:
             _reject(
@@ -260,6 +594,111 @@ def _read_conta_corrente(
     return lancamentos
 
 
+def _deduplicate_lancamentos(
+    lancamentos: list[Lancamento],
+    rejeitados: list[_RejectedRow],
+    manifest: dict[str, object],
+) -> list[Lancamento]:
+    accepted: list[Lancamento] = []
+    by_key: dict[_DedupKey, Lancamento] = {}
+    ordered = sorted(
+        enumerate(lancamentos),
+        key=lambda item: (_source_priority(item[1].origem), item[0]),
+    )
+
+    for _, lancamento in ordered:
+        key = _dedup_key(lancamento)
+        winner = by_key.get(key)
+        if winner is not None:
+            same_source = winner.origem == lancamento.origem
+            motivo = "DUPLICADO_INTERNO_FONTE" if same_source else "DUPLICADO_FONTE_PRIORITARIA"
+            _reject_lancamento(
+                rejeitados,
+                manifest,
+                lancamento,
+                motivo=motivo,
+                fonte_prioritaria=winner.origem,
+                chave_dedup=key.as_text(),
+                increment_source=True,
+            )
+            manifest["deduplicacao"]["duplicados_excluidos"] += 1
+            manifest["deduplicacao"]["valor_duplicado_excluido"] = round(
+                float(manifest["deduplicacao"]["valor_duplicado_excluido"])
+                + float(abs(lancamento.valor)),
+                2,
+            )
+            continue
+
+        for accepted_lancamento in accepted:
+            possible_key = _dedup_key(accepted_lancamento)
+            if (
+                possible_key.valor_abs == key.valor_abs
+                and possible_key.beneficiario_normalizado == key.beneficiario_normalizado
+                and abs((accepted_lancamento.data_documento - lancamento.data_documento).days) == 1
+            ):
+                _reject_lancamento(
+                    rejeitados,
+                    manifest,
+                    lancamento,
+                    motivo="POSSIVEL_DUPLICADO_DATA_DIVERGENTE",
+                    fonte_prioritaria=accepted_lancamento.origem,
+                    chave_dedup=key.as_text(),
+                    increment_source=False,
+                    incluido=True,
+                )
+                manifest["deduplicacao"]["possiveis_duplicados_data_divergente"] += 1
+                break
+
+        by_key[key] = lancamento
+        accepted.append(lancamento)
+
+    _refresh_source_included_counts(manifest, accepted)
+    return accepted
+
+
+def _dedup_key(lancamento: Lancamento) -> _DedupKey:
+    return _DedupKey(
+        data=lancamento.data_documento.isoformat(),
+        valor_abs=f"{abs(lancamento.valor).quantize(Decimal('0.01')):.2f}",
+        beneficiario_normalizado=normalize_match_text(lancamento.fornecedor_ou_favorecido),
+    )
+
+
+def _source_priority(origem: str) -> int:
+    return {
+        "COMPROVANTES_CSV": 1,
+        "COMPROVANTES_BANCA": 2,
+        "CONTA_CORRENTE": 2,
+        "CONTA_CORRENTE_CSV": 3,
+    }.get(origem, 99)
+
+
+def _source_manifest_key(fonte: str) -> str:
+    return {
+        "COMPROVANTES_CSV": "comprovantes_csv",
+        "CONTA_CORRENTE_CSV": "conta_corrente_csv",
+        "COMPROVANTES_BANCA": "decisoes_comprovantes_aprovadas",
+        "CONTA_CORRENTE": "decisoes_conta_corrente_aprovadas",
+    }.get(fonte, fonte.lower())
+
+
+def _refresh_source_included_counts(
+    manifest: dict[str, object],
+    lancamentos: list[Lancamento],
+) -> None:
+    included_by_source = {key: 0 for key in manifest["fontes"]}
+    for lancamento in lancamentos:
+        source_key = _source_manifest_key(lancamento.origem)
+        if source_key in included_by_source:
+            included_by_source[source_key] += 1
+
+    for source_key, total in included_by_source.items():
+        manifest["fontes"][source_key]["linhas_incluidas"] = total
+
+    manifest["linhas_aprovadas_comprovantes_csv"] = included_by_source["comprovantes_csv"]
+    manifest["linhas_aprovadas_conta_corrente_csv"] = included_by_source["conta_corrente_csv"]
+
+
 def _decision(
     row: dict[str, object],
     *,
@@ -268,6 +707,7 @@ def _decision(
     beneficiary_header: str,
     periodo_ini: date,
     periodo_fim: date,
+    rejeitar_valor_positivo: bool = False,
 ) -> str:
     status = _upper(row.get("STATUS_DECISAO"))
     acao = _upper(row.get("ACAO_REGRA"))
@@ -289,9 +729,11 @@ def _decision(
 
     try:
         data_documento = _parse_date(row.get(date_header))
-        _parse_decimal(row.get(value_header))
+        valor = _parse_decimal(row.get(value_header))
     except LancamentosBancaError:
         return "DADOS_OBRIGATORIOS_AUSENTES"
+    if rejeitar_valor_positivo and valor > 0:
+        return "ACAO_ESCLUIDA"
 
     if not _text(row.get(beneficiary_header)):
         return "DADOS_OBRIGATORIOS_AUSENTES"
@@ -388,12 +830,13 @@ def _reject(
         "DADOS_OBRIGATORIOS_AUSENTES": "linhas_rejeitadas_dados_obrigatorios",
     }.get(motivo, "linhas_rejeitadas_status")
     manifest[counter] = int(manifest[counter]) + 1
+    _bump_source_rejected(manifest, fonte)
     rejeitados.append(
         _RejectedRow(
             fonte=fonte,
             sheet=sheet,
             linha=row_number,
-            motivo=motivo,
+            motivo=_canonical_rejection_motivo(motivo),
             status_decisao=_text(row.get("STATUS_DECISAO")),
             acao_regra=_text(row.get("ACAO_REGRA")),
             risco_duplicidade_xml=_text(row.get("RISCO_DUPLICIDADE_XML")),
@@ -404,6 +847,97 @@ def _reject(
             conta_nome=_text(row.get("CONTA_NOME_APROVADA")),
         )
     )
+
+
+def _reject_csv(
+    rejeitados: list[_RejectedRow],
+    manifest: dict[str, object],
+    *,
+    fonte: str,
+    row_number: int,
+    row: dict[str, object],
+    motivo: str,
+    date_header: str,
+    beneficiary_header: str,
+) -> None:
+    _bump_source_rejected(manifest, fonte)
+    rejeitados.append(
+        _RejectedRow(
+            fonte=fonte,
+            sheet="CSV",
+            linha=row_number,
+            motivo=motivo,
+            status_decisao=_text(row.get("status_classificacao")),
+            acao_regra=_text(row.get("acao_regra")),
+            risco_duplicidade_xml="",
+            data=_text(row.get(date_header)),
+            valor=_text(row.get("valor")),
+            beneficiario=_text(row.get(beneficiary_header)) or _text(row.get("lancamento")),
+            conta_id=_text(row.get("conta_id")),
+            conta_nome=_text(row.get("conta_nome")),
+        )
+    )
+
+
+def _reject_lancamento(
+    rejeitados: list[_RejectedRow],
+    manifest: dict[str, object],
+    lancamento: Lancamento,
+    *,
+    motivo: str,
+    fonte_prioritaria: str,
+    chave_dedup: str,
+    increment_source: bool,
+    incluido: bool = False,
+) -> None:
+    if increment_source:
+        _bump_source_rejected(manifest, lancamento.origem)
+    rejeitados.append(
+        _RejectedRow(
+            fonte=lancamento.origem,
+            sheet="DEDUP",
+            linha=_linha_from_chave_origem(lancamento.chave_origem),
+            motivo=motivo,
+            status_decisao="",
+            acao_regra="",
+            risco_duplicidade_xml="",
+            data=lancamento.data_documento.isoformat(),
+            valor=f"{lancamento.valor.quantize(Decimal('0.01')):.2f}",
+            beneficiario=lancamento.fornecedor_ou_favorecido,
+            conta_id=lancamento.conta_id,
+            conta_nome=lancamento.conta_nome,
+            fonte_prioritaria=fonte_prioritaria,
+            chave_dedup=chave_dedup,
+            incluido="true" if incluido else "false",
+        )
+    )
+
+
+def _bump_source_rejected(manifest: dict[str, object], fonte: str) -> None:
+    source_key = _source_manifest_key(fonte)
+    fontes = manifest.get("fontes")
+    if isinstance(fontes, dict) and source_key in fontes:
+        fontes[source_key]["linhas_rejeitadas"] += 1
+
+
+def _canonical_rejection_motivo(motivo: str) -> str:
+    if motivo.startswith("STATUS_"):
+        return "STATUS_NAO_APROVADO"
+    if motivo.startswith("ACAO_") or motivo == "RISCO_DUPLICIDADE_XML":
+        return "ACAO_ESCLUIDA"
+    if motivo == "DADOS_OBRIGATORIOS_AUSENTES":
+        return "SEM_CONTA_ID"
+    return motivo
+
+
+def _linha_from_chave_origem(chave_origem: str) -> int:
+    for part in chave_origem.split("|"):
+        if part.startswith("linha="):
+            try:
+                return int(part.removeprefix("linha="))
+            except ValueError:
+                return 0
+    return 0
 
 
 def _write_rejeitados(path: Path, rejeitados: Iterable[_RejectedRow]) -> None:
@@ -421,6 +955,9 @@ def _write_rejeitados(path: Path, rejeitados: Iterable[_RejectedRow]) -> None:
         "beneficiario",
         "conta_id",
         "conta_nome",
+        "fonte_prioritaria",
+        "chave_dedup",
+        "incluido",
     ]
     with path.open("w", encoding="utf-8-sig", newline="") as file:
         writer = csv.DictWriter(file, fieldnames=fieldnames, delimiter=";")
@@ -441,6 +978,10 @@ def _base_manifest(
         "periodo_fim": periodo_fim.isoformat(),
         "comprovantes_xlsx": str(comprovantes_xlsx),
         "conta_corrente_xlsx": str(conta_corrente_xlsx),
+        "linhas_lidas_comprovantes_csv": 0,
+        "linhas_aprovadas_comprovantes_csv": 0,
+        "linhas_lidas_conta_corrente_csv": 0,
+        "linhas_aprovadas_conta_corrente_csv": 0,
         "linhas_lidas_comprovantes": 0,
         "linhas_lidas_conta_corrente": 0,
         "linhas_aprovadas_incluidas": 0,
@@ -451,6 +992,33 @@ def _base_manifest(
         "linhas_fora_periodo": 0,
         "linhas_rejeitadas_status": 0,
         "linhas_rejeitadas_dados_obrigatorios": 0,
+        "fontes": {
+            "comprovantes_csv": {
+                "linhas_lidas": 0,
+                "linhas_incluidas": 0,
+                "linhas_rejeitadas": 0,
+            },
+            "conta_corrente_csv": {
+                "linhas_lidas": 0,
+                "linhas_incluidas": 0,
+                "linhas_rejeitadas": 0,
+            },
+            "decisoes_comprovantes_aprovadas": {
+                "linhas_lidas": 0,
+                "linhas_incluidas": 0,
+                "linhas_rejeitadas": 0,
+            },
+            "decisoes_conta_corrente_aprovadas": {
+                "linhas_lidas": 0,
+                "linhas_incluidas": 0,
+                "linhas_rejeitadas": 0,
+            },
+        },
+        "deduplicacao": {
+            "duplicados_excluidos": 0,
+            "valor_duplicado_excluido": 0.0,
+            "possiveis_duplicados_data_divergente": 0,
+        },
         "output_xlsx": str(output_xlsx),
     }
 

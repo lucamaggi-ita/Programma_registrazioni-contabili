@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import json
 from datetime import date
 from decimal import Decimal
@@ -11,6 +12,7 @@ from fantozzi.banking.models import BankLaunchEnrichment, PaymentReceiptRaw
 from fantozzi.banking.revisao_banca import (
     COMPROVANTES_SHEET,
     COMPROVANTES_XLSX,
+    CONTA_CORRENTE_CLASSIFICADOS_CSV,
     CONTA_CORRENTE_SHEET,
     CONTA_CORRENTE_XLSX,
     ImportaRevisaoBancaError,
@@ -1402,6 +1404,262 @@ def test_pix_enviado_julio_cesar_different_date_stays_review(
 
     row = _row_by_index(output_dir / CONTA_CORRENTE_XLSX, CONTA_CORRENTE_SHEET, row=2)
     assert row["POSSIVEL_COMPROVANTE_RELACIONADO"] == "NAO"
+
+
+# ---------------------------------------------------------------------------
+# Testes: conta_corrente_classificados.csv (FZ-GIORNALE-DRE-BRIDGE-BANCA-002B)
+# ---------------------------------------------------------------------------
+
+
+def test_conta_corrente_classificados_csv_criado_com_classificados_yaml(
+    monkeypatch, tmp_path
+):
+    """Righe YAML-classificate (COELBA, EMBASA, VIVO DA) entrano nel CSV, non nell'Excel."""
+    bank_raw_dir, cnpj_dir = _make_bank_raw_month(tmp_path)
+    (cnpj_dir / "ConsultaPagamentos.xls").write_bytes(b"placeholder")
+    (cnpj_dir / "Extrato_Lancamentos.xlsx").write_bytes(b"placeholder")
+    output_dir = tmp_path / "bank_raw" / "_decisoes_regras"
+    _patch_bank_sources(
+        monkeypatch,
+        [],
+        [
+            _launch(
+                "DA COELBA 7014914336", "", raw_hash="launch-coelba",
+                amount="-9164.48", transaction_date=date(2026, 4, 23),
+            ),
+            _launch(
+                "EMBASA 142698660", "", raw_hash="launch-embasa",
+                amount="-351.23", transaction_date=date(2026, 4, 13),
+            ),
+            _launch(
+                "DA VIVO-BA 20304230426", "", raw_hash="launch-vivo",
+                amount="-380.97", transaction_date=date(2026, 4, 6),
+            ),
+        ],
+    )
+
+    result = importar_revisao_banca(
+        **{
+            **_import_kwargs(tmp_path, bank_raw_dir, output_dir),
+            "regras_path": _write_rules_with_recurring_conta_corrente(tmp_path),
+        }
+    )
+
+    csv_path = output_dir / CONTA_CORRENTE_CLASSIFICADOS_CSV
+    assert csv_path.exists()
+    assert result.csv_conta_corrente_classificados == csv_path
+    assert result.conta_corrente_classificados_linhas == 3
+
+    rows = _read_csv(csv_path)
+    lancamentos_no_csv = {r["lancamento"] for r in rows}
+    assert "DA COELBA 7014914336" in lancamentos_no_csv
+    assert "EMBASA 142698660" in lancamentos_no_csv
+    assert "DA VIVO-BA 20304230426" in lancamentos_no_csv
+
+    coelba = next(r for r in rows if "COELBA" in r["lancamento"])
+    assert coelba["conta_id"] == "4.01.011"
+    assert coelba["mes"] == "2026-04"
+    assert coelba["cnpj"] == "08884180000123"
+    assert coelba["regra_id"] == "REGRA_4_01_011_CONTA_CORRENTE_COELBA"
+
+    assert result.conta_corrente_candidatos == 0
+    decisoes = _data_rows(output_dir / CONTA_CORRENTE_XLSX, CONTA_CORRENTE_SHEET)
+    assert all(
+        "COELBA" not in str(r.get("LANCAMENTO", ""))
+        and "EMBASA" not in str(r.get("LANCAMENTO", ""))
+        and "VIVO" not in str(r.get("LANCAMENTO", ""))
+        for r in decisoes
+    )
+
+
+def test_conta_corrente_classificados_csv_nao_inclui_sem_regra(monkeypatch, tmp_path):
+    """Righe senza regola vanno all'Excel decisionale, non al CSV."""
+    bank_raw_dir, cnpj_dir = _make_bank_raw_month(tmp_path)
+    (cnpj_dir / "ConsultaPagamentos.xls").write_bytes(b"placeholder")
+    (cnpj_dir / "Extrato_Lancamentos.xlsx").write_bytes(b"placeholder")
+    output_dir = tmp_path / "bank_raw" / "_decisoes_regras"
+    _patch_bank_sources(
+        monkeypatch,
+        [],
+        [
+            _launch(
+                "DA COELBA 7014914336", "", raw_hash="launch-coelba",
+                amount="-9164.48", transaction_date=date(2026, 4, 23),
+            ),
+            _launch(
+                "PAGAMENTOS TRIB COD BARRAS", "", raw_hash="launch-sem-regra",
+                amount="-10.00", transaction_date=date(2026, 4, 18),
+            ),
+        ],
+    )
+
+    result = importar_revisao_banca(
+        **{
+            **_import_kwargs(tmp_path, bank_raw_dir, output_dir),
+            "regras_path": _write_rules_with_recurring_conta_corrente(tmp_path),
+        }
+    )
+
+    csv_rows = _read_csv(output_dir / CONTA_CORRENTE_CLASSIFICADOS_CSV)
+    lancamentos_csv = {r["lancamento"] for r in csv_rows}
+    assert "DA COELBA 7014914336" in lancamentos_csv
+    assert "PAGAMENTOS TRIB COD BARRAS" not in lancamentos_csv
+
+    assert result.conta_corrente_candidatos == 1
+    decisoes = _data_rows(output_dir / CONTA_CORRENTE_XLSX, CONTA_CORRENTE_SHEET)
+    assert any("PAGAMENTOS TRIB" in str(r.get("LANCAMENTO", "")) for r in decisoes)
+
+
+def test_conta_corrente_classificados_csv_nao_inclui_escludere(monkeypatch, tmp_path):
+    """Righe ESCLUDERE (SISPAG) non devono entrare nel CSV classificados."""
+    bank_raw_dir, cnpj_dir = _make_bank_raw_month(tmp_path)
+    (cnpj_dir / "ConsultaPagamentos.xls").write_bytes(b"placeholder")
+    (cnpj_dir / "Extrato_Lancamentos.xlsx").write_bytes(b"placeholder")
+    output_dir = tmp_path / "bank_raw" / "_decisoes_regras"
+    _patch_bank_sources(
+        monkeypatch,
+        [],
+        [
+            _launch(
+                "DA COELBA 7014914336", "", raw_hash="launch-coelba",
+                amount="-9164.48", transaction_date=date(2026, 4, 23),
+            ),
+            _launch(
+                "SISPAG SALARIOS", "", raw_hash="launch-sispag",
+                amount="-29641.68", transaction_date=date(2026, 4, 6),
+            ),
+        ],
+    )
+
+    result = importar_revisao_banca(
+        **{
+            **_import_kwargs(tmp_path, bank_raw_dir, output_dir),
+            "regras_path": _write_rules_with_recurring_conta_corrente(tmp_path),
+        }
+    )
+
+    csv_rows = _read_csv(output_dir / CONTA_CORRENTE_CLASSIFICADOS_CSV)
+    lancamentos_csv = {r["lancamento"] for r in csv_rows}
+    assert "DA COELBA 7014914336" in lancamentos_csv
+    assert "SISPAG SALARIOS" not in lancamentos_csv
+    assert result.conta_corrente_classificados_linhas == 1
+
+
+def test_conta_corrente_classificados_csv_nao_inclui_pix_bridge_comprovante(
+    monkeypatch, tmp_path
+):
+    """PIX classificado via bridge comprovante NON deve entrare nel CSV (il comprovante lo copre)."""
+    bank_raw_dir, cnpj_dir = _make_bank_raw_month(tmp_path)
+    (cnpj_dir / "ConsultaPagamentos.xls").write_bytes(b"placeholder")
+    (cnpj_dir / "Extrato_Lancamentos.xlsx").write_bytes(b"placeholder")
+    output_dir = tmp_path / "bank_raw" / "_decisoes_regras"
+    _patch_bank_sources(
+        monkeypatch,
+        [
+            _receipt(
+                "Beneficiario Com Regra", raw_hash="receipt-bridge",
+                amount="100.00", payment_date=date(2026, 4, 10),
+                document="12.345.678/0001-90",
+            ),
+        ],
+        [
+            _launch(
+                "PIX ENVIADO", "Nome Banco Diferente", raw_hash="launch-bridge",
+                amount="-100.00", transaction_date=date(2026, 4, 10),
+                document="12.345.678/0001-90",
+            ),
+        ],
+    )
+
+    result = importar_revisao_banca(
+        **{
+            **_import_kwargs(tmp_path, bank_raw_dir, output_dir),
+            "regras_path": _write_rules_with_supplier(tmp_path, "BENEFICIARIO COM REGRA"),
+        }
+    )
+
+    assert result.conta_corrente_pix_yaml_via_comprovante == 1
+    csv_path = output_dir / CONTA_CORRENTE_CLASSIFICADOS_CSV
+    assert csv_path.exists()
+    csv_rows = _read_csv(csv_path)
+    assert csv_rows == []
+    assert result.conta_corrente_classificados_linhas == 0
+
+
+def test_conta_corrente_classificados_csv_manifest_atualizado(monkeypatch, tmp_path):
+    """Il manifest deve includere il path CSV e il conteggio delle linhas classificate."""
+    bank_raw_dir, cnpj_dir = _make_bank_raw_month(tmp_path)
+    (cnpj_dir / "ConsultaPagamentos.xls").write_bytes(b"placeholder")
+    (cnpj_dir / "Extrato_Lancamentos.xlsx").write_bytes(b"placeholder")
+    output_dir = tmp_path / "bank_raw" / "_decisoes_regras"
+    _patch_bank_sources(
+        monkeypatch,
+        [],
+        [
+            _launch(
+                "DA COELBA 7014914336", "", raw_hash="launch-coelba",
+                amount="-9164.48", transaction_date=date(2026, 4, 23),
+            ),
+        ],
+    )
+
+    importar_revisao_banca(
+        **{
+            **_import_kwargs(tmp_path, bank_raw_dir, output_dir),
+            "regras_path": _write_rules_with_recurring_conta_corrente(tmp_path),
+        }
+    )
+
+    manifest = json.loads(
+        (output_dir / "manifest_importa_revisao_banca.json").read_text(encoding="utf-8")
+    )
+    expected_csv = str(output_dir / CONTA_CORRENTE_CLASSIFICADOS_CSV)
+    assert manifest["csv_conta_corrente_classificados"] == expected_csv
+    assert manifest["conta_corrente_classificados_linhas"] == 1
+
+
+def test_excel_decisional_nao_muda_com_novo_csv(monkeypatch, tmp_path):
+    """A geração do CSV não deve alterar o conteúdo dos Excel decisionais."""
+    bank_raw_dir, cnpj_dir = _make_bank_raw_month(tmp_path)
+    (cnpj_dir / "ConsultaPagamentos.xls").write_bytes(b"placeholder")
+    (cnpj_dir / "Extrato_Lancamentos.xlsx").write_bytes(b"placeholder")
+    output_dir = tmp_path / "bank_raw" / "_decisoes_regras"
+    _patch_bank_sources(
+        monkeypatch,
+        [],
+        [
+            _launch(
+                "DA COELBA 7014914336", "", raw_hash="launch-coelba",
+                amount="-9164.48", transaction_date=date(2026, 4, 23),
+            ),
+            _launch(
+                "PAGAMENTOS TRIB COD BARRAS", "", raw_hash="launch-sem-regra",
+                amount="-10.00", transaction_date=date(2026, 4, 18),
+            ),
+        ],
+    )
+
+    result = importar_revisao_banca(
+        **{
+            **_import_kwargs(tmp_path, bank_raw_dir, output_dir),
+            "regras_path": _write_rules_with_recurring_conta_corrente(tmp_path),
+        }
+    )
+
+    # Classificato via YAML → non nell'Excel
+    assert result.conta_corrente_regras_yaml_aplicadas == 1
+    # Senza regola → nell'Excel
+    assert result.conta_corrente_candidatos == 1
+    decisoes = _data_rows(output_dir / CONTA_CORRENTE_XLSX, CONTA_CORRENTE_SHEET)
+    assert len(decisoes) == 1
+    assert decisoes[0]["LANCAMENTO"] == "PAGAMENTOS TRIB COD BARRAS"
+    assert "COELBA" not in str(decisoes[0].get("LANCAMENTO", ""))
+
+
+def _read_csv(path: Path) -> list[dict[str, str]]:
+    with path.open(encoding="utf-8-sig", newline="") as f:
+        reader = csv.DictReader(f, delimiter=";")
+        return list(reader)
 
 
 def _write_existing_comprovantes(path: Path) -> None:

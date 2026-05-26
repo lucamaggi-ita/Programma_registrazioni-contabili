@@ -4,7 +4,10 @@ from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
+import shutil
 from typing import Callable, Mapping, Sequence
+
+from openpyxl import load_workbook
 
 from fantozzi import run_manager
 from fantozzi.allocation import allocate_nfe_to_lancamentos
@@ -22,6 +25,7 @@ from fantozzi.dre_gerencial_provisoria import gerar_dre_gerencial_ok_provisoria
 from fantozzi.excel_diagnostics import diagnose_excel
 from fantozzi.excel_diagnostics import report_text as diagnostic_report_text
 from fantozzi.excel_diagnostics import save_report as save_diagnostic_report
+from fantozzi.excel_writer import LANCAMENTOS_SHEET
 from fantozzi.excel_writer import write_lancamentos_to_excel
 from fantozzi.fase9_decision_engine import (
     evaluate_fase9_decisions,
@@ -65,6 +69,7 @@ ETAPAS_PREVISTAS = (
     "DIAGNOSTICOS_CONCLUIDOS",
     "OPERACOES_ESPECIAIS_AUDITADAS",
     "LANCAMENTOS_MANUAIS_GERENCIAIS_APLICADOS",
+    "LANCAMENTOS_BANCA_APROVADOS_INCLUIDOS",
     "PRE_LIVRO_GERADO",
     "AUDITORIA_PRE_LIVRO_CONCLUIDA",
     "PACOTE_REVISAO_CONTABIL_GERADO",
@@ -108,6 +113,7 @@ class PipelineContext:
     fontes_xml: tuple[XmlSource, ...]
     fase9_csv_paths: tuple[Path, ...] = ()
     lancamentos_manuais_gerenciais_csv_path: Path | None = None
+    lancamentos_banca_aprovados_path: Path | None = None
     gerar_pacote_contabil_gerencial: bool = False
     lancamentos_xlsx: tuple[Path, ...] = ()
 
@@ -150,6 +156,7 @@ def reprocessar_importacao_real_provisoria(
     today: date | None = None,
     fase9_csv_path: Path | str | Sequence[Path | str] | None = None,
     lancamentos_manuais_gerenciais_csv_path: Path | str | None = None,
+    lancamentos_banca_aprovados_path: Path | str | None = None,
     gerar_pacote_contabil_gerencial: bool = False,
 ) -> ReprocessamentoResultado:
     xml_base = Path(xml_base)
@@ -162,11 +169,18 @@ def reprocessar_importacao_real_provisoria(
         if lancamentos_manuais_gerenciais_csv_path
         else None
     )
+    lancamentos_banca_path = (
+        Path(lancamentos_banca_aprovados_path)
+        if lancamentos_banca_aprovados_path
+        else None
+    )
 
     if modo == "definitivo":
         raise ReprocessamentoPipelineError(MODO_DEFINITIVO_BLOQUEADO)
     if modo != "provisorio":
         raise ReprocessamentoPipelineError(f"Modo invalido: {modo}")
+    if lancamentos_banca_path is not None:
+        _validar_lancamentos_banca_aprovados_path(lancamentos_banca_path)
 
     if dry_run:
         planned_run = run_manager.preparar_run(
@@ -221,6 +235,7 @@ def reprocessar_importacao_real_provisoria(
         fontes_xml=fontes_xml,
         fase9_csv_paths=fase9_csv_paths,
         lancamentos_manuais_gerenciais_csv_path=lancamentos_manuais_path,
+        lancamentos_banca_aprovados_path=lancamentos_banca_path,
         gerar_pacote_contabil_gerencial=gerar_pacote_contabil_gerencial,
     )
     steps = steps or default_pipeline_steps()
@@ -264,6 +279,15 @@ def reprocessar_importacao_real_provisoria(
                 context,
                 "LANCAMENTOS_MANUAIS_GERENCIAIS_APLICADOS",
                 _step_lancamentos_manuais_gerenciais,
+                arquivos_gerados,
+                avisos,
+                etapas_executadas,
+            )
+        if context.lancamentos_banca_aprovados_path:
+            _executar_step(
+                context,
+                "LANCAMENTOS_BANCA_APROVADOS_INCLUIDOS",
+                _step_lancamentos_banca_aprovados,
                 arquivos_gerados,
                 avisos,
                 etapas_executadas,
@@ -347,6 +371,10 @@ def reprocessar_importacao_real_provisoria(
     manifest.setdefault(
         "lancamentos_manuais_gerenciais",
         {"executado": False},
+    )
+    manifest.setdefault(
+        "lancamentos_banca_aprovados",
+        {"incluido": False},
     )
     run_manager.save_manifest(context.manifest_path, _json_ready(manifest))
     run_manager.add_checkpoint(context.manifest_path, "FINALIZACAO_PROVISORIA")
@@ -640,6 +668,35 @@ def _step_lancamentos_manuais_gerenciais(context: PipelineContext) -> StepResult
     )
 
 
+def _step_lancamentos_banca_aprovados(context: PipelineContext) -> StepResult:
+    input_path = context.lancamentos_banca_aprovados_path
+    if input_path is None:
+        return StepResult(
+            manifest_updates={
+                "lancamentos_banca_aprovados": {"incluido": False}
+            }
+        )
+
+    linhas_lidas = _contar_lancamentos_xlsx(input_path)
+    output_dir = context.output_run_dir / "BANCA_APROVADA"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_xlsx = output_dir / "lancamentos_banca_aprovados.xlsx"
+    if input_path.resolve() != output_xlsx.resolve():
+        shutil.copy2(input_path, output_xlsx)
+    context.lancamentos_xlsx = (*_lancamentos_xlsx(context), output_xlsx)
+    return StepResult(
+        arquivos_gerados=(output_xlsx,),
+        manifest_updates={
+            "lancamentos_banca_aprovados": {
+                "incluido": True,
+                "input_xlsx": str(input_path),
+                "output_xlsx_run": str(output_xlsx),
+                "linhas_lidas": linhas_lidas,
+            }
+        },
+    )
+
+
 def _step_gerar_pacote_revisao(context: PipelineContext) -> StepResult:
     csv_paths = tuple(
         sorted(
@@ -899,6 +956,43 @@ def _find_xml_files(pasta_path: Path) -> list[Path]:
         ),
         key=lambda path: path.name.lower(),
     )
+
+
+def _validar_lancamentos_banca_aprovados_path(path: Path) -> None:
+    if not path.exists():
+        raise ReprocessamentoPipelineError(
+            f"Excel de lancamentos banca aprovados nao encontrado: {path}"
+        )
+    if not path.is_file():
+        raise ReprocessamentoPipelineError(
+            f"Excel de lancamentos banca aprovados nao e arquivo: {path}"
+        )
+    if path.suffix.lower() != ".xlsx":
+        raise ReprocessamentoPipelineError(
+            f"Excel de lancamentos banca aprovados deve ser .xlsx: {path}"
+        )
+    if path.name.startswith("~$"):
+        raise ReprocessamentoPipelineError(
+            f"Arquivo temporario de Excel nao permitido: {path}"
+        )
+
+
+def _contar_lancamentos_xlsx(path: Path) -> int:
+    _validar_lancamentos_banca_aprovados_path(path)
+    workbook = load_workbook(path, data_only=True, read_only=True)
+    try:
+        if LANCAMENTOS_SHEET not in workbook.sheetnames:
+            raise ReprocessamentoPipelineError(
+                f"Aba {LANCAMENTOS_SHEET} ausente em: {path}"
+            )
+        sheet = workbook[LANCAMENTOS_SHEET]
+        total = 0
+        for row in sheet.iter_rows(min_row=2, values_only=True):
+            if any(value not in (None, "") for value in row):
+                total += 1
+        return total
+    finally:
+        workbook.close()
 
 
 def _lancamentos_xlsx(context: PipelineContext) -> tuple[Path, ...]:
