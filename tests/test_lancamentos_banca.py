@@ -555,14 +555,74 @@ def test_conta_corrente_csv_unica_mantem_coelba_embasa_vivo_da(tmp_path):
     assert fornecedores == {"DA COELBA 7014914336", "EMBASA 142698660", "DA VIVO-BA 20304230426"}
 
 
-def test_data_divergente_um_dia_nao_deduplica_e_sinaliza(tmp_path):
+def test_data_divergente_tres_dias_deduplica_comprovantes_conta_corrente(tmp_path):
     comprovantes_csv = _write_comprovantes_csv(
         tmp_path / "comprovantes_classificados.csv",
-        [_csv_comprovante_row("M A BRITO COMERCIO LTDA", "2026-02-05", "100.00", "6.01.001", "Honorarios")],
+        [_csv_comprovante_row("EUDES BRAGA NASCIMENTO", "2026-04-03", "175.00", "6.01.001", "Servicos")],
     )
     conta_corrente_csv = _write_conta_corrente_csv(
         tmp_path / "conta_corrente_classificados.csv",
-        [_csv_conta_corrente_row("PIX M A BRITO", "M A BRITO COMERCIO LTDA", "2026-02-06", "-100.00", "6.01.001", "Honorarios")],
+        [_csv_conta_corrente_row("PIX EUDES", "EUDES BRAGA NASCIMENTO", "2026-04-06", "-175.00", "6.01.001", "Servicos")],
+    )
+    comprovantes_xlsx, conta_corrente_xlsx = _empty_xlsx_pair(tmp_path)
+
+    output = gerar_lancamentos_banca_aprovados(
+        comprovantes_xlsx,
+        conta_corrente_xlsx,
+        tmp_path / "out.xlsx",
+        date(2026, 4, 1),
+        date(2026, 4, 30),
+        comprovantes_csv=comprovantes_csv,
+        conta_corrente_csv=conta_corrente_csv,
+    )
+
+    rows = _lancamentos(output)
+    assert len(rows) == 1
+    assert rows[0]["origem"] == "COMPROVANTES_CSV"
+    rejeitado = next(
+        row
+        for row in _rejeitados(tmp_path)
+        if row["motivo"] == "DUPLICADO_BANCARIO_DATA_DIVERGENTE"
+    )
+    assert rejeitado["fonte"] == "CONTA_CORRENTE_CSV"
+    assert rejeitado["fonte_prioritaria"] == "COMPROVANTES_CSV"
+    manifest = json.loads((tmp_path / MANIFEST_NAME).read_text(encoding="utf-8"))
+    assert manifest["deduplicacao"]["duplicados_bancarios_data_divergente_excluidos"] == 1
+
+
+def test_data_divergente_dois_dias_deduplica(tmp_path):
+    comprovantes_csv = _write_comprovantes_csv(
+        tmp_path / "comprovantes_classificados.csv",
+        [_csv_comprovante_row("FIBRANET BA TELECOM LTDA", "2026-02-16", "99.99", "6.01.001", "Internet")],
+    )
+    conta_corrente_csv = _write_conta_corrente_csv(
+        tmp_path / "conta_corrente_classificados.csv",
+        [_csv_conta_corrente_row("PIX FIBRANET", "FIBRANET BA TELECOM LTDA", "2026-02-18", "-99.99", "6.01.001", "Internet")],
+    )
+    comprovantes_xlsx, conta_corrente_xlsx = _empty_xlsx_pair(tmp_path)
+
+    output = gerar_lancamentos_banca_aprovados(
+        comprovantes_xlsx,
+        conta_corrente_xlsx,
+        tmp_path / "out.xlsx",
+        date(2026, 2, 1),
+        date(2026, 2, 28),
+        comprovantes_csv=comprovantes_csv,
+        conta_corrente_csv=conta_corrente_csv,
+    )
+
+    assert len(_lancamentos(output)) == 1
+    assert _rejeitados(tmp_path)[0]["motivo"] == "DUPLICADO_BANCARIO_DATA_DIVERGENTE"
+
+
+def test_data_divergente_quatro_dias_nao_deduplica(tmp_path):
+    comprovantes_csv = _write_comprovantes_csv(
+        tmp_path / "comprovantes_classificados.csv",
+        [_csv_comprovante_row("FORNECEDOR DATA DIVERGENTE LTDA", "2026-02-05", "100.00", "6.01.001", "Honorarios")],
+    )
+    conta_corrente_csv = _write_conta_corrente_csv(
+        tmp_path / "conta_corrente_classificados.csv",
+        [_csv_conta_corrente_row("PIX DATA DIVERGENTE", "FORNECEDOR DATA DIVERGENTE LTDA", "2026-02-09", "-100.00", "6.01.001", "Honorarios")],
     )
     comprovantes_xlsx, conta_corrente_xlsx = _empty_xlsx_pair(tmp_path)
 
@@ -577,10 +637,167 @@ def test_data_divergente_um_dia_nao_deduplica_e_sinaliza(tmp_path):
     )
 
     assert len(_lancamentos(output)) == 2
-    possivel = next(row for row in _rejeitados(tmp_path) if row["motivo"] == "POSSIVEL_DUPLICADO_DATA_DIVERGENTE")
+    assert [
+        row for row in _rejeitados(tmp_path)
+        if row["motivo"] == "DUPLICADO_BANCARIO_DATA_DIVERGENTE"
+    ] == []
+
+
+def test_data_divergente_mesma_fonte_nao_deduplica(tmp_path):
+    comprovantes_csv = _write_comprovantes_csv(
+        tmp_path / "comprovantes_classificados.csv",
+        [
+            _csv_comprovante_row("FORNECEDOR REPETIDO LTDA", "2026-02-05", "100.00", "6.01.001", "Honorarios"),
+            _csv_comprovante_row("FORNECEDOR REPETIDO LTDA", "2026-02-07", "100.00", "6.01.001", "Honorarios"),
+        ],
+    )
+    comprovantes_xlsx, conta_corrente_xlsx = _empty_xlsx_pair(tmp_path)
+
+    output = gerar_lancamentos_banca_aprovados(
+        comprovantes_xlsx,
+        conta_corrente_xlsx,
+        tmp_path / "out.xlsx",
+        date(2026, 2, 1),
+        date(2026, 2, 28),
+        comprovantes_csv=comprovantes_csv,
+    )
+
+    assert len(_lancamentos(output)) == 2
+
+
+def test_data_divergente_beneficiario_generico_nao_deduplica(tmp_path):
+    comprovantes_csv = _write_comprovantes_csv(
+        tmp_path / "comprovantes_classificados.csv",
+        [_csv_comprovante_row("PIX ENVIADO", "2026-02-05", "100.00", "6.01.001", "Honorarios")],
+    )
+    conta_corrente_csv = _write_conta_corrente_csv(
+        tmp_path / "conta_corrente_classificados.csv",
+        [_csv_conta_corrente_row("PIX ENVIADO", "PIX ENVIADO", "2026-02-07", "-100.00", "6.01.001", "Honorarios")],
+    )
+    comprovantes_xlsx, conta_corrente_xlsx = _empty_xlsx_pair(tmp_path)
+
+    output = gerar_lancamentos_banca_aprovados(
+        comprovantes_xlsx,
+        conta_corrente_xlsx,
+        tmp_path / "out.xlsx",
+        date(2026, 2, 1),
+        date(2026, 2, 28),
+        comprovantes_csv=comprovantes_csv,
+        conta_corrente_csv=conta_corrente_csv,
+    )
+
+    assert len(_lancamentos(output)) == 2
+
+
+def test_data_divergente_valor_diferente_nao_deduplica(tmp_path):
+    comprovantes_csv = _write_comprovantes_csv(
+        tmp_path / "comprovantes_classificados.csv",
+        [_csv_comprovante_row("FORNECEDOR VALOR DIFERENTE LTDA", "2026-02-05", "100.00", "6.01.001", "Honorarios")],
+    )
+    conta_corrente_csv = _write_conta_corrente_csv(
+        tmp_path / "conta_corrente_classificados.csv",
+        [_csv_conta_corrente_row("PIX VALOR DIFERENTE", "FORNECEDOR VALOR DIFERENTE LTDA", "2026-02-07", "-101.00", "6.01.001", "Honorarios")],
+    )
+    comprovantes_xlsx, conta_corrente_xlsx = _empty_xlsx_pair(tmp_path)
+
+    output = gerar_lancamentos_banca_aprovados(
+        comprovantes_xlsx,
+        conta_corrente_xlsx,
+        tmp_path / "out.xlsx",
+        date(2026, 2, 1),
+        date(2026, 2, 28),
+        comprovantes_csv=comprovantes_csv,
+        conta_corrente_csv=conta_corrente_csv,
+    )
+
+    assert len(_lancamentos(output)) == 2
+
+
+def test_data_divergente_ambiguo_nao_deduplica_e_sinaliza(tmp_path):
+    comprovantes_csv = _write_comprovantes_csv(
+        tmp_path / "comprovantes_classificados.csv",
+        [
+            _csv_comprovante_row("FORNECEDOR AMBIGUO LTDA", "2026-02-05", "100.00", "6.01.001", "Honorarios"),
+            _csv_comprovante_row("FORNECEDOR AMBIGUO LTDA", "2026-02-06", "100.00", "6.01.001", "Honorarios"),
+        ],
+    )
+    conta_corrente_csv = _write_conta_corrente_csv(
+        tmp_path / "conta_corrente_classificados.csv",
+        [_csv_conta_corrente_row("PIX AMBIGUO", "FORNECEDOR AMBIGUO LTDA", "2026-02-08", "-100.00", "6.01.001", "Honorarios")],
+    )
+    comprovantes_xlsx, conta_corrente_xlsx = _empty_xlsx_pair(tmp_path)
+
+    output = gerar_lancamentos_banca_aprovados(
+        comprovantes_xlsx,
+        conta_corrente_xlsx,
+        tmp_path / "out.xlsx",
+        date(2026, 2, 1),
+        date(2026, 2, 28),
+        comprovantes_csv=comprovantes_csv,
+        conta_corrente_csv=conta_corrente_csv,
+    )
+
+    assert len(_lancamentos(output)) == 3
+    possivel = next(
+        row
+        for row in _rejeitados(tmp_path)
+        if row["motivo"] == "POSSIVEL_DUPLICADO_DATA_DIVERGENTE"
+    )
     assert possivel["incluido"] == "true"
     manifest = json.loads((tmp_path / MANIFEST_NAME).read_text(encoding="utf-8"))
-    assert manifest["deduplicacao"]["possiveis_duplicados_data_divergente"] == 1
+    assert manifest["deduplicacao"]["ambiguos_data_divergente"] == 1
+
+
+def test_m_a_brito_duplicado_bancario_pontual_e_excluido(tmp_path):
+    comprovantes_csv = _write_comprovantes_csv(
+        tmp_path / "comprovantes_classificados.csv",
+        [
+            _csv_comprovante_row(
+                "M A BRITO COMERCIO LTDA",
+                "2026-02-17",
+                "1000.00",
+                "4.01.013",
+                "Gas de Cozinha",
+            )
+        ],
+    )
+    conta_corrente_csv = _write_conta_corrente_csv(
+        tmp_path / "conta_corrente_classificados.csv",
+        [
+            _csv_conta_corrente_row(
+                "PIX ENVIADO",
+                "M. A BRITO COMERCIO LTDA",
+                "2026-02-18",
+                "-1000.00",
+                "4.01.013",
+                "Gas de Cozinha",
+            )
+        ],
+    )
+    comprovantes_xlsx, conta_corrente_xlsx = _empty_xlsx_pair(tmp_path)
+
+    output = gerar_lancamentos_banca_aprovados(
+        comprovantes_xlsx,
+        conta_corrente_xlsx,
+        tmp_path / "out.xlsx",
+        date(2026, 2, 1),
+        date(2026, 2, 28),
+        comprovantes_csv=comprovantes_csv,
+        conta_corrente_csv=conta_corrente_csv,
+    )
+
+    rows = _lancamentos(output)
+    assert len(rows) == 1
+    assert rows[0]["origem"] == "COMPROVANTES_CSV"
+    rejeitado = next(
+        row
+        for row in _rejeitados(tmp_path)
+        if row["motivo"] == "DUPLICADO_BANCARIO_DATA_DIVERGENTE"
+    )
+    assert rejeitado["fonte"] == "CONTA_CORRENTE_CSV"
+    assert rejeitado["fonte_prioritaria"] == "COMPROVANTES_CSV"
+    manifest = json.loads((tmp_path / MANIFEST_NAME).read_text(encoding="utf-8"))
+    assert manifest["deduplicacao"]["duplicados_excluidos"] == 1
 
 
 def test_mesma_data_mesmo_valor_beneficiarios_diferentes_nao_deduplica(tmp_path):

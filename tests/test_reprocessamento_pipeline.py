@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import json
 from datetime import date
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,7 @@ from openpyxl import Workbook
 
 from fantozzi.cli import build_parser
 from fantozzi.excel_writer import HEADERS, LANCAMENTOS_SHEET
+from fantozzi.models import Lancamento
 from fantozzi.reprocessamento_pipeline import (
     MODO_DEFINITIVO_BLOQUEADO,
     ETAPAS_PREVISTAS,
@@ -17,6 +19,7 @@ from fantozzi.reprocessamento_pipeline import (
     PipelineSteps,
     ReprocessamentoPipelineError,
     StepResult,
+    _aplicar_excecoes_contabeis_pontuais,
     _step_gerar_pacote_revisao,
     descobrir_fontes_xml,
     reprocessar_importacao_real_provisoria,
@@ -200,6 +203,72 @@ def _run_pipeline_com_fase9(tmp_path: Path, fase9_csv_path):
         fase9_csv_path=fase9_csv_path,
     )
     return result, calls, saida_output, saida_reports
+
+
+def _lancamento_xml(
+    *,
+    fornecedor: str,
+    documento: str,
+    valor: Decimal,
+    descricao: str,
+    origem: str = "XML_NFE",
+    tipo_documento: str = "XML_NFE",
+) -> Lancamento:
+    return Lancamento(
+        data_documento=date(2026, 2, 17),
+        competencia="2026-02",
+        cnpj_empresa="08884180000123",
+        nome_empresa="AMAMI RESTAURANTE LTDA",
+        fornecedor_ou_favorecido=fornecedor,
+        cnpj_cpf_favorecido="48901288000100",
+        documento=documento,
+        tipo_documento=tipo_documento,
+        conta_id="4.01.013",
+        conta_nome="Gas de Cozinha",
+        grupo_conta="Ocupacao, Utilidades e Funcionamento",
+        descricao_itens=descricao,
+        valor=valor,
+        origem=origem,
+        arquivo_origem="Database_Dev/XML_fatture_acquisto/08884180000123/xml/nfe.xml",
+        chave_origem="29260248901288000100550010000026841126527091",
+        hash_registro="hash",
+        status_revisao="OK",
+    )
+
+
+def test_excecao_pontual_m_a_brito_remove_apenas_xml_2684_glp_p45():
+    excecao = _lancamento_xml(
+        fornecedor="M. A BRITO COMERCIO LTDA",
+        documento="2684",
+        valor=Decimal("12000.00"),
+        descricao="GLP EM CILINDRO P45 (12000.00)",
+    )
+    pagamento_banca = _lancamento_xml(
+        fornecedor="M A BRITO COMERCIO LTDA",
+        documento="PIX 1000",
+        valor=Decimal("1000.00"),
+        descricao="PIX pagamento gas",
+        origem="COMPROVANTES_CSV",
+        tipo_documento="BANCA_COMPROVANTE_CSV",
+    )
+    outro_xml = _lancamento_xml(
+        fornecedor="M A BRITO COMERCIO LTDA",
+        documento="2685",
+        valor=Decimal("12000.00"),
+        descricao="GLP EM CILINDRO P45 (12000.00)",
+    )
+
+    mantidos, excluidos = _aplicar_excecoes_contabeis_pontuais(
+        [excecao, pagamento_banca, outro_xml]
+    )
+
+    assert mantidos == [pagamento_banca, outro_xml]
+    assert len(excluidos) == 1
+    assert (
+        excluidos[0]["motivo"]
+        == "EXCECAO_CONTABIL_PONTUAL_M_A_BRITO_USAR_PAGAMENTOS"
+    )
+    assert excluidos[0]["documento"] == "2684"
 
 
 def test_pipeline_provisoria_cria_run(tmp_path):

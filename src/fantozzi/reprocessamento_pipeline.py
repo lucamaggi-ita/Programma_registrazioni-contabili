@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
+import csv
 from pathlib import Path
 import shutil
 from typing import Callable, Mapping, Sequence
@@ -14,6 +15,7 @@ from fantozzi.allocation import allocate_nfe_to_lancamentos
 from fantozzi.auditoria_relatorios_gerenciais_ok import (
     auditar_relatorios_gerenciais_ok_provisorios,
 )
+from fantozzi.banking.payment_rules import normalize_match_text
 from fantozzi.chart_of_accounts import ChartOfAccounts
 from fantozzi.classification_candidates import (
     generate_classification_candidates_report,
@@ -62,6 +64,8 @@ AVISO_FASE9_BLOQUEADA = (
     "Fase 9 bloqueada. Revisao contabil real pendente. "
     "Relatorios gerados sao provisorios."
 )
+EXCECAO_M_A_BRITO_MOTIVO = "EXCECAO_CONTABIL_PONTUAL_M_A_BRITO_USAR_PAGAMENTOS"
+EXCECOES_CONTABEIS_PONTUAIS_CSV = "excecoes_contabeis_pontuais.csv"
 
 ETAPAS_PREVISTAS = (
     "CRIACAO_DA_RUN",
@@ -496,8 +500,10 @@ def _step_importar_xml(context: PipelineContext) -> StepResult:
     )
     arquivos: list[Path] = []
     avisos: list[str] = []
+    excecoes: list[dict[str, object]] = []
     xml_processados = 0
     lancamentos_gerados = 0
+    lancamentos_brutos = 0
     valor_total = Decimal("0.00")
 
     for fonte in context.fontes_xml:
@@ -524,8 +530,13 @@ def _step_importar_xml(context: PipelineContext) -> StepResult:
                 continue
             xml_processados += 1
             valor_total += nfe.valor_total
-            lancamentos_gerados += len(file_lancamentos)
-            lancamentos.extend(file_lancamentos)
+            lancamentos_brutos += len(file_lancamentos)
+            lancamentos_filtrados, excecoes_file = _aplicar_excecoes_contabeis_pontuais(
+                file_lancamentos
+            )
+            lancamentos_gerados += len(lancamentos_filtrados)
+            lancamentos.extend(lancamentos_filtrados)
+            excecoes.extend(excecoes_file)
 
         excel_path = (
             context.output_run_dir
@@ -538,15 +549,114 @@ def _step_importar_xml(context: PipelineContext) -> StepResult:
     if xml_processados == 0:
         raise ReprocessamentoPipelineError("Nenhum XML valido importado.")
 
+    manifest_updates: dict[str, object] = {
+        "excecoes_contabeis_pontuais": {
+            "executado": True,
+            "linhas_excluidas": len(excecoes),
+            "motivos": sorted({str(row["motivo"]) for row in excecoes}),
+            "observacao": (
+                "Excecoes nominativas e nao replicaveis. Nao cria regra geral "
+                "de preferencia entre XML e banca."
+            ),
+        }
+    }
+    if excecoes:
+        excecoes_path = context.reports_run_dir / EXCECOES_CONTABEIS_PONTUAIS_CSV
+        _write_excecoes_contabeis_pontuais(excecoes_path, excecoes)
+        arquivos.append(excecoes_path)
+        manifest_updates["excecoes_contabeis_pontuais"]["csv"] = str(excecoes_path)
+
     return StepResult(
         arquivos_gerados=tuple(arquivos),
         totais={
             "xml_processados": xml_processados,
             "lancamentos_gerados": lancamentos_gerados,
+            "lancamentos_xml_brutos": lancamentos_brutos,
+            "lancamentos_xml_excluidos_pontuais": len(excecoes),
             "valor_total_importado": valor_total,
         },
         avisos=tuple(avisos),
+        manifest_updates=manifest_updates,
     )
+
+
+def _aplicar_excecoes_contabeis_pontuais(
+    lancamentos: Sequence[object],
+) -> tuple[list[object], list[dict[str, object]]]:
+    mantidos: list[object] = []
+    excluidos: list[dict[str, object]] = []
+    for lancamento in lancamentos:
+        if _is_excecao_m_a_brito_xml_usar_pagamentos(lancamento):
+            excluidos.append(_excecao_row(lancamento))
+            continue
+        mantidos.append(lancamento)
+    return mantidos, excluidos
+
+
+def _is_excecao_m_a_brito_xml_usar_pagamentos(lancamento: object) -> bool:
+    if _text_attr(lancamento, "origem") != "XML_NFE":
+        return False
+    if _text_attr(lancamento, "tipo_documento") != "XML_NFE":
+        return False
+    if normalize_match_text(_text_attr(lancamento, "fornecedor_ou_favorecido")) != "M A BRITO COMERCIO LTDA":
+        return False
+    if _text_attr(lancamento, "documento") != "2684":
+        return False
+    if _text_attr(lancamento, "conta_id") != "4.01.013":
+        return False
+    if _decimal_attr(lancamento, "valor").copy_abs().quantize(Decimal("0.01")) != Decimal("12000.00"):
+        return False
+    descricao = normalize_match_text(_text_attr(lancamento, "descricao_itens"))
+    return "GLP" in descricao and "P45" in descricao
+
+
+def _excecao_row(lancamento: object) -> dict[str, object]:
+    return {
+        "motivo": EXCECAO_M_A_BRITO_MOTIVO,
+        "origem": _text_attr(lancamento, "origem"),
+        "tipo_documento": _text_attr(lancamento, "tipo_documento"),
+        "fornecedor": _text_attr(lancamento, "fornecedor_ou_favorecido"),
+        "documento": _text_attr(lancamento, "documento"),
+        "valor": f"{_decimal_attr(lancamento, 'valor').quantize(Decimal('0.01')):.2f}",
+        "descricao": _text_attr(lancamento, "descricao_itens"),
+        "conta_id": _text_attr(lancamento, "conta_id"),
+        "arquivo_origem": _text_attr(lancamento, "arquivo_origem"),
+        "chave_origem": _text_attr(lancamento, "chave_origem"),
+    }
+
+
+def _write_excecoes_contabeis_pontuais(
+    path: Path,
+    rows: Sequence[Mapping[str, object]],
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames = [
+        "motivo",
+        "origem",
+        "tipo_documento",
+        "fornecedor",
+        "documento",
+        "valor",
+        "descricao",
+        "conta_id",
+        "arquivo_origem",
+        "chave_origem",
+    ]
+    with path.open("w", encoding="utf-8-sig", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=fieldnames, delimiter=";")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def _text_attr(lancamento: object, attr: str) -> str:
+    return str(getattr(lancamento, attr, "") or "").strip()
+
+
+def _decimal_attr(lancamento: object, attr: str) -> Decimal:
+    value = getattr(lancamento, attr, Decimal("0"))
+    if isinstance(value, Decimal):
+        return value
+    return Decimal(str(value or "0"))
 
 
 def _step_gerar_diagnosticos(context: PipelineContext) -> StepResult:

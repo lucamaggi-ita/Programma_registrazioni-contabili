@@ -95,3 +95,56 @@ L'audit del YAML si esegue con:
 ```powershell
 .\.venv\Scripts\python.exe -m fantozzi.cli auditar-regras-comprovantes --regras config\regras_classificacao_comprovantes.yaml
 ```
+
+---
+
+## Eccezione contabile puntuale: M A BRITO NF-e 2684
+
+Decisione adottata nella fase `FZ-GIORNALE-DRE-MULTIFONTE-004B`.
+
+Regola generale di governance:
+
+- la fonte XML/NF-e prevale normalmente per i costi documentati;
+- i pagamenti bancari servono come fonte DRE solo quando rappresentano uscite non già coperte o quando esiste decisione esplicita;
+- il pagamento bancario non deve duplicare automaticamente una voce DRE già rappresentata da XML/NF-e;
+- non esiste una regola automatica "preferire banca a XML".
+
+Eccezione nominativa, unica e non replicabile:
+
+| Campo | Valore |
+|---|---|
+| Fornitore | `M A BRITO COMERCIO LTDA` |
+| Documento/NF | `2684` |
+| Valore | `12000.00` |
+| Descrizione | `GLP P45` |
+| Motivo | `EXCECAO_CONTABIL_PONTUAL_M_A_BRITO_USAR_PAGAMENTOS` |
+
+Questa eccezione esclude dal DRE la riga XML/NF-e specifica sopra e mantiene nel DRE i pagamenti bancari M A BRITO approvati/deduplicati.
+
+## Deduplica bancaria cross-fonte con data divergente
+
+Decisione adottata nella fase `FZ-GIORNALE-DRE-MULTIFONTE-004C`.
+
+Questa regola riguarda solo il bridge bancario e non modifica la prevalenza XML/NF-e. Non deduplica XML x banca e non crea eccezioni nominative.
+
+Una riga `CONTA_CORRENTE_CSV` e' esclusa con motivo `DUPLICADO_BANCARIO_DATA_DIVERGENTE` quando esiste un solo match non ambiguo in `COMPROVANTES_CSV` con:
+
+| Campo | Valore |
+|---|---|
+| Fonte prioritaria | `COMPROVANTES_CSV` |
+| Fonte esclusa | `CONTA_CORRENTE_CSV` |
+| Data | divergente da 1 a 3 giorni |
+| Beneficiario | normalizzato uguale e non generico |
+| Valore | valore assoluto identico |
+| CNPJ azienda | uguale quando presente in entrambe le fonti |
+| Conta | `conta_id` uguale |
+
+Se ci sono piu' candidati concorrenti nella finestra 1-3 giorni, la riga non viene esclusa automaticamente: resta inclusa e viene segnalata come `POSSIVEL_DUPLICADO_DATA_DIVERGENTE`.
+
+La regola non si applica a righe della stessa fonte, beneficiari vuoti/generici, valori diversi, conti diversi, entrate bancarie o fonti diverse da `COMPROVANTES_CSV` x `CONTA_CORRENTE_CSV`.
+
+Divieti:
+
+- non trasformare questo caso in regola automatica per M A BRITO;
+- non estendere questa eccezione ad altri documentos, importi, descrizioni o fornitori;
+- non usare questa eccezione per derivare una gerarchia generale banca > XML.

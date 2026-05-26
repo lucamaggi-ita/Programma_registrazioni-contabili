@@ -633,39 +633,158 @@ def _deduplicate_lancamentos(
                 chave_dedup=key.as_text(),
                 increment_source=True,
             )
-            manifest["deduplicacao"]["duplicados_excluidos"] += 1
-            manifest["deduplicacao"]["valor_duplicado_excluido"] = round(
-                float(manifest["deduplicacao"]["valor_duplicado_excluido"])
+            _registrar_duplicado_excluido(manifest, lancamento)
+            continue
+
+        data_divergente_matches = [
+            accepted_lancamento
+            for accepted_lancamento in accepted
+            if _is_duplicado_bancario_data_divergente(accepted_lancamento, lancamento)
+        ]
+        if len(data_divergente_matches) == 1:
+            winner = data_divergente_matches[0]
+            _reject_lancamento(
+                rejeitados,
+                manifest,
+                lancamento,
+                motivo="DUPLICADO_BANCARIO_DATA_DIVERGENTE",
+                fonte_prioritaria=winner.origem,
+                chave_dedup=_data_divergente_dedup_key(winner, lancamento),
+                increment_source=True,
+            )
+            _registrar_duplicado_excluido(manifest, lancamento)
+            manifest["deduplicacao"]["duplicados_bancarios_data_divergente_excluidos"] += 1
+            manifest["deduplicacao"]["valor_duplicado_bancario_data_divergente_excluido"] = round(
+                float(
+                    manifest["deduplicacao"][
+                        "valor_duplicado_bancario_data_divergente_excluido"
+                    ]
+                )
                 + float(abs(lancamento.valor)),
                 2,
             )
             continue
 
-        for accepted_lancamento in accepted:
-            possible_key = _dedup_key(accepted_lancamento)
-            if (
-                possible_key.valor_abs == key.valor_abs
-                and possible_key.beneficiario_normalizado == key.beneficiario_normalizado
-                and abs((accepted_lancamento.data_documento - lancamento.data_documento).days) == 1
-            ):
-                _reject_lancamento(
-                    rejeitados,
-                    manifest,
-                    lancamento,
-                    motivo="POSSIVEL_DUPLICADO_DATA_DIVERGENTE",
-                    fonte_prioritaria=accepted_lancamento.origem,
-                    chave_dedup=key.as_text(),
-                    increment_source=False,
-                    incluido=True,
-                )
-                manifest["deduplicacao"]["possiveis_duplicados_data_divergente"] += 1
-                break
+        possible_data_divergente = [
+            accepted_lancamento
+            for accepted_lancamento in accepted
+            if _is_possivel_duplicado_data_divergente(accepted_lancamento, lancamento)
+        ]
+        if possible_data_divergente:
+            winner = possible_data_divergente[0]
+            if len(possible_data_divergente) > 1:
+                manifest["deduplicacao"]["ambiguos_data_divergente"] += 1
+            _reject_lancamento(
+                rejeitados,
+                manifest,
+                lancamento,
+                motivo="POSSIVEL_DUPLICADO_DATA_DIVERGENTE",
+                fonte_prioritaria=winner.origem,
+                chave_dedup=_data_divergente_dedup_key(winner, lancamento),
+                increment_source=False,
+                incluido=True,
+            )
+            manifest["deduplicacao"]["possiveis_duplicados_data_divergente"] += 1
 
         by_key[key] = lancamento
         accepted.append(lancamento)
 
     _refresh_source_included_counts(manifest, accepted)
     return accepted
+
+
+def _registrar_duplicado_excluido(
+    manifest: dict[str, object],
+    lancamento: Lancamento,
+) -> None:
+    manifest["deduplicacao"]["duplicados_excluidos"] += 1
+    manifest["deduplicacao"]["valor_duplicado_excluido"] = round(
+        float(manifest["deduplicacao"]["valor_duplicado_excluido"])
+        + float(abs(lancamento.valor)),
+        2,
+    )
+
+
+def _is_duplicado_bancario_data_divergente(
+    prioritaria: Lancamento,
+    candidata: Lancamento,
+) -> bool:
+    return (
+        prioritaria.origem == "COMPROVANTES_CSV"
+        and candidata.origem == "CONTA_CORRENTE_CSV"
+        and _is_possivel_duplicado_data_divergente(prioritaria, candidata)
+        and _same_cnpj_when_present(prioritaria, candidata)
+        and _conta_compativel(prioritaria, candidata)
+    )
+
+
+def _is_possivel_duplicado_data_divergente(
+    prioritaria: Lancamento,
+    candidata: Lancamento,
+) -> bool:
+    beneficiario = normalize_match_text(prioritaria.fornecedor_ou_favorecido)
+    return (
+        prioritaria.origem != candidata.origem
+        and beneficiario
+        and beneficiario == normalize_match_text(candidata.fornecedor_ou_favorecido)
+        and not _beneficiario_generico(beneficiario)
+        and _valor_abs(prioritaria) == _valor_abs(candidata)
+        and 1 <= abs((prioritaria.data_documento - candidata.data_documento).days) <= 3
+        and prioritaria.valor > 0
+        and candidata.valor > 0
+    )
+
+
+def _same_cnpj_when_present(
+    prioritaria: Lancamento,
+    candidata: Lancamento,
+) -> bool:
+    cnpj_prioritaria = normalize_match_text(prioritaria.cnpj_empresa)
+    cnpj_candidata = normalize_match_text(candidata.cnpj_empresa)
+    return not cnpj_prioritaria or not cnpj_candidata or cnpj_prioritaria == cnpj_candidata
+
+
+def _conta_compativel(
+    prioritaria: Lancamento,
+    candidata: Lancamento,
+) -> bool:
+    return bool(prioritaria.conta_id and prioritaria.conta_id == candidata.conta_id)
+
+
+def _beneficiario_generico(beneficiario_normalizado: str) -> bool:
+    return beneficiario_normalizado in {
+        "PAGAMENTO",
+        "PIX",
+        "PIX ENVIADO",
+        "TRANSFERENCIA",
+        "TRANSFERENCIA PIX",
+        "TED",
+        "DOC",
+        "FORNECEDOR",
+        "FAVORECIDO",
+    }
+
+
+def _valor_abs(lancamento: Lancamento) -> Decimal:
+    return abs(lancamento.valor).quantize(Decimal("0.01"))
+
+
+def _data_divergente_dedup_key(
+    prioritaria: Lancamento,
+    candidata: Lancamento,
+) -> str:
+    return "|".join(
+        [
+            "tipo=data_divergente",
+            f"fonte_prioritaria={prioritaria.origem}",
+            f"fonte_secundaria={candidata.origem}",
+            f"data_prioritaria={prioritaria.data_documento.isoformat()}",
+            f"data_secundaria={candidata.data_documento.isoformat()}",
+            f"valor_abs={_valor_abs(candidata):.2f}",
+            f"beneficiario={normalize_match_text(candidata.fornecedor_ou_favorecido)}",
+            f"conta_id={candidata.conta_id}",
+        ]
+    )
 
 
 def _dedup_key(lancamento: Lancamento) -> _DedupKey:
@@ -1053,7 +1172,17 @@ def _base_manifest(
         "deduplicacao": {
             "duplicados_excluidos": 0,
             "valor_duplicado_excluido": 0.0,
+            "duplicados_bancarios_data_divergente_excluidos": 0,
+            "valor_duplicado_bancario_data_divergente_excluido": 0.0,
             "possiveis_duplicados_data_divergente": 0,
+            "ambiguos_data_divergente": 0,
+            "criterio_data_divergente": {
+                "fontes": "COMPROVANTES_CSV > CONTA_CORRENTE_CSV",
+                "delta_dias": "1-3",
+                "cnpj": "comparado quando presente nas duas fontes",
+                "conta": "conta_id igual",
+                "ambiguidade": "nao exclui quando ha multiplos matches",
+            },
         },
         "output_xlsx": str(output_xlsx),
     }
