@@ -155,13 +155,13 @@ DEFAULT_REGRAS_COMPROVANTES = (
 )
 DEFAULT_MAPEAMENTO_DRE_PATH = PROJECT_ROOT / "config" / "mapeamento_dre.yaml"
 DEFAULT_TEMPLATE_MANUAIS_PATH = (
-    PROJECT_ROOT / "Database_Dev" / "_templates" / "lancamentos_manuais_gerenciais_template.xlsx"
+    PROJECT_ROOT / "Database_Dev" / "Registrazioni_manuali" / "registrazioni_manuali_base.xlsx"
 )
 DEFAULT_REGISTRAZIONI_MANUALI_BASE = (
     PROJECT_ROOT / "Database_Dev" / "Registrazioni_manuali" / "registrazioni_manuali_base.xlsx"
 )
 DEFAULT_TEMPLATE_MANUAIS_SAIDA_CSV = (
-    PROJECT_ROOT / "Database_Dev" / "_templates" / "lancamentos_manuais_gerenciais_tecnico.csv"
+    PROJECT_ROOT / "Database_Dev" / "Registrazioni_manuali" / "registrazioni_manuali_tecnico.csv"
 )
 DEFAULT_XML_BASE = PROJECT_ROOT / "Database_Dev" / "XML_fatture_acquisto"
 DEFAULT_OUTPUT_IMPORTACAO_REAL = PROJECT_ROOT / "output" / "importacao_real"
