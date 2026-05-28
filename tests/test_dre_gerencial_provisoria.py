@@ -110,6 +110,101 @@ def test_separa_contas_sem_mapeamento(tmp_path):
     assert sheet["A2"].value == "9.99.999"
 
 
+def test_manual_com_contropartida_tecnica_nao_gera_mapeamento_incompleto(tmp_path):
+    excel_path = tmp_path / "manual" / "lancamentos.xlsx"
+    write_lancamentos_to_excel(
+        excel_path,
+        [
+            _lancamento(
+                "manual-hortifruti",
+                conta_id="2.02.008",
+                conta_nome="Hortifruti",
+                valor=Decimal("25.30"),
+                origem="MANUAL_GERENCIAL",
+                tipo_documento="MANUAL_GERENCIAL",
+                tipo_lancamento="MANUAL_GERENCIAL_DEBITO_TOTALIZAVEL",
+            ),
+            _lancamento(
+                "manual-hortifruti-tecnica",
+                conta_id="99.99.998",
+                conta_nome="Contrapartida Tecnica Lancamentos Manuais",
+                valor=Decimal("25.30"),
+                origem="MANUAL_GERENCIAL",
+                tipo_documento="MANUAL_GERENCIAL",
+                tipo_lancamento="MANUAL_GERENCIAL_CREDITO",
+            ),
+            _lancamento(
+                "manual-combustivel",
+                conta_id="8.03.001",
+                conta_nome="Combustivel",
+                valor=Decimal("100.00"),
+                origem="MANUAL_GERENCIAL",
+                tipo_documento="MANUAL_GERENCIAL",
+                tipo_lancamento="MANUAL_GERENCIAL_DEBITO_TOTALIZAVEL",
+            ),
+            _lancamento(
+                "manual-combustivel-tecnica",
+                conta_id="99.99.998",
+                conta_nome="Contrapartida Tecnica Lancamentos Manuais",
+                valor=Decimal("100.00"),
+                origem="MANUAL_GERENCIAL",
+                tipo_documento="MANUAL_GERENCIAL",
+                tipo_lancamento="MANUAL_GERENCIAL_CREDITO",
+            ),
+        ],
+    )
+    xlsx_path = tmp_path / "dre.xlsx"
+    report_path = tmp_path / "dre.txt"
+
+    result = gerar_dre_gerencial_ok_provisoria(
+        [excel_path], _save_mapping(tmp_path), xlsx_path, report_path
+    )
+
+    workbook = load_workbook(xlsx_path, data_only=True)
+    dre_geral = _sheet_rows(workbook, DRE_GERAL_SHEET)
+    base_rows = _sheet_rows(workbook, BASE_OK_DRE_SHEET)
+    sem_mapeamento = _sheet_rows(workbook, CONTAS_SEM_MAPEAMENTO_SHEET)
+    report_text = report_path.read_text(encoding="utf-8")
+
+    assert result.status_dre == "OK_PROVISORIO"
+    assert result.quantidade_contas_sem_mapeamento == 0
+    assert result.valor_total_sem_mapeamento == Decimal("0.00")
+    assert (
+        sum(Decimal(str(row["valor"])) for row in dre_geral)
+        == Decimal("125.30")
+    )
+    assert {row["conta_id"] for row in base_rows} == {"2.02.008", "8.03.001"}
+    assert sem_mapeamento[0]["conta_id"] == "-"
+    assert "99.99.998" not in report_text
+    for sheet in workbook.worksheets:
+        for row in sheet.iter_rows(values_only=True):
+            assert "99.99.998" not in {str(value) for value in row if value is not None}
+
+
+def test_conta_economica_mapeada_sem_linha_dre_continua_alertando(tmp_path):
+    excel_path = tmp_path / "empresa" / "lancamentos.xlsx"
+    write_lancamentos_to_excel(
+        excel_path,
+        [
+            _lancamento(
+                "economica-sem-linha",
+                conta_id="9.99.998",
+                conta_nome="Conta economica sem linha DRE",
+                valor=Decimal("77.70"),
+            )
+        ],
+    )
+    xlsx_path = tmp_path / "dre.xlsx"
+
+    result = gerar_dre_gerencial_ok_provisoria([excel_path], _save_mapping(tmp_path), xlsx_path)
+
+    sheet = load_workbook(xlsx_path, data_only=True)[CONTAS_SEM_MAPEAMENTO_SHEET]
+    assert result.status_dre == "ATENCAO_MAPEAMENTO_INCOMPLETO"
+    assert result.quantidade_contas_sem_mapeamento == 1
+    assert result.valor_total_sem_mapeamento == Decimal("77.70")
+    assert sheet["A2"].value == "9.99.998"
+
+
 def test_calcula_dre_geral_e_mensal(tmp_path):
     excel_path = tmp_path / "55746722000181" / "lancamentos.xlsx"
     write_lancamentos_to_excel(
@@ -176,6 +271,18 @@ linhas_dre:
     sinal: "-"
     ordem: 302
     calculada: false
+  - id: "03.01"
+    nome: "CMV - Alimentos"
+    grupo: "Custos"
+    sinal: "-"
+    ordem: 301
+    calculada: false
+  - id: "11.01"
+    nome: "Combustiveis"
+    grupo: "Despesas Operacionais"
+    sinal: "-"
+    ordem: 1101
+    calculada: false
   - id: "03.08"
     nome: "Bonificacoes Recebidas / Reducao de CMV"
     grupo: "Custos"
@@ -185,7 +292,11 @@ linhas_dre:
 mapeamento:
   "1.01.001": { dre_linha_id: "01.01", entra_dre: true }
   "2.01.004": { dre_linha_id: "03.02", entra_dre: true }
+  "2.02.008": { dre_linha_id: "03.01", entra_dre: true }
   "2.05.003": { dre_linha_id: "03.08", entra_dre: true }
+  "8.03.001": { dre_linha_id: "11.01", entra_dre: true }
+  "9.99.998": { dre_linha_id: "", entra_dre: true }
+  "99.99.998": { dre_linha_id: "", entra_dre: false }
 """,
         encoding="utf-8",
     )
@@ -224,6 +335,9 @@ def _lancamento(
     chave_origem: str = "NFE123",
     tipo_operacao_especial: str = "",
     tratamento_operacao_especial: str = "",
+    origem: str = "XML_NFE",
+    tipo_documento: str = "XML_NFE",
+    tipo_lancamento: str = "custo",
 ) -> Lancamento:
     return Lancamento(
         data_documento=date(2026, 5, 5),
@@ -233,14 +347,14 @@ def _lancamento(
         fornecedor_ou_favorecido="Fornecedor teste",
         cnpj_cpf_favorecido="12345678000195",
         documento="12566",
-        tipo_documento="XML_NFE",
+        tipo_documento=tipo_documento,
         conta_id=conta_id,
         conta_nome=conta_nome,
         grupo_conta="Grupo teste",
         descricao_itens="ITEM TESTE",
         valor=valor,
         duplicatas=[Duplicata(numero="001", vencimento=date(2026, 5, 20), valor=valor)],
-        origem="XML_NFE",
+        origem=origem,
         arquivo_origem="nfe.xml",
         chave_origem=chave_origem,
         hash_registro=hash_registro,
@@ -248,5 +362,5 @@ def _lancamento(
         alertas="" if status_revisao == "OK" else "CLASSIFICACAO_NAO_ENCONTRADA",
         tipo_operacao_especial=tipo_operacao_especial,
         tratamento_operacao_especial=tratamento_operacao_especial,
-        tipo_lancamento="custo",
+        tipo_lancamento=tipo_lancamento,
     )

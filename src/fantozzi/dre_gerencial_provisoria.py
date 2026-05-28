@@ -126,7 +126,10 @@ def gerar_dre_gerencial_ok_provisoria(
             continue
         if _status(row) != "OK":
             excluded_revisar.append(row)
-    base_rows = [_dre_base_row(row, mapping) for row in base_ok]
+    base_rows_all = [_dre_base_row(row, mapping) for row in base_ok]
+    base_rows = [
+        row for row in base_rows_all if not _fora_dre_por_design(row)
+    ]
     sem_mapeamento = [row for row in base_rows if not row["linha_dre_id"]]
     mapped = [row for row in base_rows if row["linha_dre_id"] and row["entra_dre"]]
     dre_geral = _dre_geral_rows(mapped)
@@ -252,6 +255,7 @@ def _load_mapeamento(path: Path) -> dict[str, object]:
 def _dre_base_row(row: dict[str, object], mapping: dict[str, object]) -> dict[str, object]:
     conta_id = _text(row.get("conta_id"))
     map_row = mapping["mapeamento"].get(conta_id) or {}
+    mapeamento_existe = isinstance(map_row, dict) and conta_id in mapping["mapeamento"]
     linha_id = _text(map_row.get("dre_linha_id")) if isinstance(map_row, dict) else ""
     linha = mapping["linhas"].get(linha_id, {})
     entra_dre = bool(map_row.get("entra_dre", True)) if isinstance(map_row, dict) else False
@@ -269,6 +273,7 @@ def _dre_base_row(row: dict[str, object], mapping: dict[str, object]) -> dict[st
         "grupo_dre": _text(linha.get("grupo")),
         "linha_dre": _text(linha.get("nome")),
         "linha_dre_id": linha_id,
+        "mapeamento_existe": mapeamento_existe,
         "ordem": int(linha.get("ordem") or 999999),
         "sinal": _text(linha.get("sinal")),
         "entra_dre": entra_dre,
@@ -279,6 +284,10 @@ def _dre_base_row(row: dict[str, object], mapping: dict[str, object]) -> dict[st
         "tratamento_operacao_especial": row.get("tratamento_operacao_especial"),
         "origem_arquivo": row.get(SOURCE_HEADER),
     }
+
+
+def _fora_dre_por_design(row: dict[str, object]) -> bool:
+    return bool(row.get("mapeamento_existe")) and not bool(row.get("entra_dre"))
 
 
 def _dre_geral_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
