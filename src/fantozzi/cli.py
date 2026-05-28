@@ -2496,6 +2496,9 @@ def _print_incremental_operator_summary(result) -> None:
     print("Registrazioni manuali completate.")
     print(f"Righe valide: {manuali.get('linhas', '-')}")
     print(f"Totale manuali: {_format_brl(manuali.get('valor_total'))}")
+    competencias = manuali.get("competencias_afetadas") or []
+    if competencias:
+        print(f"Competenze affette: {', '.join(str(item) for item in competencias)}")
     print("Run: INCREMENTAL")
     print(f"Full run eseguita: {_sim_nao(manifest.get('full_run_executed'))}")
     print(f"XML rilanciati: {_sim_nao(fontes.get('xml'))}")

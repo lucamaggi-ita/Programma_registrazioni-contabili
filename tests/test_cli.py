@@ -2046,7 +2046,11 @@ def test_cli_executar_run_incremental_mostra_resumo_sintetico(tmp_path, monkeypa
     manifest_path.write_text(
         json.dumps(
             {
-                "manuali": {"linhas": 2, "valor_total": "125.30"},
+                "manuali": {
+                    "linhas": 2,
+                    "valor_total": "125.30",
+                    "competencias_afetadas": ["2026-02", "2026-04"],
+                },
                 "full_run_executed": False,
                 "fontes_reprocessadas": {
                     "xml": False,
@@ -2091,6 +2095,7 @@ def test_cli_executar_run_incremental_mostra_resumo_sintetico(tmp_path, monkeypa
     assert "Registrazioni manuali completate." in captured.out
     assert "Righe valide: 2" in captured.out
     assert "Totale manuali: R$ 125,30" in captured.out
+    assert "Competenze affette: 2026-02, 2026-04" in captured.out
     assert "Run: INCREMENTAL" in captured.out
     assert "Full run eseguita: no" in captured.out
     assert "XML rilanciati: no" in captured.out

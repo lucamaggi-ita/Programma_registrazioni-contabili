@@ -12,6 +12,7 @@ from fantozzi.excel_writer import write_lancamentos_to_excel
 from fantozzi.models import Lancamento
 from fantozzi.runs_incrementais import (
     BLOCCO_BASELINE_AUSENTE,
+    BLOCCO_BASELINE_INSUFICIENTE,
     BLOCCO_DELTA_JA_APLICADO,
     BLOCCO_STRUCTURAL_CHANGE,
     RunsIncrementaisError,
@@ -146,6 +147,126 @@ def test_incremental_manuais_retroativos_dentro_baseline_sao_aceitos(tmp_path):
     assert manifest["manuali"]["periodo_ini"] == "2026-02-15"
     assert manifest["manuali"]["periodo_fim"] == "2026-02-15"
     assert manifest["manuali"]["competencias_afetadas"] == ["2026-02"]
+    assert manifest["dre_status"] == "OK_PROVISORIO"
+
+
+def test_incremental_manuais_duas_competencias_retroativas_ordem_estavel(tmp_path):
+    project_root, baseline_path, manuali_csv, manuali_manifest = _fixture_incremental(
+        tmp_path
+    )
+    baseline = _load_json(baseline_path)
+    baseline["periodo_ini"] = "2026-01-01"
+    baseline["periodo_fim"] = "2026-04-30"
+    baseline_path.write_text(json.dumps(baseline), encoding="utf-8")
+    _write_manuali(
+        project_root,
+        rows=[
+            (
+                "2026-04-03",
+                "Manual abril dentro baseline",
+                "2.02.008",
+                "Hortifruti",
+                "25.30",
+            ),
+            (
+                "2026-02-15",
+                "Manual fevereiro dentro baseline",
+                "8.03.001",
+                "Combustivel",
+                "100.00",
+            ),
+        ],
+    )
+
+    result = executar_run_incremental_manuais(
+        baseline_path,
+        manuali_csv,
+        manuali_manifest,
+        tmp_path / "incremental_duas_competencias",
+        project_root=project_root,
+    )
+
+    manifest = _load_json(result.manifest_path)
+    assert manifest["full_run_executed"] is False
+    assert manifest["fontes_reprocessadas"]["manuali"] is True
+    assert manifest["fontes_reprocessadas"]["xml"] is False
+    assert manifest["fontes_reprocessadas"]["banca"] is False
+    assert manifest["fontes_reprocessadas"]["comprovantes"] is False
+    assert manifest["fontes_reprocessadas"]["conta_corrente"] is False
+    assert manifest["manuali"]["competencias_afetadas"] == ["2026-02", "2026-04"]
+    assert manifest["dre_status"] == "OK_PROVISORIO"
+
+
+def test_incremental_manuais_data_antes_da_baseline_bloqueia_sem_promover(tmp_path):
+    project_root, baseline_path, manuali_csv, manuali_manifest = _fixture_incremental(
+        tmp_path
+    )
+    baseline = _load_json(baseline_path)
+    baseline["periodo_ini"] = "2026-01-01"
+    baseline["periodo_fim"] = "2026-04-30"
+    baseline_path.write_text(json.dumps(baseline), encoding="utf-8")
+    _write_manuali(
+        project_root,
+        rows=[
+            (
+                "2025-12-20",
+                "Manual antes da baseline",
+                "2.02.008",
+                "Hortifruti",
+                "10.00",
+            )
+        ],
+    )
+
+    with pytest.raises(RunsIncrementaisError) as exc_info:
+        executar_run_incremental_manuais(
+            baseline_path,
+            manuali_csv,
+            manuali_manifest,
+            tmp_path / "incremental_antes",
+            project_root=project_root,
+        )
+
+    assert exc_info.value.code == BLOCCO_BASELINE_INSUFICIENTE
+    assert "fora do periodo coberto pela baseline" in exc_info.value.message
+    assert _load_json(baseline_path) == baseline
+    assert not (tmp_path / "incremental_antes").exists()
+
+
+def test_incremental_manuais_data_depois_da_baseline_bloqueia_sem_full_run(tmp_path):
+    project_root, baseline_path, manuali_csv, manuali_manifest = _fixture_incremental(
+        tmp_path
+    )
+    baseline = _load_json(baseline_path)
+    baseline["periodo_ini"] = "2026-01-01"
+    baseline["periodo_fim"] = "2026-04-30"
+    baseline_path.write_text(json.dumps(baseline), encoding="utf-8")
+    _write_manuali(
+        project_root,
+        rows=[
+            (
+                "2026-05-10",
+                "Manual depois da baseline",
+                "2.02.008",
+                "Hortifruti",
+                "10.00",
+            )
+        ],
+    )
+
+    with pytest.raises(RunsIncrementaisError) as exc_info:
+        executar_run_incremental_manuais(
+            baseline_path,
+            manuali_csv,
+            manuali_manifest,
+            tmp_path / "incremental_depois",
+            project_root=project_root,
+        )
+
+    assert exc_info.value.code == BLOCCO_BASELINE_INSUFICIENTE
+    assert "fora do periodo coberto pela baseline" in exc_info.value.message
+    assert _load_json(baseline_path) == baseline
+    assert not (tmp_path / "incremental_depois").exists()
 
 
 def test_incremental_manuais_delta_ja_aplicado_nao_duplica(tmp_path):
