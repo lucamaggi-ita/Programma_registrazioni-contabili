@@ -44,6 +44,8 @@ def test_incremental_manuais_nao_reprocessa_xml_banca_e_atualiza_dre(tmp_path):
     assert manifest["manuali"]["linhas"] == 2
     assert manifest["manuali"]["valor_total"] == "125.30"
     assert manifest["manuali"]["competencias_afetadas"] == ["2026-04"]
+    assert manifest["periodo_ini"] == "2026-04-01"
+    assert manifest["periodo_fim"] == "2026-04-30"
     assert manifest["dre_status"] == "OK_PROVISORIO"
 
     baseline_atualizada = _load_json(baseline_path)
@@ -147,6 +149,51 @@ def test_incremental_manuais_retroativos_dentro_baseline_sao_aceitos(tmp_path):
     assert manifest["manuali"]["periodo_ini"] == "2026-02-15"
     assert manifest["manuali"]["periodo_fim"] == "2026-02-15"
     assert manifest["manuali"]["competencias_afetadas"] == ["2026-02"]
+    assert manifest["periodo_ini"] == "2026-01-01"
+    assert manifest["periodo_fim"] == "2026-04-30"
+    assert manifest["dre_status"] == "OK_PROVISORIO"
+
+
+def test_incremental_manuais_marco_dentro_baseline_jan_abr_sao_aceitos(tmp_path):
+    project_root, baseline_path, manuali_csv, manuali_manifest = _fixture_incremental(
+        tmp_path
+    )
+    baseline = _load_json(baseline_path)
+    baseline["periodo_ini"] = "2026-01-01"
+    baseline["periodo_fim"] = "2026-04-30"
+    baseline_path.write_text(json.dumps(baseline), encoding="utf-8")
+    _write_manuali(
+        project_root,
+        rows=[
+            (
+                "2026-03-06",
+                "Manual marco dentro baseline",
+                "2.02.008",
+                "Hortifruti",
+                "80.00",
+            )
+        ],
+    )
+
+    result = executar_run_incremental_manuais(
+        baseline_path,
+        manuali_csv,
+        manuali_manifest,
+        tmp_path / "incremental_marco",
+        project_root=project_root,
+    )
+
+    manifest = _load_json(result.manifest_path)
+    assert manifest["full_run_executed"] is False
+    assert manifest["fontes_reprocessadas"]["xml"] is False
+    assert manifest["fontes_reprocessadas"]["banca"] is False
+    assert manifest["fontes_reprocessadas"]["comprovantes"] is False
+    assert manifest["fontes_reprocessadas"]["conta_corrente"] is False
+    assert manifest["manuali"]["periodo_ini"] == "2026-03-06"
+    assert manifest["manuali"]["periodo_fim"] == "2026-03-06"
+    assert manifest["manuali"]["competencias_afetadas"] == ["2026-03"]
+    assert manifest["periodo_ini"] == "2026-01-01"
+    assert manifest["periodo_fim"] == "2026-04-30"
     assert manifest["dre_status"] == "OK_PROVISORIO"
 
 
@@ -269,6 +316,48 @@ def test_incremental_manuais_data_depois_da_baseline_bloqueia_sem_full_run(tmp_p
     assert not (tmp_path / "incremental_depois").exists()
 
 
+def test_incremental_manuais_marco_baseline_estreita_bloqueia_com_mensagem_baseline(
+    tmp_path,
+):
+    project_root, baseline_path, manuali_csv, manuali_manifest = _fixture_incremental(
+        tmp_path
+    )
+    baseline = _load_json(baseline_path)
+    baseline["periodo_ini"] = "2026-04-12"
+    baseline["periodo_fim"] = "2026-04-12"
+    baseline_path.write_text(json.dumps(baseline), encoding="utf-8")
+    _write_manuali(
+        project_root,
+        rows=[
+            (
+                "2026-03-06",
+                "Manual marco com baseline estreita",
+                "2.02.008",
+                "Hortifruti",
+                "80.00",
+            )
+        ],
+    )
+
+    with pytest.raises(RunsIncrementaisError) as exc_info:
+        executar_run_incremental_manuais(
+            baseline_path,
+            manuali_csv,
+            manuali_manifest,
+            tmp_path / "incremental_marco_bloqueado",
+            project_root=project_root,
+        )
+
+    assert exc_info.value.code == BLOCCO_BASELINE_INSUFICIENTE
+    assert "baseline corrente nao cobre estas datas" in exc_info.value.message
+    assert "2026-03-06..2026-03-06 fora de 2026-04-12..2026-04-12" in (
+        exc_info.value.message
+    )
+    assert "Nao sera feita full run automatica" in exc_info.value.message
+    assert _load_json(baseline_path) == baseline
+    assert not (tmp_path / "incremental_marco_bloqueado").exists()
+
+
 def test_incremental_manuais_delta_ja_aplicado_nao_duplica(tmp_path):
     project_root, baseline_path, manuali_csv, manuali_manifest = _fixture_incremental(
         tmp_path
@@ -347,6 +436,49 @@ def test_registrar_baseline_aprovada_cria_manifest_incrementalizavel(tmp_path):
     assert baseline["inputs"]["xml"]["count"] == 1
     assert baseline["structural_hash"]
     assert baseline["applied_manuali_hashes"] == []
+
+
+def test_registrar_baseline_aprovada_preserva_periodo_original_de_incremental(
+    tmp_path,
+):
+    project_root, baseline_path, manuali_csv, manuali_manifest = _fixture_incremental(
+        tmp_path
+    )
+    baseline = _load_json(baseline_path)
+    baseline["periodo_ini"] = "2026-01-01"
+    baseline["periodo_fim"] = "2026-04-30"
+    baseline_path.write_text(json.dumps(baseline), encoding="utf-8")
+    _write_manuali(
+        project_root,
+        rows=[
+            (
+                "2026-04-12",
+                "Manual abril dentro baseline",
+                "2.02.008",
+                "Hortifruti",
+                "80.00",
+            )
+        ],
+    )
+    incremental = executar_run_incremental_manuais(
+        baseline_path,
+        manuali_csv,
+        manuali_manifest,
+        tmp_path / "incremental_promovido",
+        project_root=project_root,
+    )
+
+    result = registrar_baseline_aprovada(
+        incremental.manifest_path,
+        tmp_path / "baseline_promovida.json",
+        project_root=project_root,
+    )
+
+    promoted = _load_json(result.baseline_path)
+    assert promoted["periodo_ini"] == "2026-01-01"
+    assert promoted["periodo_fim"] == "2026-04-30"
+    assert promoted["source_run_path"] == str(incremental.output_run_dir)
+    assert promoted["reports_run_path"] == str(incremental.reports_run_dir)
 
 
 def _fixture_incremental(tmp_path: Path) -> tuple[Path, Path, Path, Path]:

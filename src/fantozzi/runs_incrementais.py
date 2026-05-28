@@ -107,7 +107,7 @@ def registrar_baseline_aprovada(
         if manuali_path.exists():
             manuali_hashes.append(_sha256_file(manuali_path))
 
-    periodo = _periodo_lancamentos(source_run_path)
+    periodo = _periodo_baseline_from_manifest(manifest, source_run_path)
     baseline = {
         "baseline_id": baseline_id,
         "run_id": run_id,
@@ -314,6 +314,10 @@ def _incremental_manifest(
         "tipo_run": TIPO_RUN_INCREMENTAL,
         "baseline_id": baseline.get("baseline_id"),
         "baseline_run_id": baseline.get("run_id"),
+        "periodo_ini": baseline.get("periodo_ini"),
+        "periodo_fim": baseline.get("periodo_fim"),
+        "baseline_periodo_ini": baseline.get("periodo_ini"),
+        "baseline_periodo_fim": baseline.get("periodo_fim"),
         "incremental_id": incremental_id,
         "run_id": incremental_id,
         "data_execucao": _now_iso(),
@@ -402,13 +406,14 @@ def _registrar_delta_aplicado(
     baseline["pacote_path"] = manifest_incremental["outputs"]["pacote"]
     baseline["ultimo_incremental_id"] = manifest_incremental.get("incremental_id")
     baseline["ultima_atualizacao_tipo"] = TIPO_RUN_INCREMENTAL
-    baseline["periodo_ini"] = _min_date_text(
-        _text(baseline.get("periodo_ini")),
-        _text((manifest_incremental.get("manuali") or {}).get("periodo_ini")),
+    baseline_periodo_ini = _text(baseline.get("periodo_ini"))
+    baseline_periodo_fim = _text(baseline.get("periodo_fim"))
+    manuali_periodo = manifest_incremental.get("manuali") or {}
+    baseline["periodo_ini"] = baseline_periodo_ini or _text(
+        manuali_periodo.get("periodo_ini")
     )
-    baseline["periodo_fim"] = _max_date_text(
-        _text(baseline.get("periodo_fim")),
-        _text((manifest_incremental.get("manuali") or {}).get("periodo_fim")),
+    baseline["periodo_fim"] = baseline_periodo_fim or _text(
+        manuali_periodo.get("periodo_fim")
     )
     baseline["updated_at"] = _now_iso()
     _write_json(baseline_path, baseline)
@@ -473,8 +478,12 @@ def _validar_periodo_manuali(
         raise RunsIncrementaisError(
             BLOCCO_BASELINE_INSUFICIENTE,
             (
-                "manuali fora do periodo coberto pela baseline: "
-                f"{manual_ini}..{manual_fim} fora de {periodo_ini}..{periodo_fim}"
+                "a baseline corrente nao cobre estas datas; manuali fora do "
+                "periodo coberto pela baseline: "
+                f"{manual_ini}..{manual_fim} fora de {periodo_ini}..{periodo_fim}. "
+                "As datas do Excel podem estar corretas; registre/promova uma "
+                "baseline aprovada que cubra o periodo. Nao sera feita full run "
+                "automatica."
             ),
         )
 
@@ -502,6 +511,21 @@ def _periodo_lancamentos(source_run_path: Path) -> tuple[str | None, str | None]
     if not datas:
         return None, None
     return min(datas).isoformat(), max(datas).isoformat()
+
+
+def _periodo_baseline_from_manifest(
+    manifest: Mapping[str, object],
+    source_run_path: Path,
+) -> tuple[str | None, str | None]:
+    periodo_ini = _text(manifest.get("periodo_ini")) or _text(
+        manifest.get("baseline_periodo_ini")
+    )
+    periodo_fim = _text(manifest.get("periodo_fim")) or _text(
+        manifest.get("baseline_periodo_fim")
+    )
+    if periodo_ini or periodo_fim:
+        return periodo_ini or None, periodo_fim or None
+    return _periodo_lancamentos(source_run_path)
 
 
 def _parse_iso_date(value: str) -> date:
@@ -543,12 +567,15 @@ def _max_date_text(left: str, right: str) -> str | None:
 def _source_run_path_from_manifest(manifest: Mapping[str, object], run_id: str) -> Path:
     parametros = manifest.get("parametros") or {}
     saida_output = _text(parametros.get("saida_output"))
-    if not saida_output:
-        raise RunsIncrementaisError(
-            BLOCCO_BASELINE_INSUFICIENTE,
-            "manifest sem parametros.saida_output",
-        )
-    return Path(saida_output) / "runs" / run_id
+    if saida_output:
+        return Path(saida_output) / "runs" / run_id
+    output_run_dir = _text((manifest.get("outputs") or {}).get("output_run_dir"))
+    if output_run_dir:
+        return Path(output_run_dir)
+    raise RunsIncrementaisError(
+        BLOCCO_BASELINE_INSUFICIENTE,
+        "manifest sem parametros.saida_output ou outputs.output_run_dir",
+    )
 
 
 def _structural_hashes(project_root: Path) -> dict[str, str | None]:

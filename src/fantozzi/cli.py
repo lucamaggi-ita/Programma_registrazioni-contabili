@@ -146,6 +146,7 @@ from fantozzi import reprocessamento_pipeline
 from fantozzi.run_manager import RunManagerError, preparar_run
 from fantozzi.runs_incrementais import (
     BLOCCO_BASELINE_AUSENTE,
+    BLOCCO_BASELINE_INSUFICIENTE,
     BLOCCO_BASELINE_NAO_APROVADA,
     BLOCCO_DELTA_JA_APLICADO,
     RunsIncrementaisError,
@@ -2475,6 +2476,13 @@ def executar_run_incremental_command(args: argparse.Namespace) -> int:
             print(
                 "[BLOQUEADO] Queste registrazioni manuali risultano gia applicate. "
                 "Non sono state duplicate."
+            )
+        elif exc.code == BLOCCO_BASELINE_INSUFICIENTE:
+            print(
+                "[BLOQUEADO] La baseline corrente non copre le date indicate. "
+                "Le date dell'Excel possono essere corrette, ma serve registrare "
+                "una baseline approvata che copra quel periodo. Non verra fatta "
+                "una full run automatica."
             )
         print(f"[BLOQUEADO] {exc}")
         return 1
