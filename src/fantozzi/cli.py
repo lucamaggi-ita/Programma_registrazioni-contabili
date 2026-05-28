@@ -143,6 +143,11 @@ from fantozzi.relatorios_gerenciais_ok import (
 )
 from fantozzi import reprocessamento_pipeline
 from fantozzi.run_manager import RunManagerError, preparar_run
+from fantozzi.runs_incrementais import (
+    RunsIncrementaisError,
+    executar_run_incremental_manuais,
+    registrar_baseline_aprovada,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -1273,6 +1278,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Calcula run e etapas sem escrever arquivos nem importar XML.",
     )
     reprocessar_real.add_argument(
+        "--full-run",
+        action="store_true",
+        default=False,
+        help=(
+            "Confirma explicitamente uma full run quando ja existe baseline "
+            "aprovada. Sem esta flag, o uso operacional deve ser incremental."
+        ),
+    )
+    reprocessar_real.add_argument(
         "--fase9-csv",
         action="append",
         metavar="PATH",
@@ -1308,6 +1322,59 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     reprocessar_real.set_defaults(func=reprocessar_importacao_real_command)
+
+    registrar_baseline = subparsers.add_parser(
+        "registrar-baseline-aprovada",
+        help="Registra uma run aprovada como baseline para incrementais.",
+        description=(
+            "Cria um manifest de baseline aprovada a partir de manifest_run.json. "
+            "Nao reprocessa XML, banca, DRE nem pacote."
+        ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    registrar_baseline.add_argument(
+        "--manifest-run",
+        required=True,
+        help="manifest_run.json da run aprovada.",
+    )
+    registrar_baseline.add_argument(
+        "--saida",
+        required=True,
+        help="Arquivo JSON de baseline aprovada a gravar.",
+    )
+    registrar_baseline.set_defaults(func=registrar_baseline_aprovada_command)
+
+    incremental = subparsers.add_parser(
+        "executar-run-incremental",
+        help="Executa run incremental a partir de baseline aprovada.",
+        description=(
+            "MVP incremental para registrazioni manuali gerenciais: reutiliza "
+            "os outputs normalizados da baseline e aplica apenas o delta manual "
+            "validado. Nao executa full run automaticamente."
+        ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    incremental.add_argument(
+        "--baseline",
+        required=True,
+        help="baseline_atual.json aprovada.",
+    )
+    incremental.add_argument(
+        "--manuali-csv",
+        required=True,
+        help="CSV tecnico de registrazioni manuali validado.",
+    )
+    incremental.add_argument(
+        "--manuali-manifest",
+        required=True,
+        help="Manifest JSON de validacao manuali com status_validacao APROVADO.",
+    )
+    incremental.add_argument(
+        "--saida",
+        required=True,
+        help="Diretorio de saida da run incremental.",
+    )
+    incremental.set_defaults(func=executar_run_incremental_command)
 
     return parser
 
@@ -2273,6 +2340,18 @@ def preparar_run_reprocessamento_command(args: argparse.Namespace) -> int:
 
 
 def reprocessar_importacao_real_command(args: argparse.Namespace) -> int:
+    if (
+        not args.full_run
+        and _baseline_aprovada_existe()
+        and _saida_operacional_do_projeto(Path(args.saida_output))
+    ):
+        print(
+            "[BLOQUEADO] BLOCCO_FULL_RUN_REQUER_FLAG_EXPLICITO: "
+            "baseline aprovada encontrada; use executar-run-incremental ou "
+            "repita com --full-run para uma full run consciente."
+        )
+        return 1
+
     try:
         result = reprocessamento_pipeline.reprocessar_importacao_real_provisoria(
             xml_base=Path(args.xml_base),
@@ -2325,6 +2404,79 @@ def reprocessar_importacao_real_command(args: argparse.Namespace) -> int:
         print("[INFO] Lancamentos banca aprovados incluidos na run.")
     if args.gerar_pacote_contabil_gerencial:
         print("[INFO] Pacote contabil gerencial provisorio gerado na run.")
+    return 0
+
+
+def _baseline_aprovada_existe() -> bool:
+    baseline_path = PROJECT_ROOT / "output" / "baselines" / "baseline_atual.json"
+    if not baseline_path.exists():
+        return False
+    try:
+        payload = json.loads(baseline_path.read_text(encoding="utf-8"))
+    except Exception:
+        return False
+    return _text(payload.get("status")).upper() == "APROVADA"
+
+
+def _saida_operacional_do_projeto(path: Path) -> bool:
+    candidate = path if path.is_absolute() else PROJECT_ROOT / path
+    try:
+        candidate_resolved = candidate.resolve()
+        output_root = (PROJECT_ROOT / "output").resolve()
+        candidate_resolved.relative_to(output_root)
+    except ValueError:
+        return False
+    except OSError:
+        return False
+    return True
+
+
+def registrar_baseline_aprovada_command(args: argparse.Namespace) -> int:
+    try:
+        result = registrar_baseline_aprovada(
+            manifest_run_path=Path(args.manifest_run),
+            saida_path=Path(args.saida),
+            project_root=PROJECT_ROOT,
+        )
+    except RunsIncrementaisError as exc:
+        print(f"[BLOQUEADO] {exc}")
+        return 1
+    except Exception as exc:
+        print(f"[ERRO] Nao foi possivel registrar baseline aprovada: {exc}")
+        return 1
+
+    print(f"[OK] Baseline aprovada registrada: {result.baseline_id}")
+    print(f"[OK] Run origem: {result.run_id}")
+    print(f"[OK] Baseline: {result.baseline_path}")
+    print(f"[INFO] Nenhuma fonte foi reprocessada.")
+    return 0
+
+
+def executar_run_incremental_command(args: argparse.Namespace) -> int:
+    try:
+        result = executar_run_incremental_manuais(
+            baseline_path=Path(args.baseline),
+            manuali_csv_path=Path(args.manuali_csv),
+            manuali_manifest_path=Path(args.manuali_manifest),
+            saida_dir=Path(args.saida),
+            project_root=PROJECT_ROOT,
+        )
+    except RunsIncrementaisError as exc:
+        print(f"[BLOQUEADO] {exc}")
+        return 1
+    except Exception as exc:
+        print(f"[ERRO] Nao foi possivel executar run incremental: {exc}")
+        return 1
+
+    print(f"[OK] Run incremental concluida: {result.incremental_id}")
+    print(f"[OK] Baseline: {result.baseline_id}")
+    print(f"[OK] Manifest: {result.manifest_path}")
+    print(f"[OK] Output da run: {result.output_run_dir}")
+    print(f"[OK] Reports da run: {result.reports_run_dir}")
+    print(f"[INFO] Full run executada: false")
+    print(f"[INFO] XML reprocessado: false")
+    print(f"[INFO] Banca reprocessada: false")
+    print(f"[INFO] Tempo: {result.elapsed_seconds:.3f}s")
     return 0
 
 

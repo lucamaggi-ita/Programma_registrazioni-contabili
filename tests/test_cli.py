@@ -1946,6 +1946,24 @@ def test_parser_aceita_reprocessar_importacao_real():
     assert args.saida_reports == "reports/importacao_real"
     assert args.modo == "provisorio"
     assert args.dry_run is False
+    assert args.full_run is False
+
+
+def test_parser_aceita_full_run_explicito():
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "reprocessar-importacao-real",
+            "--xml-base", "XML_fatture_acquisto",
+            "--saida-output", "output/importacao_real",
+            "--saida-reports", "reports/importacao_real",
+            "--full-run",
+        ]
+    )
+
+    assert args.command == "reprocessar-importacao-real"
+    assert args.full_run is True
 
 
 def test_parser_aceita_lancamentos_manuais_gerenciais_csv():
@@ -1980,6 +1998,70 @@ def test_parser_aceita_gerar_pacote_contabil_gerencial():
 
     assert args.command == "reprocessar-importacao-real"
     assert args.gerar_pacote_contabil_gerencial is True
+
+
+def test_parser_aceita_registrar_baseline_aprovada():
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "registrar-baseline-aprovada",
+            "--manifest-run", "output/run/manifest_run.json",
+            "--saida", "output/baselines/baseline_atual.json",
+        ]
+    )
+
+    assert args.command == "registrar-baseline-aprovada"
+    assert args.manifest_run == "output/run/manifest_run.json"
+    assert args.saida == "output/baselines/baseline_atual.json"
+
+
+def test_parser_aceita_executar_run_incremental_manuais():
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "executar-run-incremental",
+            "--baseline", "output/baselines/baseline_atual.json",
+            "--manuali-csv", "manuali.csv",
+            "--manuali-manifest", "manifest_manuali.json",
+            "--saida", "output/incremental_011_manual_test",
+        ]
+    )
+
+    assert args.command == "executar-run-incremental"
+    assert args.baseline == "output/baselines/baseline_atual.json"
+    assert args.manuali_csv == "manuali.csv"
+    assert args.manuali_manifest == "manifest_manuali.json"
+    assert args.saida == "output/incremental_011_manual_test"
+
+
+def test_cli_bloqueia_full_run_operacional_sem_flag_quando_baseline_existe(
+    tmp_path, monkeypatch, capsys
+):
+    import json
+    import fantozzi.cli as cli
+
+    monkeypatch.setattr(cli, "PROJECT_ROOT", tmp_path)
+    baseline_dir = tmp_path / "output" / "baselines"
+    baseline_dir.mkdir(parents=True)
+    (baseline_dir / "baseline_atual.json").write_text(
+        json.dumps({"status": "APROVADA"}),
+        encoding="utf-8",
+    )
+
+    code = main(
+        [
+            "reprocessar-importacao-real",
+            "--xml-base", "Database_Dev/XML_fatture_acquisto",
+            "--saida-output", "output/nova_full_run",
+            "--saida-reports", "reports/nova_full_run",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert code == 1
+    assert "BLOCCO_FULL_RUN_REQUER_FLAG_EXPLICITO" in captured.out
 
 
 def test_cli_preparar_run_cria_pastas_manifesto_current_run(tmp_path, capsys):
