@@ -4,6 +4,7 @@ import argparse
 import csv
 import json
 from datetime import date
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from fantozzi.allocation import allocate_nfe_to_lancamentos
@@ -144,6 +145,9 @@ from fantozzi.relatorios_gerenciais_ok import (
 from fantozzi import reprocessamento_pipeline
 from fantozzi.run_manager import RunManagerError, preparar_run
 from fantozzi.runs_incrementais import (
+    BLOCCO_BASELINE_AUSENTE,
+    BLOCCO_BASELINE_NAO_APROVADA,
+    BLOCCO_DELTA_JA_APLICADO,
     RunsIncrementaisError,
     executar_run_incremental_manuais,
     registrar_baseline_aprovada,
@@ -2462,22 +2466,68 @@ def executar_run_incremental_command(args: argparse.Namespace) -> int:
             project_root=PROJECT_ROOT,
         )
     except RunsIncrementaisError as exc:
+        if exc.code in {BLOCCO_BASELINE_AUSENTE, BLOCCO_BASELINE_NAO_APROVADA}:
+            print(
+                "[BLOQUEADO] Non posso registrare incrementale perche manca "
+                "una baseline approvata. Serve prima approvare/registrare una baseline."
+            )
+        elif exc.code == BLOCCO_DELTA_JA_APLICADO:
+            print(
+                "[BLOQUEADO] Queste registrazioni manuali risultano gia applicate. "
+                "Non sono state duplicate."
+            )
         print(f"[BLOQUEADO] {exc}")
         return 1
     except Exception as exc:
         print(f"[ERRO] Nao foi possivel executar run incremental: {exc}")
         return 1
 
-    print(f"[OK] Run incremental concluida: {result.incremental_id}")
-    print(f"[OK] Baseline: {result.baseline_id}")
-    print(f"[OK] Manifest: {result.manifest_path}")
-    print(f"[OK] Output da run: {result.output_run_dir}")
-    print(f"[OK] Reports da run: {result.reports_run_dir}")
-    print(f"[INFO] Full run executada: false")
-    print(f"[INFO] XML reprocessado: false")
-    print(f"[INFO] Banca reprocessada: false")
-    print(f"[INFO] Tempo: {result.elapsed_seconds:.3f}s")
+    _print_incremental_operator_summary(result)
     return 0
+
+
+def _print_incremental_operator_summary(result) -> None:
+    manifest = _load_json_safely(result.manifest_path)
+    manuali = manifest.get("manuali") or {}
+    fontes = manifest.get("fontes_reprocessadas") or {}
+    outputs = manifest.get("outputs") or {}
+    pacote = manifest.get("pacote_contabil_gerencial") or {}
+
+    print("Registrazioni manuali completate.")
+    print(f"Righe valide: {manuali.get('linhas', '-')}")
+    print(f"Totale manuali: {_format_brl(manuali.get('valor_total'))}")
+    print("Run: INCREMENTAL")
+    print(f"Full run eseguita: {_sim_nao(manifest.get('full_run_executed'))}")
+    print(f"XML rilanciati: {_sim_nao(fontes.get('xml'))}")
+    print(f"Banca rilanciata: {_sim_nao(fontes.get('banca'))}")
+    print(f"Comprovantes rilanciati: {_sim_nao(fontes.get('comprovantes'))}")
+    print(f"Conta corrente rilanciata: {_sim_nao(fontes.get('conta_corrente'))}")
+    print(f"DRE: {manifest.get('dre_status', result.status)}")
+    print(f"Pacote: {'generato' if pacote.get('executado') or outputs.get('pacote') else 'non generato'}")
+    print(f"Manifest: {result.manifest_path}")
+    print(f"Tempo: {result.elapsed_seconds:.3f}s")
+
+
+def _load_json_safely(path: Path) -> dict[str, object]:
+    try:
+        return json.loads(Path(path).read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _sim_nao(value: object) -> str:
+    return "si" if value is True else "no"
+
+
+def _format_brl(value: object) -> str:
+    if value is None or value == "":
+        return "R$ -"
+    try:
+        amount = Decimal(str(value))
+    except (InvalidOperation, ValueError):
+        return f"R$ {value}"
+    formatted = f"{amount:,.2f}"
+    return "R$ " + formatted.replace(",", "X").replace(".", ",").replace("X", ".")
 
 
 def _add_config_arguments(parser: argparse.ArgumentParser) -> None:

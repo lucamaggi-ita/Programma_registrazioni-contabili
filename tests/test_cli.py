@@ -2036,6 +2036,72 @@ def test_parser_aceita_executar_run_incremental_manuais():
     assert args.saida == "output/incremental_011_manual_test"
 
 
+def test_cli_executar_run_incremental_mostra_resumo_sintetico(tmp_path, monkeypatch, capsys):
+    import json
+    from types import SimpleNamespace
+
+    import fantozzi.cli as cli
+
+    manifest_path = tmp_path / "manifest_incremental.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "manuali": {"linhas": 2, "valor_total": "125.30"},
+                "full_run_executed": False,
+                "fontes_reprocessadas": {
+                    "xml": False,
+                    "banca": False,
+                    "comprovantes": False,
+                    "conta_corrente": False,
+                    "manuali": True,
+                },
+                "dre_status": "OK_PROVISORIO",
+                "outputs": {"pacote": str(tmp_path / "pacote")},
+                "pacote_contabil_gerencial": {"executado": True},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def fake_incremental(**kwargs):
+        return SimpleNamespace(
+            manifest_path=manifest_path,
+            incremental_id="incremental_011B_operator_manual_test",
+            baseline_id="baseline_2026-05-28_001",
+            status="APROVADO",
+            output_run_dir=tmp_path / "out",
+            reports_run_dir=tmp_path / "reports",
+            elapsed_seconds=1.234,
+        )
+
+    monkeypatch.setattr(cli, "executar_run_incremental_manuais", fake_incremental)
+
+    code = main(
+        [
+            "executar-run-incremental",
+            "--baseline", "output/baselines/baseline_atual.json",
+            "--manuali-csv", "Database_Dev/Registrazioni_manuali/registrazioni_manuali_tecnico.csv",
+            "--manuali-manifest", "Database_Dev/Registrazioni_manuali/registrazioni_manuali_validazione_manifest.json",
+            "--saida", "output/incremental_011B_operator_manual_test",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert code == 0
+    assert "Registrazioni manuali completate." in captured.out
+    assert "Righe valide: 2" in captured.out
+    assert "Totale manuali: R$ 125,30" in captured.out
+    assert "Run: INCREMENTAL" in captured.out
+    assert "Full run eseguita: no" in captured.out
+    assert "XML rilanciati: no" in captured.out
+    assert "Banca rilanciata: no" in captured.out
+    assert "Comprovantes rilanciati: no" in captured.out
+    assert "Conta corrente rilanciata: no" in captured.out
+    assert "DRE: OK_PROVISORIO" in captured.out
+    assert "Pacote: generato" in captured.out
+    assert "{" not in captured.out
+
+
 def test_cli_bloqueia_full_run_operacional_sem_flag_quando_baseline_existe(
     tmp_path, monkeypatch, capsys
 ):

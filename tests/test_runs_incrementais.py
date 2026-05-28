@@ -108,6 +108,46 @@ def test_incremental_manuais_retroativos_acumulam_nova_versao_baseline(tmp_path)
     assert abs(sum(manual_values, Decimal("0.00"))) == Decimal("135.30")
 
 
+def test_incremental_manuais_retroativos_dentro_baseline_sao_aceitos(tmp_path):
+    project_root, baseline_path, manuali_csv, manuali_manifest = _fixture_incremental(
+        tmp_path
+    )
+    baseline = _load_json(baseline_path)
+    baseline["periodo_ini"] = "2026-01-01"
+    baseline["periodo_fim"] = "2026-04-30"
+    baseline_path.write_text(json.dumps(baseline), encoding="utf-8")
+    _write_manuali(
+        project_root,
+        rows=[
+            (
+                "2026-02-15",
+                "Manual retroativo dentro baseline",
+                "2.02.008",
+                "Hortifruti",
+                "42.00",
+            )
+        ],
+    )
+
+    result = executar_run_incremental_manuais(
+        baseline_path,
+        manuali_csv,
+        manuali_manifest,
+        tmp_path / "incremental_retro",
+        project_root=project_root,
+    )
+
+    manifest = _load_json(result.manifest_path)
+    assert manifest["full_run_executed"] is False
+    assert manifest["fontes_reprocessadas"]["xml"] is False
+    assert manifest["fontes_reprocessadas"]["banca"] is False
+    assert manifest["fontes_reprocessadas"]["comprovantes"] is False
+    assert manifest["fontes_reprocessadas"]["conta_corrente"] is False
+    assert manifest["manuali"]["periodo_ini"] == "2026-02-15"
+    assert manifest["manuali"]["periodo_fim"] == "2026-02-15"
+    assert manifest["manuali"]["competencias_afetadas"] == ["2026-02"]
+
+
 def test_incremental_manuais_delta_ja_aplicado_nao_duplica(tmp_path):
     project_root, baseline_path, manuali_csv, manuali_manifest = _fixture_incremental(
         tmp_path
