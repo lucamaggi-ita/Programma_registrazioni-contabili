@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import json
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
@@ -162,10 +163,12 @@ def validar_lancamentos_manuais_gerenciais_operador(
     relatorio_path: Path | str | None,
     plano_contas_path: Path | str,
     mapeamento_dre_path: Path | str,
+    manifest_path: Path | str | None = None,
 ) -> ValidationResult:
     entrada_path = Path(entrada_path)
     saida_csv_path = Path(saida_csv_path)
     relatorio = Path(relatorio_path) if relatorio_path else None
+    manifest = Path(manifest_path) if manifest_path else None
     accounts = _load_accounts(Path(plano_contas_path), Path(mapeamento_dre_path))
     technical_counterpart = _find_technical_counterpart(accounts)
 
@@ -198,6 +201,8 @@ def validar_lancamentos_manuais_gerenciais_operador(
         )
         if relatorio:
             _write_validation_report(result)
+        if manifest:
+            _write_validation_manifest(result, manifest)
         raise LancamentosManuaisTemplateError(
             f"Validacao encontrou {len(errors)} erro(s) bloqueante(s)."
         )
@@ -220,6 +225,8 @@ def validar_lancamentos_manuais_gerenciais_operador(
     )
     if relatorio:
         _write_validation_report(result)
+    if manifest:
+        _write_validation_manifest(result, manifest)
     return result
 
 
@@ -693,6 +700,30 @@ def _write_validation_report(result: ValidationResult) -> None:
         return
     result.relatorio.parent.mkdir(parents=True, exist_ok=True)
     result.relatorio.write_text(validation_report_text(result), encoding="utf-8")
+
+
+def _write_validation_manifest(result: ValidationResult, manifest_path: Path) -> None:
+    status = "APROVADO" if not result.erros else "BLOQUEADO"
+    data: dict = {
+        "status_validacao": status,
+        "arquivo_excel_operatore": str(result.entrada),
+        "arquivo_csv_tecnico": str(result.saida_csv),
+        "rejeitados": len(result.erros),
+        "pendencias": 0,
+        "pendencias_justificadas": False,
+        "duplicidade_xml_banca": 0,
+        "duplicidades_justificadas": False,
+        "created_at": datetime.now().isoformat(timespec="seconds"),
+        "total_linhas": result.linhas_lidas,
+        "linhas_validas": result.linhas_validas,
+        "linhas_bloqueadas": len(result.erros),
+    }
+    if result.avisos:
+        data["avisos"] = list(result.avisos)
+    if result.erros:
+        data["erros"] = list(result.erros)
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _parse_iso_date(value: str, line: str, errors: list[str]) -> date | None:

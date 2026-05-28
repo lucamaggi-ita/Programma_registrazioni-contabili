@@ -157,6 +157,9 @@ DEFAULT_MAPEAMENTO_DRE_PATH = PROJECT_ROOT / "config" / "mapeamento_dre.yaml"
 DEFAULT_TEMPLATE_MANUAIS_PATH = (
     PROJECT_ROOT / "Database_Dev" / "_templates" / "lancamentos_manuais_gerenciais_template.xlsx"
 )
+DEFAULT_REGISTRAZIONI_MANUALI_BASE = (
+    PROJECT_ROOT / "Database_Dev" / "Registrazioni_manuali" / "registrazioni_manuali_base.xlsx"
+)
 DEFAULT_TEMPLATE_MANUAIS_SAIDA_CSV = (
     PROJECT_ROOT / "Database_Dev" / "_templates" / "lancamentos_manuais_gerenciais_tecnico.csv"
 )
@@ -923,7 +926,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     template_manuais.add_argument(
         "--saida",
-        default=str(DEFAULT_TEMPLATE_MANUAIS_PATH),
+        default=str(DEFAULT_REGISTRAZIONI_MANUALI_BASE),
         help="Arquivo XLSX de saida do template operacional.",
     )
     template_manuais.add_argument(
@@ -964,6 +967,15 @@ def build_parser() -> argparse.ArgumentParser:
     validar_manuais.add_argument(
         "--relatorio",
         help="Arquivo TXT opcional para salvar o relatorio de validacao.",
+    )
+    validar_manuais.add_argument(
+        "--manifest",
+        default=None,
+        help=(
+            "Arquivo JSON de manifest de validacao. "
+            "Default: mesma pasta de --saida-csv com nome "
+            "registrazioni_manuali_validazione_manifest.json."
+        ),
     )
     validar_manuais.add_argument(
         "--plano-contas",
@@ -1988,6 +2000,11 @@ def gerar_template_lancamentos_manuais_gerenciais_command(
 
 
 def validar_lancamentos_manuais_gerenciais_command(args: argparse.Namespace) -> int:
+    manifest_path = (
+        Path(args.manifest)
+        if args.manifest
+        else Path(args.saida_csv).parent / "registrazioni_manuali_validazione_manifest.json"
+    )
     try:
         result = validar_lancamentos_manuais_gerenciais_operador(
             Path(args.entrada),
@@ -1995,14 +2012,20 @@ def validar_lancamentos_manuais_gerenciais_command(args: argparse.Namespace) -> 
             Path(args.relatorio) if args.relatorio else None,
             Path(args.plano_contas),
             Path(args.mapeamento_dre),
+            manifest_path,
         )
     except LancamentosManuaisTemplateError as exc:
         print(f"[ERRO] {exc}")
         if args.relatorio:
             print(f"[INFO] Relatorio salvo em: {args.relatorio}")
+        if manifest_path.exists():
+            print(f"[INFO] Manifest salvo em: {manifest_path}")
+        else:
+            print(f"[BLOCCO] BLOCCO_MANIFEST_NAO_GERADO: {manifest_path}")
         return 1
     except Exception:
         print(f"[ERRO] Nao foi possivel validar lancamentos manuais: {args.entrada}")
+        print(f"[BLOCCO] BLOCCO_MANIFEST_NAO_GERADO: {manifest_path}")
         return 1
 
     print(f"[OK] CSV tecnico gerado: {result.saida_csv}")
@@ -2011,6 +2034,7 @@ def validar_lancamentos_manuais_gerenciais_command(args: argparse.Namespace) -> 
     print(f"[INFO] Avisos: {len(result.avisos)}")
     if result.relatorio:
         print(f"[OK] Relatorio salvo em: {result.relatorio}")
+    print(f"[OK] Manifest salvo em: {manifest_path}")
     return 0
 
 

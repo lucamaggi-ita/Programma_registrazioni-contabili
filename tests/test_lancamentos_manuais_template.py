@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import json
 from pathlib import Path
 
 import pytest
@@ -271,6 +272,198 @@ def _operator_row(**overrides: str) -> dict[str, str]:
     }
     row.update(overrides)
     return row
+
+
+# --- Test 008.12: manifest ---
+
+
+def test_manifest_aprovado_com_excel_valido(tmp_path):
+    plano_path, dre_path = _save_config(tmp_path)
+    template_path = tmp_path / "registrazioni_manuali_base.xlsx"
+    output_csv = tmp_path / "registrazioni_manuali_tecnico.csv"
+    manifest_path = tmp_path / "registrazioni_manuali_validazione_manifest.json"
+    gerar_template_lancamentos_manuais_gerenciais(template_path, plano_path, dre_path)
+    _fill_template_row(template_path)
+
+    result = validar_lancamentos_manuais_gerenciais_operador(
+        template_path,
+        output_csv,
+        None,
+        plano_path,
+        dre_path,
+        manifest_path,
+    )
+
+    assert output_csv.exists()
+    assert manifest_path.exists()
+    data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert data["status_validacao"] == "APROVADO"
+    assert data["arquivo_excel_operatore"] == str(template_path)
+    assert data["arquivo_csv_tecnico"] == str(output_csv)
+    assert data["rejeitados"] == 0
+    assert result.linhas_validas == 1
+
+
+def test_manifest_bloqueado_com_excel_invalido(tmp_path):
+    plano_path, dre_path = _save_config(tmp_path)
+    template_path = tmp_path / "registrazioni_manuali_base.xlsx"
+    output_csv = tmp_path / "registrazioni_manuali_tecnico.csv"
+    manifest_path = tmp_path / "registrazioni_manuali_validazione_manifest.json"
+    gerar_template_lancamentos_manuais_gerenciais(template_path, plano_path, dre_path)
+    _fill_template_row(template_path, VALOR="0", CONTA_ESCOLHIDA="Conta Fantasma")
+
+    with pytest.raises(Exception):
+        validar_lancamentos_manuais_gerenciais_operador(
+            template_path,
+            output_csv,
+            None,
+            plano_path,
+            dre_path,
+            manifest_path,
+        )
+
+    assert manifest_path.exists()
+    data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert data["status_validacao"] == "BLOQUEADO"
+    assert data["rejeitados"] > 0
+    assert "erros" in data
+    assert len(data["erros"]) > 0
+
+
+def test_default_manifest_vicino_al_csv_via_cli(tmp_path):
+    plano_path, dre_path = _save_config(tmp_path)
+    template_path = tmp_path / "registrazioni_manuali_base.xlsx"
+    output_csv = tmp_path / "sub" / "registrazioni_manuali_tecnico.csv"
+    gerar_template_lancamentos_manuais_gerenciais(template_path, plano_path, dre_path)
+    _fill_template_row(template_path)
+
+    exit_code = main([
+        "validar-lancamentos-manuais-gerenciais",
+        "--entrada", str(template_path),
+        "--saida-csv", str(output_csv),
+        "--plano-contas", str(plano_path),
+        "--mapeamento-dre", str(dre_path),
+    ])
+
+    assert exit_code == 0
+    default_manifest = tmp_path / "sub" / "registrazioni_manuali_validazione_manifest.json"
+    assert default_manifest.exists()
+    data = json.loads(default_manifest.read_text(encoding="utf-8"))
+    assert data["status_validacao"] == "APROVADO"
+
+
+def test_nao_gera_dre_nem_giornale(tmp_path):
+    plano_path, dre_path = _save_config(tmp_path)
+    template_path = tmp_path / "registrazioni_manuali_base.xlsx"
+    output_csv = tmp_path / "registrazioni_manuali_tecnico.csv"
+    manifest_path = tmp_path / "registrazioni_manuali_validazione_manifest.json"
+    gerar_template_lancamentos_manuais_gerenciais(template_path, plano_path, dre_path)
+    _fill_template_row(template_path)
+
+    exit_code = main([
+        "validar-lancamentos-manuais-gerenciais",
+        "--entrada", str(template_path),
+        "--saida-csv", str(output_csv),
+        "--manifest", str(manifest_path),
+        "--plano-contas", str(plano_path),
+        "--mapeamento-dre", str(dre_path),
+    ])
+
+    assert exit_code == 0
+    assert not (tmp_path / "reports" / "importacao_real").exists()
+    assert not (tmp_path / "output" / "importacao_real").exists()
+    assert not (tmp_path / "output" / "runs").exists()
+
+
+# --- Test 008.13: gerar-template no path operativo ---
+
+
+def test_gerar_template_cria_arquivo_no_path_explicito(tmp_path):
+    plano_path, dre_path = _save_config(tmp_path)
+    output_path = tmp_path / "Registrazioni_manuali" / "registrazioni_manuali_base.xlsx"
+
+    exit_code = main([
+        "gerar-template-lancamentos-manuais-gerenciais",
+        "--saida", str(output_path),
+        "--plano-contas", str(plano_path),
+        "--mapeamento-dre", str(dre_path),
+    ])
+
+    assert exit_code == 0
+    assert output_path.exists()
+    assert output_path.suffix == ".xlsx"
+    assert output_path.stat().st_size > 0
+
+
+def test_gerar_template_cria_cartella_se_mancante(tmp_path):
+    plano_path, dre_path = _save_config(tmp_path)
+    output_path = tmp_path / "nuova_cartella" / "registrazioni_manuali_base.xlsx"
+    assert not output_path.parent.exists()
+
+    exit_code = main([
+        "gerar-template-lancamentos-manuais-gerenciais",
+        "--saida", str(output_path),
+        "--plano-contas", str(plano_path),
+        "--mapeamento-dre", str(dre_path),
+    ])
+
+    assert exit_code == 0
+    assert output_path.parent.exists()
+    assert output_path.exists()
+
+
+def test_gerar_template_colunas_operative_minime(tmp_path):
+    plano_path, dre_path = _save_config(tmp_path)
+    output_path = tmp_path / "registrazioni_manuali_base.xlsx"
+
+    main([
+        "gerar-template-lancamentos-manuais-gerenciais",
+        "--saida", str(output_path),
+        "--plano-contas", str(plano_path),
+        "--mapeamento-dre", str(dre_path),
+    ])
+
+    wb = load_workbook(output_path, data_only=False)
+    sheet = wb["lancamentos_manuais"]
+    headers = [cell.value for cell in sheet[1]]
+    for required in ("DATA", "CONTA_ESCOLHIDA", "DESCRICAO_DA_DESPESA", "VALOR", "OBSERVACAO"):
+        assert required in headers, f"Colonna operativa mancante: {required}"
+
+
+def test_gerar_template_conta_escolhida_ha_dropdown(tmp_path):
+    plano_path, dre_path = _save_config(tmp_path)
+    output_path = tmp_path / "registrazioni_manuali_base.xlsx"
+
+    main([
+        "gerar-template-lancamentos-manuais-gerenciais",
+        "--saida", str(output_path),
+        "--plano-contas", str(plano_path),
+        "--mapeamento-dre", str(dre_path),
+    ])
+
+    wb = load_workbook(output_path, data_only=False)
+    sheet = wb["lancamentos_manuais"]
+    validations = list(sheet.data_validations.dataValidation)
+    assert len(validations) >= 1
+    list_validations = [dv for dv in validations if dv.type == "list"]
+    assert len(list_validations) >= 1
+
+
+def test_gerar_template_nao_cria_dre_nem_giornale(tmp_path):
+    plano_path, dre_path = _save_config(tmp_path)
+    output_path = tmp_path / "registrazioni_manuali_base.xlsx"
+
+    exit_code = main([
+        "gerar-template-lancamentos-manuais-gerenciais",
+        "--saida", str(output_path),
+        "--plano-contas", str(plano_path),
+        "--mapeamento-dre", str(dre_path),
+    ])
+
+    assert exit_code == 0
+    assert not (tmp_path / "reports" / "importacao_real").exists()
+    assert not (tmp_path / "output" / "importacao_real").exists()
+    assert not (tmp_path / "output" / "runs").exists()
 
 
 def _save_config(tmp_path: Path, include_technical: bool = True) -> tuple[Path, Path]:

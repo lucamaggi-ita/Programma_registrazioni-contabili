@@ -275,6 +275,26 @@ def test_parser_accepts_gerar_template_lancamentos_manuais_gerenciais_command():
     assert args.saida == "Database_Dev/_templates/lancamentos_manuais.xlsx"
 
 
+def test_gerar_template_help_inclui_saida(capsys):
+    parser = build_parser()
+
+    with pytest.raises(SystemExit) as exc_info:
+        parser.parse_args(["gerar-template-lancamentos-manuais-gerenciais", "--help"])
+
+    assert exc_info.value.code == 0
+    captured = capsys.readouterr()
+    assert "--saida" in captured.out
+
+
+def test_gerar_template_default_saida_usa_path_operativo():
+    parser = build_parser()
+
+    args = parser.parse_args(["gerar-template-lancamentos-manuais-gerenciais"])
+
+    assert "Registrazioni_manuali" in args.saida
+    assert args.saida.endswith("registrazioni_manuali_base.xlsx")
+
+
 def test_parser_accepts_validar_lancamentos_manuais_gerenciais_command():
     parser = build_parser()
 
@@ -294,6 +314,37 @@ def test_parser_accepts_validar_lancamentos_manuais_gerenciais_command():
     assert args.entrada == "Database_Dev/_templates/lancamentos_manuais.xlsx"
     assert args.saida_csv == "reports/lancamentos_manuais.csv"
     assert args.relatorio == "reports/lancamentos_manuais.txt"
+
+
+def test_parser_accepts_manifest_para_validar_lancamentos_manuais_gerenciais():
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "validar-lancamentos-manuais-gerenciais",
+            "--entrada",
+            "Database_Dev/Registrazioni_manuali/registrazioni_manuali_base.xlsx",
+            "--saida-csv",
+            "Database_Dev/Registrazioni_manuali/registrazioni_manuali_tecnico.csv",
+            "--manifest",
+            "Database_Dev/Registrazioni_manuali/registrazioni_manuali_validazione_manifest.json",
+        ]
+    )
+
+    assert args.manifest == (
+        "Database_Dev/Registrazioni_manuali/registrazioni_manuali_validazione_manifest.json"
+    )
+
+
+def test_validar_manuais_help_inclui_manifest(capsys):
+    parser = build_parser()
+
+    with pytest.raises(SystemExit) as exc_info:
+        parser.parse_args(["validar-lancamentos-manuais-gerenciais", "--help"])
+
+    assert exc_info.value.code == 0
+    captured = capsys.readouterr()
+    assert "--manifest" in captured.out
 
 
 def test_parser_accepts_gerar_pacote_revisao_contabil_command():
