@@ -57,13 +57,106 @@ Fantozzi può:
 - classificare senza regola;
 - usare AI/inferenza per creare contabilizzazioni;
 - usare matching automatico aggressivo;
-- modificare XML/DRE/Fase 9 senza ordine;
+- modificare XML/DRE senza ordine esplicito;
 - modificare YAML senza conferma;
+- modificare config/, src/, tests/, docs/ senza autorizzazione esplicita;
 - fare git add .;
 - fare git clean;
 - fare commit/push automatici;
 - nascondere warning o conflitti;
-- rispondere con dati non verificati.
+- rispondere con dati non verificati;
+- usare executar-run-incremental come percorso operativo;
+- hardcodare branch master: usare sempre il branch attivo allineato a origin/<branch>.
+
+---
+
+# Branch e strategia operativa
+
+## Branch attivo
+
+Il branch operativo attuale è **senza-incrementali**.
+
+Non hardcodare mai `master`. Usare sempre il branch attivo corrente, allineato a `origin/<branch>`.
+
+## Strategia: FULL RUN DA ZERO
+
+La strategia operativa corrente è **FULL RUN DA ZERO**:
+
+- nessuna baseline;
+- nessun workflow incrementale;
+- ogni run parte da zero sulle fonti disponibili;
+- `executar-run-incremental` non è un percorso operativo valido.
+
+## APROVADO_PROVISORIO
+
+`APROVADO_PROVISORIO` significa **approvazione gestionale provvisoria**, non chiusura definitiva immutabile.
+
+I mesi già approvati possono cambiare se arrivano nuove fonti retroattive.
+L'approvazione provvisoria è un checkpoint gestionale, non un lock permanente.
+
+---
+
+# Workflow operatore
+
+## Ciclo centrale
+
+```
+Importazione fonti
+  → Excel revisione
+  → Decisione operatore
+  → Applicazione decisioni (YAML/regole)
+  → Full run da zero
+  → Giornale / DRE / pacote
+  → Audit
+  → Approvazione provvisoria
+```
+
+## Banca
+
+Percorso fonti:
+
+```
+bank_raw\YYYY\YYYY-MM\CNPJ\
+  → importa-revisione-banca
+  → Excel decisionali
+  → Approvazioni operatore
+  → Full run da zero
+```
+
+Comprovantes:
+ausiliari rispetto all'estratto conto; non lo sostituiscono.
+
+CSV multifonte classificati:
+se presenti, migliorano la deduplicazione bancaria.
+**Non devono essere bloccanti per avviare nuovi periodi.**
+
+## XML/NF-e
+
+```
+XML → classificazione → lançamentos → giornale
+```
+
+## Manuali
+
+```
+Excel manuali
+  → Validazione
+  → CSV tecnico
+  → Full run da zero
+```
+
+Movimenti manuali includono:
+- cassa;
+- contanti;
+- rettifiche;
+- scritture gestionali;
+- correzioni.
+
+## Finale
+
+```
+Giornale completo → DRE → analisi gestionale
+```
 
 ---
 
@@ -99,39 +192,6 @@ Quando esistenti:
 - reports contabili;
 - reports audit;
 - PDF documentali.
-
----
-
-# Workflow corretto
-
-## XML/NF-e
-
-XML → classificazione → lançamentos → giornale
-
-## Banca
-
-Estratto conto:
-fonte primaria dei movimenti bancari.
-
-Comprovantes:
-fonte ausiliaria per beneficiario/referência.
-
-Banca/comprovantes → classificazione → lançamentos → giornale
-
-## Manuali
-
-Movimenti manuali:
-- cassa;
-- contanti;
-- rettifiche;
-- scritture gestionali;
-- correzioni.
-
-Manuali → giornale
-
-## Finale
-
-Giornale completo → DRE → analisi gestionale
 
 ---
 
@@ -172,17 +232,43 @@ riduzione costi già definita dall'utente.
 
 ## Banca
 
+- importa-revisione-banca
 - regole-registrazioni-banca
 - gerar-pdf-regras-banca
+
+## XML
+
+- importa-revisione-xml
+- regole-registrazioni-xml
+- gerar-pdf-regras-xml
+
+## Manuali
+
+- lanciamento-registrazioni-manuali
+
+## Run / Giornale / DRE
+
+- gerar-giornale-dre-multifonte
+- workflow-operatore-final
+
+## Audit
+
+- auditar-giornale-multifonte
+- auditar-dre-gerencial
 
 ## Piano conti / DRE
 
 - aggiornamento-piano-conti-dre
 - gerar-pdfs-plano-dre
 
-## XML
+---
 
-- gerar-pdf-regras-xml
+# Note su .claude/skills/
+
+La directory `.claude/skills/` è **ignorata e non tracciata da Git**.
+
+Ogni modifica ai file skill deve essere dichiarata esplicitamente nel report di fase.
+Non fare assunzioni sull'allineamento tra skill locali e repository remoto.
 
 ---
 
@@ -190,7 +276,7 @@ riduzione costi già definita dall'utente.
 
 Per ogni modifica:
 
-1. leggere stato reale repository;
+1. leggere stato reale repository (`git status -sb`);
 2. fare precheck git;
 3. leggere YAML/file ufficiali;
 4. validare;
