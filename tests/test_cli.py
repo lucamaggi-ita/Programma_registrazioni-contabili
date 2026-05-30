@@ -1,6 +1,7 @@
 import csv
 from pathlib import Path
 from shutil import copyfile
+from unittest.mock import patch
 
 from openpyxl import Workbook, load_workbook
 import pytest
@@ -530,6 +531,7 @@ def test_general_help_returns_zero_and_lists_commands(capsys):
     assert "executar-classificacao-comprovantes-real" in captured.out
     assert "gerar-pacote-revisao-comprovantes" in captured.out
     assert "reprocessar-importacao-real" in captured.out
+    assert "validar-template-revisao-banca" in captured.out
 
 
 def test_importar_nfe_help_returns_zero_and_lists_options(capsys):
@@ -2170,3 +2172,55 @@ def test_cli_retorna_erro_quando_pipeline_falha(monkeypatch, tmp_path, capsys):
     captured = capsys.readouterr()
     assert result == 1
     assert "[ERRO] falha controlada" in captured.out
+
+
+# ---------------------------------------------------------------------------
+# validar-template-revisao-banca
+# ---------------------------------------------------------------------------
+
+def test_parser_accepts_validar_template_revisao_banca_command():
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "validar-template-revisao-banca",
+            "--output-dir",
+            "bank_raw/_decisoes_regras",
+        ]
+    )
+
+    assert args.command == "validar-template-revisao-banca"
+    assert args.output_dir == "bank_raw/_decisoes_regras"
+
+
+def test_validar_template_revisao_banca_conforme(tmp_path, capsys):
+    with patch("fantozzi.cli.validate_excel_template_banca", return_value=[]) as mock_fn:
+        result = main(["validar-template-revisao-banca", "--output-dir", str(tmp_path)])
+
+    assert result == 0
+    captured = capsys.readouterr()
+    assert "OK - Template conforme" in captured.out
+    mock_fn.assert_called_once_with(tmp_path)
+
+
+def test_validar_template_revisao_banca_nao_conforme(tmp_path, capsys):
+    result = main(["validar-template-revisao-banca", "--output-dir", str(tmp_path)])
+
+    assert result == 1
+    captured = capsys.readouterr()
+    assert "BLOCCO_TEMPLATE_EXCEL_BANCA_NON_CONFORME" in captured.out
+
+
+def test_validar_template_revisao_banca_nao_modifica_config_yaml(tmp_path, capsys):
+    from fantozzi.cli import DEFAULT_REGRAS_COMPROVANTES, DEFAULT_PLANO_CONTAS, DEFAULT_MAPEAMENTO_DRE_PATH
+
+    original_regras = DEFAULT_REGRAS_COMPROVANTES.read_text(encoding="utf-8")
+    original_plano = DEFAULT_PLANO_CONTAS.read_text(encoding="utf-8")
+    original_dre = DEFAULT_MAPEAMENTO_DRE_PATH.read_text(encoding="utf-8")
+
+    with patch("fantozzi.cli.validate_excel_template_banca", return_value=[]):
+        main(["validar-template-revisao-banca", "--output-dir", str(tmp_path)])
+
+    assert DEFAULT_REGRAS_COMPROVANTES.read_text(encoding="utf-8") == original_regras
+    assert DEFAULT_PLANO_CONTAS.read_text(encoding="utf-8") == original_plano
+    assert DEFAULT_MAPEAMENTO_DRE_PATH.read_text(encoding="utf-8") == original_dre

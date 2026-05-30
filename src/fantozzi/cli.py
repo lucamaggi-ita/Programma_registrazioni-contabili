@@ -36,10 +36,12 @@ from fantozzi.banking.lancamentos_banca import (
     gerar_lancamentos_banca_aprovados,
 )
 from fantozzi.banking.revisao_banca import (
+    BLOCCO_TEMPLATE_EXCEL_BANCA_NON_CONFORME,
     ImportaRevisaoBancaError,
     console_lines as revisao_banca_console_lines,
     importar_revisao_banca,
     resolve_bank_raw_dir,
+    validate_excel_template_banca,
 )
 from fantozzi.chart_of_accounts import ChartOfAccounts
 from fantozzi.classification_candidates import (
@@ -1309,6 +1311,23 @@ def build_parser() -> argparse.ArgumentParser:
     )
     reprocessar_real.set_defaults(func=reprocessar_importacao_real_command)
 
+    validar_template_banca = subparsers.add_parser(
+        "validar-template-revisao-banca",
+        help="Valida template dos Excel decisionais banca sem modificar arquivos.",
+        description=(
+            "Verifica que os dois Excel oficiais de revisao banca estejam conformes "
+            "ao schema canonico. Nao modifica YAML, config, Excel, output nem run. "
+            "Retorna exit code 0 se conforme, 1 se nao conforme."
+        ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    validar_template_banca.add_argument(
+        "--output-dir",
+        default=str(DEFAULT_BANK_DECISOES_DIR),
+        help="Pasta com os Excel decisionais de revisao banca.",
+    )
+    validar_template_banca.set_defaults(func=validar_template_revisao_banca_command)
+
     return parser
 
 
@@ -1621,6 +1640,18 @@ def importar_revisao_banca_command(args: argparse.Namespace) -> int:
     for line in revisao_banca_console_lines(result):
         print(line)
     return 0
+
+
+def validar_template_revisao_banca_command(args: argparse.Namespace) -> int:
+    output_dir = Path(args.output_dir)
+    violations = validate_excel_template_banca(output_dir)
+    if not violations:
+        print("OK - Template conforme")
+        return 0
+    print(BLOCCO_TEMPLATE_EXCEL_BANCA_NON_CONFORME)
+    for v in violations:
+        print(f"- {v}")
+    return 1
 
 
 def gerar_lancamentos_banca_aprovados_command(args: argparse.Namespace) -> int:
