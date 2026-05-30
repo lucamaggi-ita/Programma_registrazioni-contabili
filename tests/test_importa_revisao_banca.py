@@ -1927,6 +1927,106 @@ def test_validate_template_banca_conforme_com_dados(monkeypatch, tmp_path):
     assert violations == [], f"Violazioni inattese: {violations}"
 
 
+# ---------------------------------------------------------------------------
+# Testes: revisione banca mensile — coerenza PERIODO (FZ-SKILLS-BANCA-EXCEL-011A.4)
+# ---------------------------------------------------------------------------
+
+
+def test_manifest_declara_periodo_do_mes_importado(monkeypatch, tmp_path):
+    """Il manifest dichiara esattamente il mese importato (YYYY-MM), non un intervallo."""
+    bank_raw_dir, cnpj_dir = _make_bank_raw_month(tmp_path)
+    (cnpj_dir / "ConsultaPagamentos.xls").write_bytes(b"placeholder")
+    output_dir = tmp_path / "bank_raw" / "_decisoes_regras"
+    _patch_bank_sources(monkeypatch, [_receipt("Fornecedor Teste", raw_hash="receipt-1")], [])
+
+    importar_revisao_banca(**_import_kwargs(tmp_path, bank_raw_dir, output_dir))
+
+    manifest = json.loads((output_dir / "manifest_importa_revisao_banca.json").read_text(encoding="utf-8"))
+    assert manifest["periodo"] == "2026-04"
+    import re
+    assert re.fullmatch(r"\d{4}-\d{2}", manifest["periodo"]), (
+        f"periodo deve essere YYYY-MM (singolo mese), trovato: {manifest['periodo']!r}"
+    )
+
+
+def test_excel_comprovantes_periodo_coerente_com_banco_raw_dir(monkeypatch, tmp_path):
+    """Ogni riga del foglio decisoes_comprovantes ha PERIODO == mese della bank_raw_dir."""
+    bank_raw_dir, cnpj_dir = _make_bank_raw_month(tmp_path)
+    (cnpj_dir / "ConsultaPagamentos.xls").write_bytes(b"placeholder")
+    output_dir = tmp_path / "bank_raw" / "_decisoes_regras"
+    _patch_bank_sources(
+        monkeypatch,
+        [
+            _receipt("Fornecedor A", raw_hash="receipt-a"),
+            _receipt("Fornecedor B", raw_hash="receipt-b"),
+        ],
+        [],
+    )
+
+    importar_revisao_banca(**_import_kwargs(tmp_path, bank_raw_dir, output_dir))
+
+    rows = _data_rows(output_dir / COMPROVANTES_XLSX, COMPROVANTES_SHEET)
+    assert rows, "Nessuna riga dati trovata nel foglio decisoes_comprovantes"
+    for row in rows:
+        assert row["PERIODO"] == "2026-04", (
+            f"PERIODO atteso '2026-04', trovato {row['PERIODO']!r} per beneficiario {row.get('BENEFICIARIO_FAVORECIDO')!r}"
+        )
+
+
+def test_importacao_mes_posterior_substitui_periodo_no_manifest(monkeypatch, tmp_path):
+    """Importando marzo e poi aprile, il manifest dichiara solo aprile (ultimo mese importato)."""
+    output_dir = tmp_path / "bank_raw" / "_decisoes_regras"
+
+    # Prima importazione: marzo 2026
+    mar_dir = tmp_path / "bank_raw" / "2026" / "2026-03"
+    mar_cnpj = mar_dir / "08884180000123"
+    mar_cnpj.mkdir(parents=True)
+    (mar_cnpj / "ConsultaPagamentos.xls").write_bytes(b"placeholder")
+    _patch_bank_sources(monkeypatch, [_receipt("Fornecedor Marzo", raw_hash="receipt-mar")], [])
+    importar_revisao_banca(
+        bank_raw_dir=mar_dir,
+        output_dir=output_dir,
+        regras_path=_write_rules(tmp_path),
+        plano_contas_path=_write_plan(tmp_path),
+        mapeamento_dre_path=_write_mapping(tmp_path),
+    )
+
+    manifest_dopo_marzo = json.loads(
+        (output_dir / "manifest_importa_revisao_banca.json").read_text(encoding="utf-8")
+    )
+    assert manifest_dopo_marzo["periodo"] == "2026-03"
+
+    # Seconda importazione: aprile 2026
+    apr_dir = tmp_path / "bank_raw" / "2026" / "2026-04"
+    apr_cnpj = apr_dir / "08884180000123"
+    apr_cnpj.mkdir(parents=True)
+    (apr_cnpj / "ConsultaPagamentos.xls").write_bytes(b"placeholder")
+    _patch_bank_sources(monkeypatch, [_receipt("Fornecedor Abril", raw_hash="receipt-apr")], [])
+    importar_revisao_banca(
+        bank_raw_dir=apr_dir,
+        output_dir=output_dir,
+        regras_path=_write_rules(tmp_path),
+        plano_contas_path=_write_plan(tmp_path),
+        mapeamento_dre_path=_write_mapping(tmp_path),
+    )
+
+    manifest_dopo_aprile = json.loads(
+        (output_dir / "manifest_importa_revisao_banca.json").read_text(encoding="utf-8")
+    )
+    # Il manifest corrente deve dichiarare SOLO aprile — non un intervallo o "marzo-aprile"
+    assert manifest_dopo_aprile["periodo"] == "2026-04", (
+        f"Dopo importazione aprile, manifest deve dichiarare '2026-04', trovato: {manifest_dopo_aprile['periodo']!r}"
+    )
+
+    # Le righe Excel devono contenere PERIODO == "2026-04", non "2026-03"
+    rows = _data_rows(output_dir / COMPROVANTES_XLSX, COMPROVANTES_SHEET)
+    assert rows, "Nessuna riga trovata negli Excel dopo importazione aprile"
+    for row in rows:
+        assert row["PERIODO"] == "2026-04", (
+            f"Dopo importazione aprile, PERIODO atteso '2026-04', trovato {row['PERIODO']!r}"
+        )
+
+
 def _read_csv(path: Path) -> list[dict[str, str]]:
     with path.open(encoding="utf-8-sig", newline="") as f:
         reader = csv.DictReader(f, delimiter=";")
