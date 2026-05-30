@@ -11,11 +11,13 @@ from openpyxl.utils import get_column_letter
 
 from fantozzi.banking.models import BankLaunchEnrichment, PaymentReceiptRaw
 from fantozzi.banking.revisao_banca import (
+    COMPROVANTES_GREY_COLUMNS,
     COMPROVANTES_HEADERS,
     COMPROVANTES_HIDDEN_COLUMNS,
     COMPROVANTES_SHEET,
     COMPROVANTES_XLSX,
     CONTA_CORRENTE_CLASSIFICADOS_CSV,
+    CONTA_CORRENTE_GREY_COLUMNS,
     CONTA_CORRENTE_HEADERS,
     CONTA_CORRENTE_HIDDEN_COLUMNS,
     CONTA_CORRENTE_SHEET,
@@ -1739,8 +1741,8 @@ def test_template_excel_banca_colonne_canoniche_conta_corrente(monkeypatch, tmp_
     assert headers == CONTA_CORRENTE_HEADERS
 
 
-def test_template_excel_banca_colunas_tecnicas_ocultas(monkeypatch, tmp_path):
-    """Le colonne tecniche sono nascoste; le colonne operative sono visibili."""
+def test_template_excel_banca_todas_colunas_visiveis(monkeypatch, tmp_path):
+    """Tutte le colonne (operative, avanzate e tecniche) sono visibili — nessuna nascosta."""
     bank_raw_dir, cnpj_dir = _make_bank_raw_month(tmp_path)
     (cnpj_dir / "ConsultaPagamentos.xls").write_bytes(b"placeholder")
     (cnpj_dir / "Extrato_Lancamentos.xlsx").write_bytes(b"placeholder")
@@ -1759,10 +1761,7 @@ def test_template_excel_banca_colunas_tecnicas_ocultas(monkeypatch, tmp_path):
     for col, header in enumerate(comp_headers, start=1):
         dim = comp_sheet.column_dimensions.get(get_column_letter(col))
         is_hidden = dim is not None and bool(dim.hidden)
-        if header in COMPROVANTES_HIDDEN_COLUMNS:
-            assert is_hidden, f"Comprovantes: colonna '{header}' dovrebbe essere nascosta"
-        else:
-            assert not is_hidden, f"Comprovantes: colonna '{header}' NON dovrebbe essere nascosta"
+        assert not is_hidden, f"Comprovantes: colonna '{header}' NON deve essere nascosta"
 
     conta_wb = load_workbook(output_dir / CONTA_CORRENTE_XLSX, data_only=False)
     conta_sheet = conta_wb[CONTA_CORRENTE_SHEET]
@@ -1770,10 +1769,7 @@ def test_template_excel_banca_colunas_tecnicas_ocultas(monkeypatch, tmp_path):
     for col, header in enumerate(conta_headers, start=1):
         dim = conta_sheet.column_dimensions.get(get_column_letter(col))
         is_hidden = dim is not None and bool(dim.hidden)
-        if header in CONTA_CORRENTE_HIDDEN_COLUMNS:
-            assert is_hidden, f"Conta corrente: colonna '{header}' dovrebbe essere nascosta"
-        else:
-            assert not is_hidden, f"Conta corrente: colonna '{header}' NON dovrebbe essere nascosta"
+        assert not is_hidden, f"Conta corrente: colonna '{header}' NON deve essere nascosta"
 
 
 def test_template_excel_banca_autofilter_cobre_area_completa(monkeypatch, tmp_path):
@@ -1925,6 +1921,191 @@ def test_validate_template_banca_conforme_com_dados(monkeypatch, tmp_path):
     violations = validate_excel_template_banca(output_dir)
 
     assert violations == [], f"Violazioni inattese: {violations}"
+
+
+# ---------------------------------------------------------------------------
+# Testes: colonne visibili — template senza colonne nascoste (FZ-SKILLS-BANCA-EXCEL-011A.5)
+# ---------------------------------------------------------------------------
+
+
+def test_validate_template_banca_nao_bloqueia_colonna_tecnica_visivel(tmp_path):
+    """validate_excel_template_banca non segnala violazione se le colonne tecniche sono visibili."""
+    output_dir = tmp_path / "decisoes_regras"
+    output_dir.mkdir()
+
+    for xlsx_name, headers, sheet_name in [
+        (COMPROVANTES_XLSX, COMPROVANTES_HEADERS, COMPROVANTES_SHEET),
+        (CONTA_CORRENTE_XLSX, CONTA_CORRENTE_HEADERS, CONTA_CORRENTE_SHEET),
+    ]:
+        wb = Workbook()
+        sheet = wb.active
+        sheet.title = sheet_name
+        sheet.append(headers)
+        sheet.append(["val"] * len(headers))
+        sheet.auto_filter.ref = sheet.dimensions
+        _add_test_dropdowns(sheet, headers, sheet_name == CONTA_CORRENTE_SHEET)
+        wb.save(output_dir / xlsx_name)
+
+    violations = validate_excel_template_banca(output_dir)
+
+    assert violations == [], f"Violazioni inattese con colonne tecniche visibili: {violations}"
+
+
+def test_template_excel_banca_chave_regra_visiveis(monkeypatch, tmp_path):
+    """CHAVE_REGRA_* sono visibili nel template generato (non nascoste)."""
+    bank_raw_dir, cnpj_dir = _make_bank_raw_month(tmp_path)
+    (cnpj_dir / "ConsultaPagamentos.xls").write_bytes(b"placeholder")
+    (cnpj_dir / "Extrato_Lancamentos.xlsx").write_bytes(b"placeholder")
+    output_dir = tmp_path / "bank_raw" / "_decisoes_regras"
+    _patch_bank_sources(
+        monkeypatch,
+        [_receipt("Fornecedor Teste", raw_hash="receipt-1")],
+        [_launch("PIX enviado", "Fornecedor Teste", raw_hash="launch-1")],
+    )
+
+    importar_revisao_banca(**_import_kwargs(tmp_path, bank_raw_dir, output_dir))
+
+    comp_wb = load_workbook(output_dir / COMPROVANTES_XLSX, data_only=False)
+    comp_sheet = comp_wb[COMPROVANTES_SHEET]
+    comp_headers = [cell.value for cell in comp_sheet[1]]
+    for chave_col in ("CHAVE_REGRA_BENEFICIARIO", "CHAVE_REGRA_REFERENCIA"):
+        assert chave_col in comp_headers, f"{chave_col} non trovata nelle colonne comprovantes"
+        col_idx = comp_headers.index(chave_col) + 1
+        dim = comp_sheet.column_dimensions.get(get_column_letter(col_idx))
+        is_hidden = dim is not None and bool(dim.hidden)
+        assert not is_hidden, f"Comprovantes: {chave_col} deve essere visibile"
+
+    conta_wb = load_workbook(output_dir / CONTA_CORRENTE_XLSX, data_only=False)
+    conta_sheet = conta_wb[CONTA_CORRENTE_SHEET]
+    conta_headers = [cell.value for cell in conta_sheet[1]]
+    for chave_col in ("CHAVE_REGRA_LANCAMENTO", "CHAVE_REGRA_RAZAO_SOCIAL"):
+        assert chave_col in conta_headers, f"{chave_col} non trovata nelle colonne conta corrente"
+        col_idx = conta_headers.index(chave_col) + 1
+        dim = conta_sheet.column_dimensions.get(get_column_letter(col_idx))
+        is_hidden = dim is not None and bool(dim.hidden)
+        assert not is_hidden, f"Conta corrente: {chave_col} deve essere visibile"
+
+
+def test_template_excel_banca_conta_id_aprovada_visivel(monkeypatch, tmp_path):
+    """CONTA_ID_APROVADA e CONTA_NOME_APROVADA sono visibili nel template generato."""
+    bank_raw_dir, cnpj_dir = _make_bank_raw_month(tmp_path)
+    (cnpj_dir / "ConsultaPagamentos.xls").write_bytes(b"placeholder")
+    (cnpj_dir / "Extrato_Lancamentos.xlsx").write_bytes(b"placeholder")
+    output_dir = tmp_path / "bank_raw" / "_decisoes_regras"
+    _patch_bank_sources(
+        monkeypatch,
+        [_receipt("Fornecedor Teste", raw_hash="receipt-1")],
+        [_launch("PIX enviado", "Fornecedor Teste", raw_hash="launch-1")],
+    )
+
+    importar_revisao_banca(**_import_kwargs(tmp_path, bank_raw_dir, output_dir))
+
+    for xlsx_name, sheet_name in [
+        (COMPROVANTES_XLSX, COMPROVANTES_SHEET),
+        (CONTA_CORRENTE_XLSX, CONTA_CORRENTE_SHEET),
+    ]:
+        wb = load_workbook(output_dir / xlsx_name, data_only=False)
+        sheet = wb[sheet_name]
+        headers = [cell.value for cell in sheet[1]]
+        for col_name in ("CONTA_ID_APROVADA", "CONTA_NOME_APROVADA"):
+            assert col_name in headers, f"{col_name} non trovata in {sheet_name}"
+            col_idx = headers.index(col_name) + 1
+            dim = sheet.column_dimensions.get(get_column_letter(col_idx))
+            is_hidden = dim is not None and bool(dim.hidden)
+            assert not is_hidden, f"{sheet_name}: {col_name} deve essere visibile"
+
+
+def test_template_excel_banca_colonne_grigie_stilizzate(monkeypatch, tmp_path):
+    """Le colonne tecniche/derivate hanno fill grigio nel template generato."""
+    bank_raw_dir, cnpj_dir = _make_bank_raw_month(tmp_path)
+    (cnpj_dir / "ConsultaPagamentos.xls").write_bytes(b"placeholder")
+    (cnpj_dir / "Extrato_Lancamentos.xlsx").write_bytes(b"placeholder")
+    output_dir = tmp_path / "bank_raw" / "_decisoes_regras"
+    _patch_bank_sources(
+        monkeypatch,
+        [_receipt("Fornecedor Teste", raw_hash="receipt-1")],
+        [_launch("PIX enviado", "Fornecedor Teste", raw_hash="launch-1")],
+    )
+
+    importar_revisao_banca(**_import_kwargs(tmp_path, bank_raw_dir, output_dir))
+
+    comp_wb = load_workbook(output_dir / COMPROVANTES_XLSX, data_only=False)
+    comp_sheet = comp_wb[COMPROVANTES_SHEET]
+    comp_headers = [cell.value for cell in comp_sheet[1]]
+    for col_idx, header in enumerate(comp_headers, start=1):
+        if header in COMPROVANTES_GREY_COLUMNS:
+            cell_fill = comp_sheet.cell(row=1, column=col_idx).fill
+            assert "D9D9D9" in cell_fill.fgColor.rgb.upper(), (
+                f"Comprovantes: colonna '{header}' dovrebbe avere fill grigio (rgb={cell_fill.fgColor.rgb!r})"
+            )
+
+    conta_wb = load_workbook(output_dir / CONTA_CORRENTE_XLSX, data_only=False)
+    conta_sheet = conta_wb[CONTA_CORRENTE_SHEET]
+    conta_headers = [cell.value for cell in conta_sheet[1]]
+    for col_idx, header in enumerate(conta_headers, start=1):
+        if header in CONTA_CORRENTE_GREY_COLUMNS:
+            cell_fill = conta_sheet.cell(row=1, column=col_idx).fill
+            assert "D9D9D9" in cell_fill.fgColor.rgb.upper(), (
+                f"Conta corrente: colonna '{header}' dovrebbe avere fill grigio (rgb={cell_fill.fgColor.rgb!r})"
+            )
+
+
+def test_validate_template_banca_dropdown_conta_escolhida_assente_blocca(tmp_path):
+    """Dropdown CONTA_ESCOLHIDA assente è ancora un blocco (bloccante se assente)."""
+    output_dir = tmp_path / "decisoes_regras"
+    output_dir.mkdir()
+
+    for xlsx_name, headers, sheet_name in [
+        (COMPROVANTES_XLSX, COMPROVANTES_HEADERS, COMPROVANTES_SHEET),
+        (CONTA_CORRENTE_XLSX, CONTA_CORRENTE_HEADERS, CONTA_CORRENTE_SHEET),
+    ]:
+        wb = Workbook()
+        sheet = wb.active
+        sheet.title = sheet_name
+        sheet.append(headers)
+        sheet.append(["val"] * len(headers))
+        sheet.auto_filter.ref = sheet.dimensions
+        wb.save(output_dir / xlsx_name)
+
+    violations = validate_excel_template_banca(output_dir)
+
+    assert any("CONTA_ESCOLHIDA" in v for v in violations), (
+        f"Atteso blocco per CONTA_ESCOLHIDA assente, violazioni: {violations}"
+    )
+
+
+def _add_test_dropdowns(sheet, headers: list[str], dropdown_usar_somente: bool) -> None:
+    """Aggiunge dropdown minimi per far passare la validazione template."""
+    from openpyxl.worksheet.datavalidation import DataValidation as DV
+    row_count = max(sheet.max_row - 1, 1)
+
+    for col_name, formula in [
+        ("STATUS_DECISAO", '"PENDENTE,APROVADO,REVISAR,NAO_CRIAR_REGRA,BLOQUEADO"'),
+        ("ACAO_REGRA", '"CLASSIFICAR,ESCLUDERE,XML,NAO_CRIAR_REGRA,REVISAR,BLOQUEADO"'),
+        ("RISCO_DUPLICIDADE_XML", '"OK,DUVIDA"'),
+        ("ESCOPO_REGRA", '"COMPROVANTE,CONTA_CORRENTE"'),
+    ]:
+        if col_name not in headers:
+            continue
+        col_idx = headers.index(col_name) + 1
+        letter = get_column_letter(col_idx)
+        val = DV(type="list", formula1=formula, allow_blank=True)
+        sheet.add_data_validation(val)
+        val.add(f"{letter}2:{letter}{row_count + 1}")
+
+    if dropdown_usar_somente and "USAR_SOMENTE_SEM_COMPROVANTE" in headers:
+        col_idx = headers.index("USAR_SOMENTE_SEM_COMPROVANTE") + 1
+        letter = get_column_letter(col_idx)
+        val = DV(type="list", formula1='"SIM,NAO"', allow_blank=True)
+        sheet.add_data_validation(val)
+        val.add(f"{letter}2:{letter}{row_count + 1}")
+
+    if "CONTA_ESCOLHIDA" in headers:
+        col_idx = headers.index("CONTA_ESCOLHIDA") + 1
+        letter = get_column_letter(col_idx)
+        val = DV(type="list", formula1="=plano_contas!$A$2:$A$2", allow_blank=True)
+        sheet.add_data_validation(val)
+        val.add(f"{letter}2:{letter}{row_count + 1}")
 
 
 # ---------------------------------------------------------------------------

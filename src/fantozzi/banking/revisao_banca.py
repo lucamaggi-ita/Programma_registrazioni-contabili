@@ -185,23 +185,23 @@ ESCOPO_REGRA_VALUES = ("COMPROVANTE", "CONTA_CORRENTE")
 USAR_SOMENTE_SEM_COMPROVANTE_VALUES = ("SIM", "NAO")
 BOLETO_PAGO_FALLBACK_REGRA_ID = "EXCLUSAO_XML_CONTA_CORRENTE_BOLETO_PAGO"
 
-COMPROVANTES_HIDDEN_COLUMNS: frozenset[str] = frozenset({
+COMPROVANTES_HIDDEN_COLUMNS: frozenset[str] = frozenset()
+
+CONTA_CORRENTE_HIDDEN_COLUMNS: frozenset[str] = frozenset()
+
+COMPROVANTES_GREY_COLUMNS: frozenset[str] = frozenset({
     "PERIODO",
     "CNPJ",
     "CONTA_ID_APROVADA",
     "CONTA_NOME_APROVADA",
-    "CHAVE_REGRA_BENEFICIARIO",
-    "CHAVE_REGRA_REFERENCIA",
     "QTD_OCORRENCIAS",
     "VALOR_TOTAL",
     "EXEMPLOS",
 })
 
-CONTA_CORRENTE_HIDDEN_COLUMNS: frozenset[str] = frozenset({
+CONTA_CORRENTE_GREY_COLUMNS: frozenset[str] = frozenset({
     "CONTA_ID_APROVADA",
     "CONTA_NOME_APROVADA",
-    "CHAVE_REGRA_LANCAMENTO",
-    "CHAVE_REGRA_RAZAO_SOCIAL",
     "COMPROVANTE_RELACIONADO_BENEFICIARIO",
     "COMPROVANTE_RELACIONADO_DOCUMENTO",
     "COMPROVANTE_RELACIONADO_DATA",
@@ -527,7 +527,7 @@ def importar_revisao_banca(
         technical_headers=TECNICO_COMPROVANTES_HEADERS,
         technical_rows=comprovante_tecnico,
         account_options=account_options,
-        hidden_columns=COMPROVANTES_HIDDEN_COLUMNS,
+        grey_columns=COMPROVANTES_GREY_COLUMNS,
     )
     _write_decision_workbook(
         conta_corrente_path,
@@ -538,7 +538,7 @@ def importar_revisao_banca(
         technical_headers=TECNICO_CONTA_CORRENTE_HEADERS,
         technical_rows=conta_tecnico,
         account_options=account_options,
-        hidden_columns=CONTA_CORRENTE_HIDDEN_COLUMNS,
+        grey_columns=CONTA_CORRENTE_GREY_COLUMNS,
     )
 
     conta_corrente_csv_path = output_dir / CONTA_CORRENTE_CLASSIFICADOS_CSV
@@ -586,6 +586,7 @@ def validate_excel_template_banca(output_dir: Path) -> list[str]:
     Returns a list of violation strings. Empty list = conformant (OK).
     If violations are present, the caller must raise BLOCCO_TEMPLATE_EXCEL_BANCA_NON_CONFORME
     and must NOT proceed to read APROVADO rows, update YAML, or run multifonte/giornale/DRE.
+    All columns must be visible — no hidden columns. Visibility is not a blocking check.
     """
     output_dir = Path(output_dir)
     violations: list[str] = []
@@ -602,7 +603,6 @@ def validate_excel_template_banca(output_dir: Path) -> list[str]:
             comprovantes_path,
             COMPROVANTES_SHEET,
             COMPROVANTES_HEADERS,
-            COMPROVANTES_HIDDEN_COLUMNS,
             dropdown_usar_somente=False,
         )
     )
@@ -611,7 +611,6 @@ def validate_excel_template_banca(output_dir: Path) -> list[str]:
             conta_corrente_path,
             CONTA_CORRENTE_SHEET,
             CONTA_CORRENTE_HEADERS,
-            CONTA_CORRENTE_HIDDEN_COLUMNS,
             dropdown_usar_somente=True,
         )
     )
@@ -1275,10 +1274,15 @@ def _is_formula(value: object) -> bool:
     return isinstance(value, str) and value.startswith("=")
 
 
-def _hide_technical_columns(sheet, headers: list[str], hidden_columns: frozenset[str]) -> None:
+def _apply_grey_columns(sheet, headers: list[str], grey_columns: frozenset[str]) -> None:
+    fill = PatternFill("solid", fgColor="D9D9D9")
     for index, header in enumerate(headers, start=1):
-        if header in hidden_columns:
-            sheet.column_dimensions[get_column_letter(index)].hidden = True
+        if header not in grey_columns:
+            continue
+        col_letter = get_column_letter(index)
+        sheet.cell(row=1, column=index).fill = fill
+        for row_idx in range(2, max(sheet.max_row + 1, 2)):
+            sheet.cell(row=row_idx, column=index).fill = fill
 
 
 def _write_decision_workbook(
@@ -1291,14 +1295,14 @@ def _write_decision_workbook(
     technical_headers: list[str],
     technical_rows: list[dict[str, object]],
     account_options: list[tuple[str, str, str]],
-    hidden_columns: frozenset[str] = frozenset(),
+    grey_columns: frozenset[str] = frozenset(),
 ) -> None:
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = sheet_name
     _append_rows(sheet, headers, rows)
     _style_sheet(sheet, headers)
-    _hide_technical_columns(sheet, headers, hidden_columns)
+    _apply_grey_columns(sheet, headers, grey_columns)
     _add_decision_validations(sheet, headers, len(rows))
     _add_account_validation(sheet, headers, len(rows), len(account_options))
     _add_account_formulas(sheet, headers, len(rows))
@@ -1750,7 +1754,6 @@ def _validate_decision_workbook(
     path: Path,
     sheet_name: str,
     expected_headers: list[str],
-    hidden_columns: frozenset[str],
     *,
     dropdown_usar_somente: bool,
 ) -> list[str]:
@@ -1775,15 +1778,6 @@ def _validate_decision_workbook(
         if not missing and not extra:
             violations.append(f"Ordine colonne errato in {sheet_name}")
         return violations
-    for index, header in enumerate(actual_headers, start=1):
-        if header is None:
-            continue
-        dim = sheet.column_dimensions.get(get_column_letter(index))
-        is_hidden = dim is not None and bool(dim.hidden)
-        if header in hidden_columns and not is_hidden:
-            violations.append(f"Colonna tecnica non nascosta in {sheet_name}: {header}")
-        elif header not in hidden_columns and is_hidden:
-            violations.append(f"Colonna operativa nascosta in {sheet_name}: {header}")
     if sheet.auto_filter.ref != sheet.dimensions:
         violations.append(
             f"AutoFilter non copre area completa in {sheet_name} "
