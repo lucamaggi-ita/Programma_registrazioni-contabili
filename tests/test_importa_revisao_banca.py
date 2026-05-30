@@ -7,18 +7,24 @@ from decimal import Decimal
 from pathlib import Path
 
 from openpyxl import Workbook, load_workbook
+from openpyxl.utils import get_column_letter
 
 from fantozzi.banking.models import BankLaunchEnrichment, PaymentReceiptRaw
 from fantozzi.banking.revisao_banca import (
+    COMPROVANTES_HEADERS,
+    COMPROVANTES_HIDDEN_COLUMNS,
     COMPROVANTES_SHEET,
     COMPROVANTES_XLSX,
     CONTA_CORRENTE_CLASSIFICADOS_CSV,
+    CONTA_CORRENTE_HEADERS,
+    CONTA_CORRENTE_HIDDEN_COLUMNS,
     CONTA_CORRENTE_SHEET,
     CONTA_CORRENTE_XLSX,
     ImportaRevisaoBancaError,
     _existing_key,
     importar_revisao_banca,
     resolve_bank_raw_dir,
+    validate_excel_template_banca,
 )
 from fantozzi.cli import build_parser, main
 
@@ -1654,6 +1660,271 @@ def test_excel_decisional_nao_muda_com_novo_csv(monkeypatch, tmp_path):
     assert len(decisoes) == 1
     assert decisoes[0]["LANCAMENTO"] == "PAGAMENTOS TRIB COD BARRAS"
     assert "COELBA" not in str(decisoes[0].get("LANCAMENTO", ""))
+
+
+# ---------------------------------------------------------------------------
+# Testes: conformidade template Excel decisionale banca (FZ-SKILLS-BANCA-EXCEL-011A)
+# ---------------------------------------------------------------------------
+
+_REQUIRED_COMPROVANTES_SHEETS = {
+    "decisoes_comprovantes",
+    "tecnico_comprovantes",
+    "plano_contas",
+    "listas_validacao",
+    "instrucoes",
+}
+_REQUIRED_CONTA_CORRENTE_SHEETS = {
+    "decisoes_conta_corrente",
+    "tecnico_conta_corrente",
+    "plano_contas",
+    "listas_validacao",
+    "instrucoes",
+}
+
+
+def test_template_excel_banca_fogli_obbligatori(monkeypatch, tmp_path):
+    """Entrambi i workbook generati hanno esattamente i fogli obbligatori."""
+    bank_raw_dir, cnpj_dir = _make_bank_raw_month(tmp_path)
+    (cnpj_dir / "ConsultaPagamentos.xls").write_bytes(b"placeholder")
+    (cnpj_dir / "Extrato_Lancamentos.xlsx").write_bytes(b"placeholder")
+    output_dir = tmp_path / "bank_raw" / "_decisoes_regras"
+    _patch_bank_sources(
+        monkeypatch,
+        [_receipt("Fornecedor Teste", raw_hash="receipt-1")],
+        [_launch("PIX enviado", "Fornecedor Teste", raw_hash="launch-1")],
+    )
+
+    importar_revisao_banca(**_import_kwargs(tmp_path, bank_raw_dir, output_dir))
+
+    comp_wb = load_workbook(output_dir / COMPROVANTES_XLSX, data_only=False)
+    assert set(comp_wb.sheetnames) == _REQUIRED_COMPROVANTES_SHEETS
+
+    conta_wb = load_workbook(output_dir / CONTA_CORRENTE_XLSX, data_only=False)
+    assert set(conta_wb.sheetnames) == _REQUIRED_CONTA_CORRENTE_SHEETS
+
+
+def test_template_excel_banca_colonne_canoniche_comprovantes(monkeypatch, tmp_path):
+    """Il foglio decisoes_comprovantes ha esattamente le 20 colonne canoniche nell'ordine corretto."""
+    bank_raw_dir, cnpj_dir = _make_bank_raw_month(tmp_path)
+    (cnpj_dir / "ConsultaPagamentos.xls").write_bytes(b"placeholder")
+    output_dir = tmp_path / "bank_raw" / "_decisoes_regras"
+    _patch_bank_sources(
+        monkeypatch,
+        [_receipt("Fornecedor Teste", raw_hash="receipt-1")],
+        [],
+    )
+
+    importar_revisao_banca(**_import_kwargs(tmp_path, bank_raw_dir, output_dir))
+
+    workbook = load_workbook(output_dir / COMPROVANTES_XLSX, data_only=False)
+    headers = [cell.value for cell in workbook[COMPROVANTES_SHEET][1]]
+    assert headers == COMPROVANTES_HEADERS
+
+
+def test_template_excel_banca_colonne_canoniche_conta_corrente(monkeypatch, tmp_path):
+    """Il foglio decisoes_conta_corrente ha esattamente le 24 colonne canoniche nell'ordine corretto."""
+    bank_raw_dir, cnpj_dir = _make_bank_raw_month(tmp_path)
+    (cnpj_dir / "Extrato_Lancamentos.xlsx").write_bytes(b"placeholder")
+    output_dir = tmp_path / "bank_raw" / "_decisoes_regras"
+    _patch_bank_sources(
+        monkeypatch,
+        [],
+        [_launch("PIX enviado", "Fornecedor Teste", raw_hash="launch-1")],
+    )
+
+    importar_revisao_banca(**_import_kwargs(tmp_path, bank_raw_dir, output_dir))
+
+    workbook = load_workbook(output_dir / CONTA_CORRENTE_XLSX, data_only=False)
+    headers = [cell.value for cell in workbook[CONTA_CORRENTE_SHEET][1]]
+    assert headers == CONTA_CORRENTE_HEADERS
+
+
+def test_template_excel_banca_colunas_tecnicas_ocultas(monkeypatch, tmp_path):
+    """Le colonne tecniche sono nascoste; le colonne operative sono visibili."""
+    bank_raw_dir, cnpj_dir = _make_bank_raw_month(tmp_path)
+    (cnpj_dir / "ConsultaPagamentos.xls").write_bytes(b"placeholder")
+    (cnpj_dir / "Extrato_Lancamentos.xlsx").write_bytes(b"placeholder")
+    output_dir = tmp_path / "bank_raw" / "_decisoes_regras"
+    _patch_bank_sources(
+        monkeypatch,
+        [_receipt("Fornecedor Teste", raw_hash="receipt-1")],
+        [_launch("PIX enviado", "Fornecedor Teste", raw_hash="launch-1")],
+    )
+
+    importar_revisao_banca(**_import_kwargs(tmp_path, bank_raw_dir, output_dir))
+
+    comp_wb = load_workbook(output_dir / COMPROVANTES_XLSX, data_only=False)
+    comp_sheet = comp_wb[COMPROVANTES_SHEET]
+    comp_headers = [cell.value for cell in comp_sheet[1]]
+    for col, header in enumerate(comp_headers, start=1):
+        dim = comp_sheet.column_dimensions.get(get_column_letter(col))
+        is_hidden = dim is not None and bool(dim.hidden)
+        if header in COMPROVANTES_HIDDEN_COLUMNS:
+            assert is_hidden, f"Comprovantes: colonna '{header}' dovrebbe essere nascosta"
+        else:
+            assert not is_hidden, f"Comprovantes: colonna '{header}' NON dovrebbe essere nascosta"
+
+    conta_wb = load_workbook(output_dir / CONTA_CORRENTE_XLSX, data_only=False)
+    conta_sheet = conta_wb[CONTA_CORRENTE_SHEET]
+    conta_headers = [cell.value for cell in conta_sheet[1]]
+    for col, header in enumerate(conta_headers, start=1):
+        dim = conta_sheet.column_dimensions.get(get_column_letter(col))
+        is_hidden = dim is not None and bool(dim.hidden)
+        if header in CONTA_CORRENTE_HIDDEN_COLUMNS:
+            assert is_hidden, f"Conta corrente: colonna '{header}' dovrebbe essere nascosta"
+        else:
+            assert not is_hidden, f"Conta corrente: colonna '{header}' NON dovrebbe essere nascosta"
+
+
+def test_template_excel_banca_autofilter_cobre_area_completa(monkeypatch, tmp_path):
+    """L'AutoFilter copre l'intera area dati incluse tutte le righe, non solo l'intestazione."""
+    bank_raw_dir, cnpj_dir = _make_bank_raw_month(tmp_path)
+    (cnpj_dir / "ConsultaPagamentos.xls").write_bytes(b"placeholder")
+    (cnpj_dir / "Extrato_Lancamentos.xlsx").write_bytes(b"placeholder")
+    output_dir = tmp_path / "bank_raw" / "_decisoes_regras"
+    _patch_bank_sources(
+        monkeypatch,
+        [
+            _receipt("Fornecedor A", raw_hash="receipt-a"),
+            _receipt("Fornecedor B", raw_hash="receipt-b"),
+            _receipt("Fornecedor C", raw_hash="receipt-c"),
+        ],
+        [
+            _launch("PIX A", "Fornecedor A", raw_hash="launch-a"),
+            _launch("PIX B", "Fornecedor B", raw_hash="launch-b"),
+        ],
+    )
+
+    importar_revisao_banca(**_import_kwargs(tmp_path, bank_raw_dir, output_dir))
+
+    comp_wb = load_workbook(output_dir / COMPROVANTES_XLSX, data_only=False)
+    comp_sheet = comp_wb[COMPROVANTES_SHEET]
+    assert comp_sheet.auto_filter.ref == comp_sheet.dimensions
+
+    conta_wb = load_workbook(output_dir / CONTA_CORRENTE_XLSX, data_only=False)
+    conta_sheet = conta_wb[CONTA_CORRENTE_SHEET]
+    assert conta_sheet.auto_filter.ref == conta_sheet.dimensions
+
+
+# ---------------------------------------------------------------------------
+# Testes: validate_excel_template_banca (FZ-SKILLS-BANCA-EXCEL-011A.1)
+# ---------------------------------------------------------------------------
+
+
+def test_validate_template_banca_arquivo_ausente(tmp_path):
+    """File Excel mancanti producono violazioni — nessuna conformanza possibile."""
+    output_dir = tmp_path / "decisoes_regras"
+    output_dir.mkdir()
+
+    violations = validate_excel_template_banca(output_dir)
+
+    assert any(COMPROVANTES_XLSX in v for v in violations)
+    assert any(CONTA_CORRENTE_XLSX in v for v in violations)
+
+
+def test_validate_template_banca_foglio_ausente(tmp_path):
+    """Foglio operativo con nome sbagliato produce violazione."""
+    output_dir = tmp_path / "decisoes_regras"
+    output_dir.mkdir()
+
+    wb = Workbook()
+    wb.active.title = "foglio_sbagliato"
+    wb.active.append(COMPROVANTES_HEADERS)
+    wb.save(output_dir / COMPROVANTES_XLSX)
+
+    wb2 = Workbook()
+    wb2.active.title = CONTA_CORRENTE_SHEET
+    wb2.active.append(CONTA_CORRENTE_HEADERS)
+    wb2.save(output_dir / CONTA_CORRENTE_XLSX)
+
+    violations = validate_excel_template_banca(output_dir)
+
+    assert any(COMPROVANTES_SHEET in v for v in violations)
+
+
+def test_validate_template_banca_coluna_extra(tmp_path):
+    """Colonna extra nel foglio decisionale produce violazione BLOCCO."""
+    output_dir = tmp_path / "decisoes_regras"
+    output_dir.mkdir()
+
+    wb = Workbook()
+    sheet = wb.active
+    sheet.title = COMPROVANTES_SHEET
+    sheet.append(COMPROVANTES_HEADERS + ["COLONNA_EXTRA"])
+    wb.save(output_dir / COMPROVANTES_XLSX)
+
+    wb2 = Workbook()
+    sheet2 = wb2.active
+    sheet2.title = CONTA_CORRENTE_SHEET
+    sheet2.append(CONTA_CORRENTE_HEADERS)
+    wb2.save(output_dir / CONTA_CORRENTE_XLSX)
+
+    violations = validate_excel_template_banca(output_dir)
+
+    assert any("COLONNA_EXTRA" in v for v in violations)
+
+
+def test_validate_template_banca_coluna_ausente(tmp_path):
+    """Colonna mancante nel foglio decisionale produce violazione BLOCCO."""
+    output_dir = tmp_path / "decisoes_regras"
+    output_dir.mkdir()
+
+    wb = Workbook()
+    sheet = wb.active
+    sheet.title = COMPROVANTES_SHEET
+    sheet.append(COMPROVANTES_HEADERS[:-1])
+    wb.save(output_dir / COMPROVANTES_XLSX)
+
+    wb2 = Workbook()
+    sheet2 = wb2.active
+    sheet2.title = CONTA_CORRENTE_SHEET
+    sheet2.append(CONTA_CORRENTE_HEADERS)
+    wb2.save(output_dir / CONTA_CORRENTE_XLSX)
+
+    violations = validate_excel_template_banca(output_dir)
+
+    assert any(COMPROVANTES_HEADERS[-1] in v for v in violations)
+
+
+def test_validate_template_banca_ordine_errato(tmp_path):
+    """Colonne in ordine invertito (stesso set, ordine sbagliato) produce violazione BLOCCO."""
+    output_dir = tmp_path / "decisoes_regras"
+    output_dir.mkdir()
+
+    wb = Workbook()
+    sheet = wb.active
+    sheet.title = COMPROVANTES_SHEET
+    sheet.append(list(reversed(COMPROVANTES_HEADERS)))
+    wb.save(output_dir / COMPROVANTES_XLSX)
+
+    wb2 = Workbook()
+    sheet2 = wb2.active
+    sheet2.title = CONTA_CORRENTE_SHEET
+    sheet2.append(CONTA_CORRENTE_HEADERS)
+    wb2.save(output_dir / CONTA_CORRENTE_XLSX)
+
+    violations = validate_excel_template_banca(output_dir)
+
+    assert any(COMPROVANTES_SHEET in v for v in violations)
+
+
+def test_validate_template_banca_conforme_com_dados(monkeypatch, tmp_path):
+    """Workbook generato da importar_revisao_banca supera la validazione senza violazioni."""
+    bank_raw_dir, cnpj_dir = _make_bank_raw_month(tmp_path)
+    (cnpj_dir / "ConsultaPagamentos.xls").write_bytes(b"placeholder")
+    (cnpj_dir / "Extrato_Lancamentos.xlsx").write_bytes(b"placeholder")
+    output_dir = tmp_path / "bank_raw" / "_decisoes_regras"
+    _patch_bank_sources(
+        monkeypatch,
+        [_receipt("Fornecedor Teste", raw_hash="receipt-1")],
+        [_launch("PIX enviado", "Fornecedor Teste", raw_hash="launch-1")],
+    )
+
+    importar_revisao_banca(**_import_kwargs(tmp_path, bank_raw_dir, output_dir))
+
+    violations = validate_excel_template_banca(output_dir)
+
+    assert violations == [], f"Violazioni inattese: {violations}"
 
 
 def _read_csv(path: Path) -> list[dict[str, str]]:

@@ -185,6 +185,35 @@ ESCOPO_REGRA_VALUES = ("COMPROVANTE", "CONTA_CORRENTE")
 USAR_SOMENTE_SEM_COMPROVANTE_VALUES = ("SIM", "NAO")
 BOLETO_PAGO_FALLBACK_REGRA_ID = "EXCLUSAO_XML_CONTA_CORRENTE_BOLETO_PAGO"
 
+COMPROVANTES_HIDDEN_COLUMNS: frozenset[str] = frozenset({
+    "PERIODO",
+    "CNPJ",
+    "CONTA_ID_APROVADA",
+    "CONTA_NOME_APROVADA",
+    "CHAVE_REGRA_BENEFICIARIO",
+    "CHAVE_REGRA_REFERENCIA",
+    "QTD_OCORRENCIAS",
+    "VALOR_TOTAL",
+    "EXEMPLOS",
+})
+
+CONTA_CORRENTE_HIDDEN_COLUMNS: frozenset[str] = frozenset({
+    "CONTA_ID_APROVADA",
+    "CONTA_NOME_APROVADA",
+    "CHAVE_REGRA_LANCAMENTO",
+    "CHAVE_REGRA_RAZAO_SOCIAL",
+    "COMPROVANTE_RELACIONADO_BENEFICIARIO",
+    "COMPROVANTE_RELACIONADO_DOCUMENTO",
+    "COMPROVANTE_RELACIONADO_DATA",
+    "COMPROVANTE_RELACIONADO_VALOR",
+    "COMPROVANTE_RELACIONADO_REGRA_EXISTENTE",
+    "QTD_OCORRENCIAS",
+    "VALOR_TOTAL",
+    "EXEMPLOS",
+})
+
+BLOCCO_TEMPLATE_EXCEL_BANCA_NON_CONFORME = "BLOCCO_TEMPLATE_EXCEL_BANCA_NON_CONFORME"
+
 
 class ImportaRevisaoBancaError(ValueError):
     pass
@@ -498,6 +527,7 @@ def importar_revisao_banca(
         technical_headers=TECNICO_COMPROVANTES_HEADERS,
         technical_rows=comprovante_tecnico,
         account_options=account_options,
+        hidden_columns=COMPROVANTES_HIDDEN_COLUMNS,
     )
     _write_decision_workbook(
         conta_corrente_path,
@@ -508,6 +538,7 @@ def importar_revisao_banca(
         technical_headers=TECNICO_CONTA_CORRENTE_HEADERS,
         technical_rows=conta_tecnico,
         account_options=account_options,
+        hidden_columns=CONTA_CORRENTE_HIDDEN_COLUMNS,
     )
 
     conta_corrente_csv_path = output_dir / CONTA_CORRENTE_CLASSIFICADOS_CSV
@@ -547,6 +578,44 @@ def importar_revisao_banca(
     )
     _write_manifest(result)
     return result
+
+
+def validate_excel_template_banca(output_dir: Path) -> list[str]:
+    """
+    Validates both official Excel decision files against the canonical schema.
+    Returns a list of violation strings. Empty list = conformant (OK).
+    If violations are present, the caller must raise BLOCCO_TEMPLATE_EXCEL_BANCA_NON_CONFORME
+    and must NOT proceed to read APROVADO rows, update YAML, or run multifonte/giornale/DRE.
+    """
+    output_dir = Path(output_dir)
+    violations: list[str] = []
+    comprovantes_path = output_dir / COMPROVANTES_XLSX
+    conta_corrente_path = output_dir / CONTA_CORRENTE_XLSX
+    if not comprovantes_path.exists():
+        violations.append(f"Arquivo ausente: {COMPROVANTES_XLSX}")
+    if not conta_corrente_path.exists():
+        violations.append(f"Arquivo ausente: {CONTA_CORRENTE_XLSX}")
+    if violations:
+        return violations
+    violations.extend(
+        _validate_decision_workbook(
+            comprovantes_path,
+            COMPROVANTES_SHEET,
+            COMPROVANTES_HEADERS,
+            COMPROVANTES_HIDDEN_COLUMNS,
+            dropdown_usar_somente=False,
+        )
+    )
+    violations.extend(
+        _validate_decision_workbook(
+            conta_corrente_path,
+            CONTA_CORRENTE_SHEET,
+            CONTA_CORRENTE_HEADERS,
+            CONTA_CORRENTE_HIDDEN_COLUMNS,
+            dropdown_usar_somente=True,
+        )
+    )
+    return violations
 
 
 def console_lines(result: ImportaRevisaoBancaResult) -> list[str]:
@@ -1206,6 +1275,12 @@ def _is_formula(value: object) -> bool:
     return isinstance(value, str) and value.startswith("=")
 
 
+def _hide_technical_columns(sheet, headers: list[str], hidden_columns: frozenset[str]) -> None:
+    for index, header in enumerate(headers, start=1):
+        if header in hidden_columns:
+            sheet.column_dimensions[get_column_letter(index)].hidden = True
+
+
 def _write_decision_workbook(
     path: Path,
     *,
@@ -1216,12 +1291,14 @@ def _write_decision_workbook(
     technical_headers: list[str],
     technical_rows: list[dict[str, object]],
     account_options: list[tuple[str, str, str]],
+    hidden_columns: frozenset[str] = frozenset(),
 ) -> None:
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = sheet_name
     _append_rows(sheet, headers, rows)
     _style_sheet(sheet, headers)
+    _hide_technical_columns(sheet, headers, hidden_columns)
     _add_decision_validations(sheet, headers, len(rows))
     _add_account_validation(sheet, headers, len(rows), len(account_options))
     _add_account_formulas(sheet, headers, len(rows))
@@ -1667,3 +1744,108 @@ def _instructions(sheet_name: str) -> list[str]:
         "Para PIX ENVIADO, POSSIVEL_COMPROVANTE_RELACIONADO=SIM exige mesmo CNPJ, data exata e valor exato.",
         "MATCH_AMBIGUO sinaliza mais de um comprovante possivel; a linha fica para revisao.",
     ]
+
+
+def _validate_decision_workbook(
+    path: Path,
+    sheet_name: str,
+    expected_headers: list[str],
+    hidden_columns: frozenset[str],
+    *,
+    dropdown_usar_somente: bool,
+) -> list[str]:
+    violations: list[str] = []
+    try:
+        workbook = load_workbook(path, data_only=False)
+    except Exception as exc:
+        return [f"Arquivo nao legivel ({path.name}): {exc}"]
+    if sheet_name not in workbook.sheetnames:
+        return [f"Foglio obbligatorio ausente: {sheet_name!r} in {path.name}"]
+    sheet = workbook[sheet_name]
+    actual_headers = [cell.value for cell in sheet[1]]
+    if actual_headers != expected_headers:
+        actual_set = {h for h in actual_headers if h is not None}
+        expected_set = set(expected_headers)
+        missing = expected_set - actual_set
+        extra = actual_set - expected_set
+        if missing:
+            violations.append(f"Colonne mancanti in {sheet_name}: {sorted(missing)}")
+        if extra:
+            violations.append(f"Colonne extra in {sheet_name}: {sorted(extra)}")
+        if not missing and not extra:
+            violations.append(f"Ordine colonne errato in {sheet_name}")
+        return violations
+    for index, header in enumerate(actual_headers, start=1):
+        if header is None:
+            continue
+        dim = sheet.column_dimensions.get(get_column_letter(index))
+        is_hidden = dim is not None and bool(dim.hidden)
+        if header in hidden_columns and not is_hidden:
+            violations.append(f"Colonna tecnica non nascosta in {sheet_name}: {header}")
+        elif header not in hidden_columns and is_hidden:
+            violations.append(f"Colonna operativa nascosta in {sheet_name}: {header}")
+    if sheet.auto_filter.ref != sheet.dimensions:
+        violations.append(
+            f"AutoFilter non copre area completa in {sheet_name} "
+            f"(ref={sheet.auto_filter.ref!r}, dimensions={sheet.dimensions!r})"
+        )
+    has_data_rows = (sheet.max_row or 0) > 1
+    if has_data_rows:
+        for col_name, values in [
+            ("STATUS_DECISAO", BANK_STATUS_DECISAO_VALUES),
+            ("ACAO_REGRA", BANK_ACAO_REGRA_VALUES),
+            ("RISCO_DUPLICIDADE_XML", RISCO_DUPLICIDADE_XML_VALUES),
+            ("ESCOPO_REGRA", ESCOPO_REGRA_VALUES),
+        ]:
+            formula = f'"{",".join(values)}"'
+            if not _sheet_has_list_validation(sheet, actual_headers, col_name, formula):
+                violations.append(f"Dropdown assente o errato in {sheet_name}: {col_name}")
+        if dropdown_usar_somente:
+            formula = f'"{",".join(USAR_SOMENTE_SEM_COMPROVANTE_VALUES)}"'
+            if not _sheet_has_list_validation(
+                sheet, actual_headers, "USAR_SOMENTE_SEM_COMPROVANTE", formula
+            ):
+                violations.append(
+                    f"Dropdown assente o errato in {sheet_name}: USAR_SOMENTE_SEM_COMPROVANTE"
+                )
+        if not _sheet_has_list_validation_prefix(
+            sheet, actual_headers, "CONTA_ESCOLHIDA", f"={PLANO_CONTAS_SHEET}!"
+        ):
+            violations.append(f"Dropdown CONTA_ESCOLHIDA assente in {sheet_name}")
+    return violations
+
+
+def _sheet_has_list_validation(
+    sheet,
+    headers: list[str | None],
+    col_name: str,
+    formula1: str,
+) -> bool:
+    if col_name not in headers:
+        return True
+    col_idx = headers.index(col_name) + 1
+    cell_ref = f"{get_column_letter(col_idx)}2"
+    return any(
+        v.type == "list"
+        and v.formula1 == formula1
+        and cell_ref in str(v.sqref)
+        for v in sheet.data_validations.dataValidation
+    )
+
+
+def _sheet_has_list_validation_prefix(
+    sheet,
+    headers: list[str | None],
+    col_name: str,
+    prefix: str,
+) -> bool:
+    if col_name not in headers:
+        return True
+    col_idx = headers.index(col_name) + 1
+    cell_ref = f"{get_column_letter(col_idx)}2"
+    return any(
+        v.type == "list"
+        and str(v.formula1).startswith(prefix)
+        and cell_ref in str(v.sqref)
+        for v in sheet.data_validations.dataValidation
+    )
