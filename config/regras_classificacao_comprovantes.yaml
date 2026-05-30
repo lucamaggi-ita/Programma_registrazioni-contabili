@@ -491,6 +491,26 @@ regras:
     - TOP LEVEL DIGITAL
     referencia_empresa_contem_algum:
     - PIX ENVIADO
+- regra_id: REGRA_2_02_008_GREEN_HOUSE_HORTIFRUTI_LTDA
+  conta_id: 2.02.008
+  conta_nome: Hortifruti
+  dre_linha_id: '03.01'
+  entra_dre: true
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - GREEN HOUSE HORTIFRUTI LTDA
+    referencia_empresa_contem_algum: []
+- regra_id: REGRA_6_01_005_GUEDES_SOLUCOES_GRAFICAS_LTDA
+  conta_id: 6.01.005
+  conta_nome: Material de Escritorio
+  dre_linha_id: '08.01'
+  entra_dre: true
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - GUEDES SOLUCOES GRAFICAS LTDA
+    referencia_empresa_contem_algum: []
 
 exclusoes:
 - regra_id: EXCLUSAO_XML_OESA_COMERCIO_E_REPRESENTACOES
@@ -1252,3 +1272,10 @@ exclusoes:
     referencia_empresa_contem_algum: []
     descricao_comprovante_contem_algum:
     - BOLETO PAGO
+- regra_id: EXCLUSAO_ESCLUDERE_BUSINESS_7502_5330
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum: []
+    referencia_empresa_contem_algum:
+    - BUSINESS 7502 5330
