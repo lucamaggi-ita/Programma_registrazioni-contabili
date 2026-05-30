@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import json
 import re
+import zipfile
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
@@ -1804,6 +1805,8 @@ def _validate_decision_workbook(
                 )
         if not _sheet_has_list_validation_prefix(
             sheet, actual_headers, "CONTA_ESCOLHIDA", f"={PLANO_CONTAS_SHEET}!"
+        ) and not _sheet_has_x14_list_validation_prefix(
+            path, sheet_name, "CONTA_ESCOLHIDA", actual_headers, f"={PLANO_CONTAS_SHEET}!"
         ):
             violations.append(f"Dropdown CONTA_ESCOLHIDA assente in {sheet_name}")
     return violations
@@ -1843,3 +1846,100 @@ def _sheet_has_list_validation_prefix(
         and cell_ref in str(v.sqref)
         for v in sheet.data_validations.dataValidation
     )
+
+
+def _resolve_sheet_xml_path(zf: zipfile.ZipFile, sheet_name: str) -> str | None:
+    """Map a sheet name to its xl/worksheets/sheetN.xml path.
+
+    Tries rels-based resolution first; falls back to sequential sheet index
+    (xl/worksheets/sheet1.xml, sheet2.xml, …) which is always valid for both
+    openpyxl-generated and Excel-modified files.
+    """
+    try:
+        wb_xml = zf.read("xl/workbook.xml").decode("utf-8", errors="replace")
+    except KeyError:
+        return None
+
+    # Primary: rels-based resolution (accurate for Excel-modified files)
+    try:
+        rels_xml = zf.read("xl/_rels/workbook.xml.rels").decode("utf-8", errors="replace")
+        sheet_m = re.search(
+            r'<sheet\b[^>]*\bname=["\']' + re.escape(sheet_name) + r'["\'][^>]*/?>',
+            wb_xml,
+        )
+        if sheet_m:
+            rid_m = re.search(r'\br:id=["\']([^"\']+)["\']', sheet_m.group(0))
+            if rid_m:
+                r_id = rid_m.group(1)
+                rel_m = re.search(
+                    r'<Relationship\b[^>]*\bId=["\']' + re.escape(r_id)
+                    + r'["\'][^>]*\bTarget=["\']([^"\']+)["\']',
+                    rels_xml,
+                )
+                if rel_m:
+                    target = rel_m.group(1)
+                    if not target.startswith("xl/"):
+                        target = f"xl/{target}"
+                    return target
+    except KeyError:
+        pass
+
+    # Fallback: sequential index from workbook.xml sheet order
+    sheet_elems = re.findall(r'<sheet\b[^>]+/?>', wb_xml)
+    for idx, elem in enumerate(sheet_elems, start=1):
+        if f'name="{sheet_name}"' in elem or f"name='{sheet_name}'" in elem:
+            candidate = f"xl/worksheets/sheet{idx}.xml"
+            if candidate in zf.namelist():
+                return candidate
+    return None
+
+
+def _sheet_has_x14_list_validation_prefix(
+    xlsx_path: Path,
+    sheet_name: str,
+    col_name: str,
+    headers: list[str | None],
+    formula_prefix: str,
+) -> bool:
+    """Fallback: detect list validation in x14:dataValidations (extLst).
+
+    Excel converts cross-sheet list DataValidations to x14 format on save.
+    openpyxl silently discards x14 validations, so the standard check misses them.
+    This reads the raw sheet XML from the XLSX ZIP without writing anything.
+    """
+    if col_name not in headers:
+        return True
+    col_idx = headers.index(col_name) + 1
+    col_letter = get_column_letter(col_idx)
+    # x14 stores formula without the leading '=' that standard format uses
+    x14_prefix = formula_prefix.lstrip("=")
+    try:
+        with zipfile.ZipFile(xlsx_path, "r") as zf:
+            sheet_xml_path = _resolve_sheet_xml_path(zf, sheet_name)
+            if sheet_xml_path is None:
+                return False
+            xml_content = zf.read(sheet_xml_path).decode("utf-8", errors="replace")
+    except Exception:
+        return False
+    for block_m in re.finditer(
+        r'<x14:dataValidation\b[^>]*>.*?</x14:dataValidation>',
+        xml_content,
+        re.DOTALL,
+    ):
+        block = block_m.group(0)
+        if 'type="list"' not in block and "type='list'" not in block:
+            continue
+        fm = re.search(r'<xm:f>(.*?)</xm:f>', block)
+        if not fm:
+            continue
+        formula = fm.group(1)
+        if not (formula.startswith(x14_prefix) or formula.startswith(formula_prefix)):
+            continue
+        sqref_m = re.search(r'<xm:sqref>(.*?)</xm:sqref>', block)
+        if not sqref_m:
+            continue
+        # sqref may be space-separated; check first range starts with expected column
+        first_range = sqref_m.group(1).split()[0]
+        if first_range.startswith(col_letter):
+            return True
+    return False

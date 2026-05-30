@@ -24,6 +24,7 @@ from fantozzi.banking.revisao_banca import (
     CONTA_CORRENTE_XLSX,
     ImportaRevisaoBancaError,
     _existing_key,
+    _sheet_has_x14_list_validation_prefix,
     importar_revisao_banca,
     resolve_bank_raw_dir,
     validate_excel_template_banca,
@@ -2716,6 +2717,175 @@ def _cell_ref(sheet, header: str, row: int) -> str:
     headers = [cell.value for cell in sheet[1]]
     column = chr(ord("A") + headers.index(header))
     return f"{column}{row}"
+
+
+# ---------------------------------------------------------------------------
+# FZ-SKILLS-BANCA-EXCEL-011A.6 — dropdown x14/extLst riconosciuto dal validatore
+# ---------------------------------------------------------------------------
+
+
+def _inject_x14_conta_escolhida(xlsx_path: Path, sheet_name: str, col_letter: str) -> None:
+    """Inject x14:dataValidations extLst for CONTA_ESCOLHIDA via ZIP manipulation (no openpyxl save)."""
+    import io as _io
+    import re as _re
+    import zipfile as _zf
+
+    x14_block = (
+        "<extLst>"
+        '<ext uri="{CCE6A557-97BC-4b89-ADB6-D9C93CAAB3DF}"'
+        ' xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main">'
+        '<x14:dataValidations count="1"'
+        ' xmlns:xm="http://schemas.microsoft.com/office/excel/2006/main">'
+        '<x14:dataValidation type="list" allowBlank="1"'
+        ' errorTitle="Conta invalida" error="Escolha uma conta da lista.">'
+        "<x14:formula1><xm:f>plano_contas!$A$2:$A$2</xm:f></x14:formula1>"
+        f"<xm:sqref>{col_letter}2:{col_letter}2</xm:sqref>"
+        "</x14:dataValidation>"
+        "</x14:dataValidations>"
+        "</ext>"
+        "</extLst>"
+    )
+
+    with _zf.ZipFile(xlsx_path, "r") as zf:
+        entries = {name: zf.read(name) for name in zf.namelist()}
+
+    # Resolve sheet XML path via sequential index in workbook.xml (openpyxl always uses sheetN.xml in order)
+    wb_xml = entries["xl/workbook.xml"].decode("utf-8")
+    sheet_elems = _re.findall(r'<sheet\b[^>]+/?>', wb_xml)
+    sheet_idx = None
+    for i, elem in enumerate(sheet_elems, start=1):
+        if f'name="{sheet_name}"' in elem or f"name='{sheet_name}'" in elem:
+            sheet_idx = i
+            break
+    assert sheet_idx is not None, f"Sheet {sheet_name!r} not found in workbook.xml"
+    target = f"xl/worksheets/sheet{sheet_idx}.xml"
+
+    sheet_xml = entries[target].decode("utf-8")
+    assert "</worksheet>" in sheet_xml
+    entries[target] = sheet_xml.replace("</worksheet>", x14_block + "</worksheet>").encode("utf-8")
+
+    buf = _io.BytesIO()
+    with _zf.ZipFile(buf, "w", _zf.ZIP_DEFLATED) as zf:
+        for name, data in entries.items():
+            zf.writestr(name, data)
+    xlsx_path.write_bytes(buf.getvalue())
+
+
+def _make_minimal_xlsx_for_validation(
+    path: Path,
+    xlsx_name: str,
+    headers: list[str],
+    sheet_name: str,
+    dropdown_usar_somente: bool,
+    include_standard_conta_escolhida: bool = True,
+) -> None:
+    """Create a minimal XLSX that passes validate_excel_template_banca."""
+    from openpyxl.worksheet.datavalidation import DataValidation as DV
+
+    wb = Workbook()
+    sheet = wb.active
+    sheet.title = sheet_name
+    sheet.append(headers)
+    sheet.append(["val"] * len(headers))
+    sheet.auto_filter.ref = sheet.dimensions
+
+    row_count = 1
+    for col_name, formula in [
+        ("STATUS_DECISAO", '"PENDENTE,APROVADO,REVISAR,NAO_CRIAR_REGRA,BLOQUEADO"'),
+        ("ACAO_REGRA", '"CLASSIFICAR,ESCLUDERE,XML,NAO_CRIAR_REGRA,REVISAR,BLOQUEADO"'),
+        ("RISCO_DUPLICIDADE_XML", '"OK,DUVIDA"'),
+        ("ESCOPO_REGRA", '"COMPROVANTE,CONTA_CORRENTE"'),
+    ]:
+        if col_name not in headers:
+            continue
+        col_idx = headers.index(col_name) + 1
+        letter = get_column_letter(col_idx)
+        val = DV(type="list", formula1=formula, allow_blank=True)
+        sheet.add_data_validation(val)
+        val.add(f"{letter}2:{letter}{row_count + 1}")
+
+    if dropdown_usar_somente and "USAR_SOMENTE_SEM_COMPROVANTE" in headers:
+        col_idx = headers.index("USAR_SOMENTE_SEM_COMPROVANTE") + 1
+        letter = get_column_letter(col_idx)
+        val = DV(type="list", formula1='"SIM,NAO"', allow_blank=True)
+        sheet.add_data_validation(val)
+        val.add(f"{letter}2:{letter}{row_count + 1}")
+
+    if include_standard_conta_escolhida and "CONTA_ESCOLHIDA" in headers:
+        col_idx = headers.index("CONTA_ESCOLHIDA") + 1
+        letter = get_column_letter(col_idx)
+        val = DV(type="list", formula1="=plano_contas!$A$2:$A$2", allow_blank=True)
+        sheet.add_data_validation(val)
+        val.add(f"{letter}2:{letter}{row_count + 1}")
+
+    # plano_contas sheet (required by validator)
+    plano = wb.create_sheet("plano_contas")
+    plano.append(["CONTA_ESCOLHIDA", "CONTA_ID", "CONTA_NOME"])
+    plano.append(["1.01.001 - Cassa", "1.01.001", "Cassa"])
+
+    wb.create_sheet("tecnico_comprovantes" if sheet_name == COMPROVANTES_SHEET else "tecnico_conta_corrente")
+    wb.create_sheet("listas_validacao")
+    wb.create_sheet("instrucoes")
+
+    wb.save(path / xlsx_name)
+
+
+def test_validate_template_banca_conta_escolhida_standard_ancora_ok(tmp_path):
+    """Standard CONTA_ESCOLHIDA validation (openpyxl-generated) continua a passare."""
+    output_dir = tmp_path / "decisoes_regras"
+    output_dir.mkdir()
+
+    for xlsx_name, headers, sheet_name, usar_somente in [
+        (COMPROVANTES_XLSX, COMPROVANTES_HEADERS, COMPROVANTES_SHEET, False),
+        (CONTA_CORRENTE_XLSX, CONTA_CORRENTE_HEADERS, CONTA_CORRENTE_SHEET, True),
+    ]:
+        _make_minimal_xlsx_for_validation(
+            output_dir, xlsx_name, headers, sheet_name, usar_somente,
+            include_standard_conta_escolhida=True,
+        )
+
+    violations = validate_excel_template_banca(output_dir)
+    assert violations == [], f"Atteso nessun blocco, trovato: {violations}"
+
+
+def test_validate_template_banca_conta_escolhida_x14_riconosciuto(tmp_path):
+    """CONTA_ESCOLHIDA in formato x14/extLst (come Excel salva cross-sheet ref) è riconosciuta."""
+    output_dir = tmp_path / "decisoes_regras"
+    output_dir.mkdir()
+
+    for xlsx_name, headers, sheet_name, usar_somente, col_letter in [
+        (COMPROVANTES_XLSX, COMPROVANTES_HEADERS, COMPROVANTES_SHEET, False, "J"),
+        (CONTA_CORRENTE_XLSX, CONTA_CORRENTE_HEADERS, CONTA_CORRENTE_SHEET, True, "G"),
+    ]:
+        _make_minimal_xlsx_for_validation(
+            output_dir, xlsx_name, headers, sheet_name, usar_somente,
+            include_standard_conta_escolhida=False,  # no standard dropdown
+        )
+        _inject_x14_conta_escolhida(output_dir / xlsx_name, sheet_name, col_letter)
+
+    violations = validate_excel_template_banca(output_dir)
+    assert violations == [], (
+        f"x14 CONTA_ESCOLHIDA deve essere riconosciuta dal fallback, violazioni: {violations}"
+    )
+
+
+def test_sheet_has_x14_list_validation_prefix_assente_restituisce_false(tmp_path):
+    """_sheet_has_x14_list_validation_prefix restituisce False se x14 non è presente."""
+    from openpyxl.worksheet.datavalidation import DataValidation as DV
+
+    # XLSX senza nessun x14 (solo standard openpyxl)
+    xlsx_path = tmp_path / "no_x14.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.title = COMPROVANTES_SHEET
+    ws.append(COMPROVANTES_HEADERS)
+    ws.append(["val"] * len(COMPROVANTES_HEADERS))
+    wb.save(xlsx_path)
+
+    result = _sheet_has_x14_list_validation_prefix(
+        xlsx_path, COMPROVANTES_SHEET, "CONTA_ESCOLHIDA", COMPROVANTES_HEADERS, "=plano_contas!"
+    )
+    assert result is False, "Atteso False: nessun x14 presente"
 
 
 def _write_mapping(tmp_path: Path) -> Path:
