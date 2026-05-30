@@ -2914,3 +2914,275 @@ def _write_mapping(tmp_path: Path) -> Path:
         encoding="utf-8",
     )
     return path
+
+
+# ---------------------------------------------------------------------------
+# Helpers: plano + mapping con conto 5.01.003 (parcelamento federal)
+# ---------------------------------------------------------------------------
+
+
+def _write_plan_with_parcelamento(tmp_path: Path) -> Path:
+    path = tmp_path / "plano_parcelamento.yaml"
+    path.write_text(
+        """contas:
+- id: "4.01.012"
+  nome: Agua e Esgoto
+- id: "5.01.001"
+  nome: Simples Nacional - DAS Mensal - Anexo I
+- id: "5.01.003"
+  nome: Parcelamento Federal
+""",
+        encoding="utf-8",
+    )
+    return path
+
+
+def _write_mapping_with_parcelamento(tmp_path: Path) -> Path:
+    path = tmp_path / "mapeamento_parcelamento.yaml"
+    path.write_text(
+        """mapeamento:
+  "4.01.012":
+    dre_linha_id: "06.02"
+    entra_dre: true
+  "5.01.001":
+    dre_linha_id: "02.01"
+    entra_dre: true
+  "5.01.003":
+    dre_linha_id: "07.01"
+    entra_dre: true
+""",
+        encoding="utf-8",
+    )
+    return path
+
+
+def _write_rules_simples_parcelamento_conflict(tmp_path: Path) -> Path:
+    """Regras che simulano il conflitto reale PARCSN/PERTSN/SISPAR vs SIMPLES_NACIONAL."""
+    path = tmp_path / "regras_conflict.yaml"
+    path.write_text(
+        """regras:
+- regra_id: REGRA_5_01_001_SIMPLES_NACIONAL_GENERICO
+  conta_id: "5.01.001"
+  conta_nome: Simples Nacional - DAS Mensal - Anexo I
+  dre_linha_id: "02.01"
+  entra_dre: true
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - SIMPLES NACIONAL
+    referencia_empresa_contem_algum: []
+- regra_id: REGRA_5_01_003_PARCSN
+  conta_id: "5.01.003"
+  conta_nome: Parcelamento Federal
+  dre_linha_id: "07.01"
+  entra_dre: true
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum: []
+    referencia_empresa_contem_algum:
+    - parcsn
+- regra_id: REGRA_5_01_003_PERTSN
+  conta_id: "5.01.003"
+  conta_nome: Parcelamento Federal
+  dre_linha_id: "07.01"
+  entra_dre: true
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum: []
+    referencia_empresa_contem_algum:
+    - pertsn
+- regra_id: REGRA_5_01_003_SISPAR_PGFN
+  conta_id: "5.01.003"
+  conta_nome: Parcelamento Federal
+  dre_linha_id: "07.01"
+  entra_dre: true
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum: []
+    referencia_empresa_contem_algum:
+    - sispar
+    - pgfn
+exclusoes: []
+""",
+        encoding="utf-8",
+    )
+    return path
+
+
+# ---------------------------------------------------------------------------
+# Testes: FZ-SKILLS-BANCA-REVISIONE-011C — filtro comprovantes ja cobertos YAML
+# ---------------------------------------------------------------------------
+
+
+def test_comprovante_parcsn_coberto_por_yaml_nao_aparece_como_candidato(
+    monkeypatch,
+    tmp_path,
+):
+    """PARCSN coberto por regra especifica em referencia_empresa nao deve ser candidato operador."""
+    bank_raw_dir, cnpj_dir = _make_bank_raw_month(tmp_path)
+    (cnpj_dir / "ConsultaPagamentos.xls").write_bytes(b"placeholder")
+    output_dir = tmp_path / "bank_raw" / "_decisoes_regras"
+    _patch_bank_sources(
+        monkeypatch,
+        [
+            _receipt(
+                "DAS SIMPLES NACIONAL COD BARRA",
+                raw_hash="receipt-parcsn",
+                reference="PARCSN 2 RATA 26/60",
+                payment_type="DAS codigo barras",
+            )
+        ],
+        [],
+    )
+
+    result = importar_revisao_banca(
+        bank_raw_dir=bank_raw_dir,
+        output_dir=output_dir,
+        regras_path=_write_rules_simples_parcelamento_conflict(tmp_path),
+        plano_contas_path=_write_plan_with_parcelamento(tmp_path),
+        mapeamento_dre_path=_write_mapping_with_parcelamento(tmp_path),
+    )
+
+    assert result.comprovantes_candidatos == 0
+    rows = _data_rows(output_dir / COMPROVANTES_XLSX, COMPROVANTES_SHEET)
+    assert not any("PARCSN" in str(r.get("REFERENCIA_EMPRESA", "")) for r in rows)
+
+
+def test_comprovante_pertsn_coberto_por_yaml_nao_aparece_como_candidato(
+    monkeypatch,
+    tmp_path,
+):
+    """PERTSN coberto por regra especifica em referencia_empresa nao deve ser candidato operador."""
+    bank_raw_dir, cnpj_dir = _make_bank_raw_month(tmp_path)
+    (cnpj_dir / "ConsultaPagamentos.xls").write_bytes(b"placeholder")
+    output_dir = tmp_path / "bank_raw" / "_decisoes_regras"
+    _patch_bank_sources(
+        monkeypatch,
+        [
+            _receipt(
+                "DAS SIMPLES NACIONAL COD BARRA",
+                raw_hash="receipt-pertsn",
+                reference="PERTSN 9101 RATA 92",
+                payment_type="DAS codigo barras",
+            )
+        ],
+        [],
+    )
+
+    result = importar_revisao_banca(
+        bank_raw_dir=bank_raw_dir,
+        output_dir=output_dir,
+        regras_path=_write_rules_simples_parcelamento_conflict(tmp_path),
+        plano_contas_path=_write_plan_with_parcelamento(tmp_path),
+        mapeamento_dre_path=_write_mapping_with_parcelamento(tmp_path),
+    )
+
+    assert result.comprovantes_candidatos == 0
+    rows = _data_rows(output_dir / COMPROVANTES_XLSX, COMPROVANTES_SHEET)
+    assert not any("PERTSN" in str(r.get("REFERENCIA_EMPRESA", "")) for r in rows)
+
+
+def test_comprovante_pgfn_sispar_coberto_por_yaml_nao_aparece_como_candidato(
+    monkeypatch,
+    tmp_path,
+):
+    """PGFN-SISPAR coberto por regra especifica em referencia_empresa nao deve ser candidato operador."""
+    bank_raw_dir, cnpj_dir = _make_bank_raw_month(tmp_path)
+    (cnpj_dir / "ConsultaPagamentos.xls").write_bytes(b"placeholder")
+    output_dir = tmp_path / "bank_raw" / "_decisoes_regras"
+    _patch_bank_sources(
+        monkeypatch,
+        [
+            _receipt(
+                "DAS SIMPLES NACIONAL COD BARRA",
+                raw_hash="receipt-sispar",
+                reference="PGFN-SISPAR 8916087",
+                payment_type="DAS codigo barras",
+            )
+        ],
+        [],
+    )
+
+    result = importar_revisao_banca(
+        bank_raw_dir=bank_raw_dir,
+        output_dir=output_dir,
+        regras_path=_write_rules_simples_parcelamento_conflict(tmp_path),
+        plano_contas_path=_write_plan_with_parcelamento(tmp_path),
+        mapeamento_dre_path=_write_mapping_with_parcelamento(tmp_path),
+    )
+
+    assert result.comprovantes_candidatos == 0
+    rows = _data_rows(output_dir / COMPROVANTES_XLSX, COMPROVANTES_SHEET)
+    assert not any("SISPAR" in str(r.get("REFERENCIA_EMPRESA", "")) for r in rows)
+
+
+def test_comprovante_sem_regra_akira_permanece_candidato(
+    monkeypatch,
+    tmp_path,
+):
+    """Comprovante sem cobertura YAML (AKIRA) deve permanecer candidato no Excel operativo."""
+    bank_raw_dir, cnpj_dir = _make_bank_raw_month(tmp_path)
+    (cnpj_dir / "ConsultaPagamentos.xls").write_bytes(b"placeholder")
+    output_dir = tmp_path / "bank_raw" / "_decisoes_regras"
+    _patch_bank_sources(
+        monkeypatch,
+        [
+            _receipt(
+                "AKIRA DESINSETIZADORA E DESENT",
+                raw_hash="receipt-akira",
+                reference="-",
+                payment_type="PIX Transferencias",
+            )
+        ],
+        [],
+    )
+
+    result = importar_revisao_banca(
+        bank_raw_dir=bank_raw_dir,
+        output_dir=output_dir,
+        regras_path=_write_rules_simples_parcelamento_conflict(tmp_path),
+        plano_contas_path=_write_plan_with_parcelamento(tmp_path),
+        mapeamento_dre_path=_write_mapping_with_parcelamento(tmp_path),
+    )
+
+    assert result.comprovantes_candidatos == 1
+    rows = _data_rows(output_dir / COMPROVANTES_XLSX, COMPROVANTES_SHEET)
+    assert any("AKIRA" in str(r.get("BENEFICIARIO_FAVORECIDO", "")) for r in rows)
+
+
+def test_conta_corrente_simples_nacional_nao_regride_com_tiebreaker(
+    monkeypatch,
+    tmp_path,
+):
+    """Lancamento conta corrente SIMPLES NACIONAL ainda classifica corretamente — sem regressao."""
+    bank_raw_dir, cnpj_dir = _make_bank_raw_month(tmp_path)
+    (cnpj_dir / "Extrato_Lancamentos.xlsx").write_bytes(b"placeholder")
+    output_dir = tmp_path / "bank_raw" / "_decisoes_regras"
+    _patch_bank_sources(
+        monkeypatch,
+        [],
+        [
+            _launch(
+                "PAGAMENTOS TRIB COD BARRAS",
+                "SIMPLES NACIONAL",
+                raw_hash="launch-simples",
+                amount="-1027.55",
+                transaction_date=date(2026, 4, 17),
+            )
+        ],
+    )
+
+    result = importar_revisao_banca(
+        bank_raw_dir=bank_raw_dir,
+        output_dir=output_dir,
+        regras_path=_write_rules_simples_parcelamento_conflict(tmp_path),
+        plano_contas_path=_write_plan_with_parcelamento(tmp_path),
+        mapeamento_dre_path=_write_mapping_with_parcelamento(tmp_path),
+    )
+
+    assert result.conta_corrente_regras_yaml_aplicadas == 1
+    assert result.conta_corrente_candidatos == 0
+
+    tecnico = _data_rows(output_dir / CONTA_CORRENTE_XLSX, "tecnico_conta_corrente")
+    by_hash = {row["HASH_ORIGEM"]: row for row in tecnico}
+    assert by_hash["launch-simples"]["REGRA_EXISTENTE"] == "REGRA_5_01_001_SIMPLES_NACIONAL_GENERICO"

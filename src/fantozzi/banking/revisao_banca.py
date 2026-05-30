@@ -19,8 +19,10 @@ from fantozzi.banking.common import only_digits
 from fantozzi.banking.models import BankLaunchEnrichment, PaymentReceiptRaw
 from fantozzi.banking.payment_receipt_parser import parse_payment_receipts
 from fantozzi.banking.payment_rules import (
+    MOTIVO_REGRA_UNICA,
     STATUS_CLASSIFICADO,
     STATUS_EXCLUIDO,
+    STATUS_MULTIPLAS_REGRAS,
     STATUS_SEM_REGRA,
     PaymentClassificationResult,
     PaymentRulesError,
@@ -384,6 +386,7 @@ def importar_revisao_banca(
                 )
                 row = _receipt_dict(receipt, cnpj)
                 result = classify_payment_receipt(row, rules, exclusion_rules)
+                result = _resolve_comprovante_specificity(result, rules)
                 if result.status_classificacao in {STATUS_CLASSIFICADO, STATUS_EXCLUIDO}:
                     continue
                 key = _stable_key_comprovante(receipt)
@@ -729,6 +732,37 @@ def _classify_conta_corrente(
     return classify_payment_receipt(row, [], fallback_exclusions)
 
 
+def _resolve_comprovante_specificity(
+    result: PaymentClassificationResult,
+    rules: list,
+) -> PaymentClassificationResult:
+    # When multiple rules match with different accounts, prefer rules that match
+    # on referencia_empresa_contem_algum (more specific than beneficiario-only).
+    # This resolves conflicts like PARCSN/PERTSN/SISPAR (referencia-specific, 5.01.003)
+    # vs SIMPLES_NACIONAL (beneficiario-only, 5.01.001) without modifying YAML rules.
+    if result.status_classificacao != STATUS_MULTIPLAS_REGRAS:
+        return result
+    candidate_ids = set(result.regras_candidatas)
+    candidates = [r for r in rules if r.regra_id in candidate_ids]
+    specific = [r for r in candidates if r.match.get("referencia_empresa_contem_algum")]
+    if not specific:
+        return result
+    specific_accounts = {r.conta_id for r in specific}
+    if len(specific_accounts) != 1:
+        return result
+    rule = specific[0]
+    return PaymentClassificationResult(
+        status_classificacao=STATUS_CLASSIFICADO,
+        conta_id=rule.conta_id,
+        conta_nome=rule.conta_nome,
+        dre_linha_id=rule.dre_linha_id,
+        entra_dre=rule.entra_dre,
+        regra_id=rule.regra_id,
+        motivo=MOTIVO_REGRA_UNICA,
+        regras_candidatas=tuple(r.regra_id for r in specific),
+    )
+
+
 def _split_boleto_fallback_exclusions(exclusion_rules):
     specific_exclusions = []
     fallback_exclusions = []
@@ -797,6 +831,7 @@ def _find_pix_receipt_bridge(
 
     receipt = candidates[0]
     result = classify_payment_receipt(_receipt_dict(receipt, cnpj), rules, exclusion_rules)
+    result = _resolve_comprovante_specificity(result, rules)
     if result.status_classificacao in {STATUS_CLASSIFICADO, STATUS_EXCLUIDO}:
         return _ReceiptBridge(
             status="CLASSIFICADO",
