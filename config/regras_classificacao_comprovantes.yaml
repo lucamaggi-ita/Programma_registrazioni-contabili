@@ -511,6 +511,26 @@ regras:
     beneficiario_favorecido_contem_algum:
     - GUEDES SOLUCOES GRAFICAS LTDA
     referencia_empresa_contem_algum: []
+- regra_id: REGRA_5_01_002_DA_SEFAZ_BA_6339233
+  conta_id: '5.01.002'
+  conta_nome: ICMS Estadual / Parcelamento Estadual
+  dre_linha_id: '07.01'
+  entra_dre: true
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum: []
+    referencia_empresa_contem_algum:
+    - DA SEFAZ BA 6339233
+- regra_id: REGRA_1_02_002_PIX_DEVOLVIDO
+  conta_id: '1.02.002'
+  conta_nome: Cancelamentos e Estornos
+  dre_linha_id: '02.99'
+  entra_dre: true
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum: []
+    referencia_empresa_contem_algum:
+    - PIX DEVOLVIDO
 
 exclusoes:
 - regra_id: EXCLUSAO_XML_OESA_COMERCIO_E_REPRESENTACOES
@@ -1279,3 +1299,10 @@ exclusoes:
     beneficiario_favorecido_contem_algum: []
     referencia_empresa_contem_algum:
     - BUSINESS 7502 5330
+- regra_id: EXCLUSAO_ESCLUDERE_SISPAG_FORNECEDORES
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum: []
+    referencia_empresa_contem_algum:
+    - SISPAG FORNECEDORES
