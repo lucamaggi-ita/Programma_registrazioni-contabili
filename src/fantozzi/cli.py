@@ -92,6 +92,11 @@ from fantozzi.dre_gerencial_provisoria import (
     console_lines as dre_provisoria_console_lines,
     gerar_dre_gerencial_ok_provisoria,
 )
+from fantozzi.dre_pdf_gerencial import (
+    DrePdfGerencialError,
+    console_lines as dre_pdf_console_lines,
+    gerar_pdf_dre,
+)
 from fantozzi.excel_diagnostics import (
     ExcelDiagnosticError,
     ExcelDiagnosticFailure,
@@ -1205,6 +1210,33 @@ def build_parser() -> argparse.ArgumentParser:
     )
     gerar_dre_provisoria.set_defaults(func=gerar_dre_gerencial_ok_provisoria_command)
 
+    gerar_pdf_dre_cmd = subparsers.add_parser(
+        "gerar-pdf-dre",
+        help="Gera PDF formal da DRE gerencial a partir de uma run ja existente.",
+        description=(
+            "Le o arquivo DRE Excel ja produzido pela full run e gera um PDF "
+            "formal com layout leggivel. Nao recalcula contabilidade nem modifica "
+            "dados de origem. Output marcado como TESTE_TECNICO_NAO_OFICIAL."
+        ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    gerar_pdf_dre_cmd.add_argument(
+        "--run-dir",
+        required=True,
+        help=(
+            "Diretorio da run ja existente contendo o arquivo DRE Excel. "
+            "Exemplo: output\\multifonte_009_2026_01_04\\reprocessamento_reports\\runs\\2026-05-29_001"
+        ),
+    )
+    gerar_pdf_dre_cmd.add_argument(
+        "--output-dir",
+        help=(
+            "Diretorio de saida para o PDF. "
+            "Padrao: <run-dir>\\output_visual"
+        ),
+    )
+    gerar_pdf_dre_cmd.set_defaults(func=gerar_pdf_dre_command)
+
     preparar_run_cmd = subparsers.add_parser(
         "preparar-run-reprocessamento",
         help="Prepara infraestrutura segura para uma nova run de reprocessamento.",
@@ -2267,6 +2299,21 @@ def gerar_dre_gerencial_ok_provisoria_command(args: argparse.Namespace) -> int:
         return 1
 
     for line in dre_provisoria_console_lines(result):
+        print(line)
+    return 0
+
+
+def gerar_pdf_dre_command(args: argparse.Namespace) -> int:
+    output_dir = Path(args.output_dir) if args.output_dir else None
+    try:
+        result = gerar_pdf_dre(Path(args.run_dir), output_dir)
+    except DrePdfGerencialError as exc:
+        print(f"[ERRO] {exc}")
+        return 1
+    except Exception:
+        print(f"[ERRO] Nao foi possivel gerar PDF DRE: {args.run_dir}")
+        return 1
+    for line in dre_pdf_console_lines(result):
         print(line)
     return 0
 
