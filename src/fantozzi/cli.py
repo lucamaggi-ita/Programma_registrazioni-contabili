@@ -97,6 +97,11 @@ from fantozzi.dre_pdf_gerencial import (
     console_lines as dre_pdf_console_lines,
     gerar_pdf_dre,
 )
+from fantozzi.dashboard_html_gerencial import (
+    DashboardHtmlGerencialError,
+    console_lines as dashboard_html_console_lines,
+    gerar_dashboard_html,
+)
 from fantozzi.excel_diagnostics import (
     ExcelDiagnosticError,
     ExcelDiagnosticFailure,
@@ -1237,6 +1242,33 @@ def build_parser() -> argparse.ArgumentParser:
     )
     gerar_pdf_dre_cmd.set_defaults(func=gerar_pdf_dre_command)
 
+    gerar_dashboard_html_cmd = subparsers.add_parser(
+        "gerar-dashboard-html",
+        help="Gera dashboard HTML interativo da DRE gerencial a partir de uma run ja existente.",
+        description=(
+            "Le o arquivo DRE Excel ja produzido pela full run e gera um dashboard HTML "
+            "offline com graficos interativos (Plotly). Nao recalcula contabilidade nem modifica "
+            "dados de origem. Output marcado como TESTE_TECNICO_NAO_OFICIAL."
+        ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    gerar_dashboard_html_cmd.add_argument(
+        "--run-dir",
+        required=True,
+        help=(
+            "Diretorio da run ja existente contendo o arquivo DRE Excel. "
+            "Exemplo: output\\multifonte_009_2026_01_04\\reprocessamento_reports\\runs\\2026-05-29_001"
+        ),
+    )
+    gerar_dashboard_html_cmd.add_argument(
+        "--output-dir",
+        help=(
+            "Diretorio de saida para o HTML. "
+            "Padrao: <run-dir>\\output_visual"
+        ),
+    )
+    gerar_dashboard_html_cmd.set_defaults(func=gerar_dashboard_html_command)
+
     preparar_run_cmd = subparsers.add_parser(
         "preparar-run-reprocessamento",
         help="Prepara infraestrutura segura para uma nova run de reprocessamento.",
@@ -2314,6 +2346,21 @@ def gerar_pdf_dre_command(args: argparse.Namespace) -> int:
         print(f"[ERRO] Nao foi possivel gerar PDF DRE: {args.run_dir}")
         return 1
     for line in dre_pdf_console_lines(result):
+        print(line)
+    return 0
+
+
+def gerar_dashboard_html_command(args: argparse.Namespace) -> int:
+    output_dir = Path(args.output_dir) if args.output_dir else None
+    try:
+        result = gerar_dashboard_html(Path(args.run_dir), output_dir)
+    except DashboardHtmlGerencialError as exc:
+        print(f"[ERRO] {exc}")
+        return 1
+    except Exception:
+        print(f"[ERRO] Nao foi possivel gerar Dashboard HTML: {args.run_dir}")
+        return 1
+    for line in dashboard_html_console_lines(result):
         print(line)
     return 0
 
