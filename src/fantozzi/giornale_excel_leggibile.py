@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import unicodedata
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
@@ -9,7 +8,6 @@ from pathlib import Path
 from typing import Any
 
 from openpyxl import Workbook, load_workbook
-from openpyxl.chart import BarChart, LineChart, Reference
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
@@ -154,7 +152,7 @@ def gerar_giornale_leggibile(
     dashboard_ws.sheet_properties.tabColor = _C_HEADER_BG
     _write_dashboard(
         dashboard_ws, run_id, periodos, lancamentos_ok, lancamentos_revisar,
-        dre_geral, dre_mensal, base_ok_dre, resumo_mensal,
+        dre_geral, resumo_mensal,
     )
 
     dre_det_ws = wb.create_sheet("02_DRE_DETTAGLIO")
@@ -359,315 +357,84 @@ def _apply_databar(ws, col_letter: str, data_start: int, data_end: int, color: s
 
 # ── Sheet writers ──────────────────────────────────────────────────────────────
 
-
-def _normalize_label(value: Any) -> str:
-    text = str(value or "").strip().lower()
-    text = unicodedata.normalize("NFKD", text)
-    return "".join(ch for ch in text if not unicodedata.combining(ch))
-
-
-def _is_receita_group(label: Any) -> bool:
-    return "receita" in _normalize_label(label)
-
-
-def _is_custo_despesa_group(label: Any) -> bool:
-    normalized = _normalize_label(label)
-    return any(part in normalized for part in ("custo", "despesa", "deducao", "deducoes"))
-
-
-def _dre_group_totals(dre_geral: list[dict]) -> dict[str, Decimal]:
-    grupos: dict[str, Decimal] = {}
-    for dr in dre_geral:
-        group_name = str(dr.get("grupo_dre") or "Sem grupo DRE")
-        grupos[group_name] = grupos.get(group_name, Decimal("0")) + _to_decimal(dr.get("valor"))
-    return grupos
-
-
-def _dre_monthly_summary(
-    dre_mensal: list[dict],
-    resumo_mensal: list[dict],
-    periodos: list[str],
-) -> list[tuple[str, Decimal, Decimal, Decimal]]:
-    monthly: dict[str, dict[str, Decimal]] = {}
-    for row in dre_mensal:
-        mes = str(row.get("ano_mes") or "").strip()
-        if not mes:
-            continue
-        bucket = monthly.setdefault(
-            mes,
-            {"receitas": Decimal("0"), "custos": Decimal("0"), "resultado": Decimal("0")},
-        )
-        value = _to_decimal(row.get("valor"))
-        group_name = row.get("grupo_dre")
-        bucket["resultado"] += value
-        if _is_receita_group(group_name):
-            bucket["receitas"] += value
-        elif _is_custo_despesa_group(group_name):
-            bucket["custos"] += abs(value)
-
-    if not monthly:
-        for row in resumo_mensal:
-            mes = str(row.get("competencia") or "").strip()
-            if not mes:
-                continue
-            value = _to_decimal(row.get("valor_ok"))
-            monthly[mes] = {
-                "receitas": Decimal("0"),
-                "custos": abs(value),
-                "resultado": value,
-            }
-
-    ordered_months = periodos or sorted(monthly)
-    return [
-        (
-            mes,
-            monthly.get(mes, {}).get("receitas", Decimal("0")),
-            monthly.get(mes, {}).get("custos", Decimal("0")),
-            monthly.get(mes, {}).get("resultado", Decimal("0")),
-        )
-        for mes in ordered_months
-    ]
-
-
-def _write_section_title(ws, row: int, title: str, start_col: str = "A", end_col: str = "J") -> int:
-    ws.merge_cells(f"{start_col}{row}:{end_col}{row}")
-    cell = ws[f"{start_col}{row}"]
-    cell.value = title
-    cell.fill = _fill("FFFFFF")
-    cell.font = Font(bold=True, size=12, color=_C_HEADER_BG)
-    cell.alignment = Alignment(horizontal="left", vertical="center")
-    ws.row_dimensions[row].height = 22
-    return row + 1
-
-
 def _write_leituras_rapidas(
     ws,
     start_row: int,
-    lancamentos_revisar: list[dict],
+    total_revisar: int,
     resumo_mensal: list[dict],
     dre_geral: list[dict],
-    base_ok_dre: list[dict],
     periodos: list[str],
 ) -> int:
-    row = _write_section_title(ws, start_row, "LEITURAS RÁPIDAS")
+    """Write the 'Leituras rápidas' auto-insights block. Returns next available row."""
+    row = start_row
+
+    ws.merge_cells(f"A{row}:J{row}")
+    c = ws[f"A{row}"]
+    c.value = "LEITURAS RÁPIDAS"
+    c.font = Font(bold=True, size=12, color=_C_HEADER_BG)
+    c.alignment = Alignment(horizontal="left", vertical="center")
+    ws.row_dimensions[row].height = 22
+    row += 1
+
     insights: list[str] = []
 
-    grupos = _dre_group_totals(dre_geral)
-    custo_groups = {g: v for g, v in grupos.items() if _is_custo_despesa_group(g)}
-    if custo_groups:
-        maior_grupo = max(custo_groups, key=lambda g: abs(custo_groups[g]))
-        insights.append(
-            f"Maior grupo de custo/despesa: {maior_grupo}"
-            f"  —  R$ {_fmt_brl_value(abs(custo_groups[maior_grupo]))}"
-        )
-    elif grupos:
-        maior_grupo = max(grupos, key=lambda g: abs(grupos[g]))
-        insights.append(
-            f"Grupo DRE mais relevante: {maior_grupo}"
-            f"  —  R$ {_fmt_brl_value(abs(grupos[maior_grupo]))}"
-        )
+    if resumo_mensal:
+        mes_valores = [
+            (str(r.get("competencia") or ""), _to_decimal(r.get("valor_ok")))
+            for r in resumo_mensal
+            if r.get("competencia")
+        ]
+        if mes_valores:
+            mes_max = max(mes_valores, key=lambda x: x[1])
+            mes_min = min(mes_valores, key=lambda x: x[1])
+            insights.append(
+                f"Período com maior volume classificado: {mes_max[0]}"
+                f"  —  R$ {_fmt_brl_value(mes_max[1])}"
+            )
+            if len(mes_valores) > 1 and mes_min[0] != mes_max[0]:
+                insights.append(
+                    f"Período com menor volume classificado: {mes_min[0]}"
+                    f"  —  R$ {_fmt_brl_value(mes_min[1])}"
+                )
 
-    mes_valores = [
-        (str(r.get("competencia") or ""), abs(_to_decimal(r.get("valor_ok"))))
-        for r in resumo_mensal
-        if r.get("competencia")
-    ]
-    if mes_valores:
-        mes_max = max(mes_valores, key=lambda x: x[1])
-        insights.append(
-            f"Mês com maior custo/despesa: {mes_max[0]}"
-            f"  —  R$ {_fmt_brl_value(mes_max[1])}"
-        )
+    if dre_geral:
+        grupos: dict[str, Decimal] = {}
+        for dr in dre_geral:
+            g = str(dr.get("grupo_dre") or "—")
+            grupos[g] = grupos.get(g, Decimal("0")) + _to_decimal(dr.get("valor"))
+        if grupos:
+            maior_grupo = max(grupos, key=lambda g: abs(grupos[g]))
+            insights.append(
+                f"Maior grupo DRE: {maior_grupo}"
+                f"  —  R$ {_fmt_brl_value(abs(grupos[maior_grupo]))}"
+            )
 
-    conta_totals: dict[str, Decimal] = {}
-    for row_data in base_ok_dre:
-        conta = str(row_data.get("conta_nome") or row_data.get("conta_id") or "").strip()
-        if conta:
-            conta_totals[conta] = conta_totals.get(conta, Decimal("0")) + _to_decimal(row_data.get("valor"))
-    if conta_totals:
-        conta_top = max(conta_totals, key=lambda c: abs(conta_totals[c]))
-        insights.append(
-            f"Conta mais relevante: {conta_top}"
-            f"  —  R$ {_fmt_brl_value(abs(conta_totals[conta_top]))}"
-        )
-
-    total_revisar = len(lancamentos_revisar)
-    valor_revisar = sum(_to_decimal(r.get("valor")) for r in lancamentos_revisar)
     if total_revisar > 0:
         insights.append(
             f"Lançamentos em revisão: {total_revisar}"
-            f"  —  R$ {_fmt_brl_value(abs(valor_revisar))}"
+            f"  —  verificar antes de emitir DRE definitiva"
         )
-    elif not insights:
-        insights.append("Não disponível")
     else:
-        insights.append("Lançamentos em revisão: 0")
+        insights.append(
+            "Todos os lançamentos estão classificados  —  nenhuma linha em revisão"
+        )
+
+    insights.append(
+        f"Status: {STATUS}  —  este arquivo não substitui escrituração contábil oficial"
+    )
 
     for insight in insights:
         ws.merge_cells(f"A{row}:J{row}")
         cell = ws[f"A{row}"]
-        cell.value = f"• {insight}"
+        cell.value = f"  •  {insight}"
         cell.fill = _fill(_C_LEITURA_BG)
         cell.font = Font(size=10, color="333333")
         cell.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
         cell.border = _THIN_BORDER
-        ws.row_dimensions[row].height = 19
+        ws.row_dimensions[row].height = 16
         row += 1
 
     return row
-
-
-def _write_pendencias(ws, start_row: int, lancamentos_revisar: list[dict]) -> int:
-    row = _write_section_title(ws, start_row, "PENDÊNCIAS / REVISAR")
-    total_revisar = len(lancamentos_revisar)
-    valor_revisar = sum(_to_decimal(r.get("valor")) for r in lancamentos_revisar)
-
-    ws.merge_cells(f"A{row}:J{row}")
-    cell = ws[f"A{row}"]
-    if total_revisar == 0:
-        cell.value = "Nenhuma pendência crítica identificada no dashboard."
-    else:
-        cell.value = (
-            f"{total_revisar} lançamento(s) em revisão"
-            f"  —  R$ {_fmt_brl_value(abs(valor_revisar))}"
-        )
-    cell.fill = _fill("FFF2CC" if total_revisar else "E2EFDA")
-    cell.font = Font(bold=True, size=10, color="7A4A00" if total_revisar else "375623")
-    cell.alignment = Alignment(horizontal="left", vertical="center")
-    cell.border = _THIN_BORDER
-    ws.row_dimensions[row].height = 20
-    row += 1
-
-    if total_revisar:
-        buckets: dict[str, tuple[int, Decimal]] = {}
-        for item in lancamentos_revisar:
-            label = str(
-                item.get("conta_nome")
-                or item.get("fornecedor_ou_favorecido")
-                or item.get("conta_id")
-                or "Sem identificação"
-            )
-            count, value = buckets.get(label, (0, Decimal("0")))
-            buckets[label] = (count + 1, value + _to_decimal(item.get("valor")))
-
-        for label, (count, value) in sorted(
-            buckets.items(),
-            key=lambda kv: (-kv[1][0], -abs(kv[1][1]), kv[0]),
-        )[:3]:
-            ws.merge_cells(f"A{row}:J{row}")
-            cell = ws[f"A{row}"]
-            cell.value = f"• {label}: {count} lançamento(s) — R$ {_fmt_brl_value(abs(value))}"
-            cell.fill = _fill("FFFFFF")
-            cell.font = Font(size=10, color="444444")
-            cell.alignment = Alignment(horizontal="left", vertical="center")
-            cell.border = _THIN_BORDER
-            ws.row_dimensions[row].height = 18
-            row += 1
-
-    return row
-
-
-def _write_dashboard_links(ws, start_row: int) -> int:
-    row = _write_section_title(ws, start_row, "PARA DETALHES")
-    links = [
-        ("02_DRE_DETTAGLIO", "DRE detalhada"),
-        ("03_ANALISE_POR_CONTA", "Análise por conta"),
-        ("04_GIORNALE", "Giornale filtrável"),
-        ("05_BASE_TECNICA_AUDIT", "Base técnica"),
-    ]
-    for col, (sheet_name, label) in enumerate(links, 1):
-        cell = ws.cell(row=row, column=col)
-        cell.value = f"{sheet_name} — {label}"
-        cell.hyperlink = f"#'{sheet_name}'!A1"
-        cell.style = "Hyperlink"
-        cell.font = Font(color=_C_CARD_ACCENT, underline="single", size=9)
-        cell.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
-    ws.row_dimensions[row].height = 32
-    return row + 1
-
-
-def _write_dashboard_helper_tables(
-    ws,
-    monthly_rows: list[tuple[str, Decimal, Decimal, Decimal]],
-    group_totals: dict[str, Decimal],
-) -> tuple[tuple[int, int], tuple[int, int]]:
-    helper_col = 12  # L
-    row = 2
-    monthly_start = row
-    monthly_headers = ["Mês", "Receitas", "Custos / Despesas", "Resultado"]
-    for offset, header in enumerate(monthly_headers):
-        ws.cell(row=row, column=helper_col + offset).value = header
-    row += 1
-    data_rows = monthly_rows or [("N/D", Decimal("0"), Decimal("0"), Decimal("0"))]
-    for mes, receitas, custos, resultado in data_rows:
-        ws.cell(row=row, column=helper_col).value = mes
-        ws.cell(row=row, column=helper_col + 1).value = float(receitas)
-        ws.cell(row=row, column=helper_col + 2).value = float(custos)
-        ws.cell(row=row, column=helper_col + 3).value = float(resultado)
-        row += 1
-    monthly_end = row - 1
-
-    row += 2
-    group_start = row
-    ws.cell(row=row, column=helper_col).value = "Grupo DRE"
-    ws.cell(row=row, column=helper_col + 1).value = "Valor total"
-    row += 1
-    group_items = sorted(group_totals.items(), key=lambda kv: abs(kv[1]), reverse=True)
-    if not group_items:
-        group_items = [("Não disponível", Decimal("0"))]
-    for group_name, value in group_items[:8]:
-        ws.cell(row=row, column=helper_col).value = group_name
-        ws.cell(row=row, column=helper_col + 1).value = float(abs(value))
-        row += 1
-    group_end = row - 1
-
-    for col in range(helper_col, helper_col + 4):
-        ws.column_dimensions[get_column_letter(col)].width = 18
-        for r in range(2, group_end + 1):
-            cell = ws.cell(row=r, column=col)
-            cell.font = Font(size=8, color="666666")
-            if col > helper_col and isinstance(cell.value, (int, float)):
-                cell.number_format = _FMT_BRL
-
-    return (monthly_start, monthly_end), (group_start, group_end)
-
-
-def _add_dashboard_charts(
-    ws,
-    monthly_range: tuple[int, int],
-    group_range: tuple[int, int],
-) -> None:
-    monthly_start, monthly_end = monthly_range
-    group_start, group_end = group_range
-
-    line = LineChart()
-    line.title = "Evolução mensal DRE"
-    line.style = 13
-    line.height = 8
-    line.width = 16
-    line.y_axis.title = "R$"
-    line.x_axis.title = "Mês"
-    line_data = Reference(ws, min_col=13, max_col=15, min_row=monthly_start, max_row=monthly_end)
-    line_cats = Reference(ws, min_col=12, min_row=monthly_start + 1, max_row=monthly_end)
-    line.add_data(line_data, titles_from_data=True)
-    line.set_categories(line_cats)
-    line.legend.position = "b"
-    ws.add_chart(line, "D11")
-
-    bar = BarChart()
-    bar.type = "bar"
-    bar.title = "Composição por Grupo DRE"
-    bar.style = 10
-    bar.height = 8
-    bar.width = 16
-    bar.y_axis.title = "Grupo DRE"
-    bar.x_axis.title = "R$"
-    bar_data = Reference(ws, min_col=13, min_row=group_start, max_row=group_end)
-    bar_cats = Reference(ws, min_col=12, min_row=group_start + 1, max_row=group_end)
-    bar.add_data(bar_data, titles_from_data=True)
-    bar.set_categories(bar_cats)
-    bar.legend = None
-    ws.add_chart(bar, "D27")
 
 
 def _write_dashboard(
@@ -677,28 +444,23 @@ def _write_dashboard(
     lancamentos_ok: list[dict],
     lancamentos_revisar: list[dict],
     dre_geral: list[dict],
-    dre_mensal: list[dict],
-    base_ok_dre: list[dict],
     resumo_mensal: list[dict],
 ) -> None:
-    ws.sheet_view.showGridLines = False
     period_str = " · ".join(periodos) if periodos else "—"
     now_str = datetime.now().strftime("%d/%m/%Y %H:%M")
     total_ok = len(lancamentos_ok)
     total_revisar = len(lancamentos_revisar)
     valor_ok = sum(_to_decimal(r.get("valor")) for r in lancamentos_ok)
-    valor_revisar = sum(_to_decimal(r.get("valor")) for r in lancamentos_revisar)
-    grupos = _dre_group_totals(dre_geral)
-    receitas = sum(v for g, v in grupos.items() if _is_receita_group(g))
-    custos_despesas = sum(abs(v) for g, v in grupos.items() if _is_custo_despesa_group(g))
-    resultado = sum(grupos.values(), Decimal("0")) if grupos else valor_ok
-    monthly_rows = _dre_monthly_summary(dre_mensal, resumo_mensal, periodos)
-    monthly_range, group_range = _write_dashboard_helper_tables(ws, monthly_rows, grupos)
+    n_contas = len({str(r.get("conta_id") or "") for r in lancamentos_ok if r.get("conta_id")})
 
     # Row 1: status badge (10 cols)
     ws.merge_cells("A1:J1")
     c = ws["A1"]
-    c.value = f"TESTE TÉCNICO / NÃO OFICIAL  —  STATUS: {STATUS}"
+    c.value = (
+        f"TESTE TÉCNICO / NÃO OFICIAL  —  "
+        f"STATUS: {STATUS}  —  "
+        "Este relatório não substitui escrituração contábil oficial sem revisão do contador."
+    )
     c.fill = _fill(_C_STATUS_BADGE)
     c.font = Font(bold=True, color="FFFFFF", size=10)
     c.alignment = Alignment(horizontal="center", vertical="center")
@@ -707,7 +469,7 @@ def _write_dashboard(
     # Rows 2–3: main title
     ws.merge_cells("A2:J3")
     c = ws["A2"]
-    c.value = "PAINEL ECONÔMICO GERENCIAL"
+    c.value = "DRE Gerencial Provisória"
     c.fill = _fill(_C_HEADER_BG)
     c.font = Font(bold=True, color="FFFFFF", size=22)
     c.alignment = Alignment(horizontal="left", vertical="center", indent=2)
@@ -727,20 +489,19 @@ def _write_dashboard(
     # Row 5: spacer
     ws.row_dimensions[5].height = 12
 
-    # Cards: rows 6–9 (label / value / hint / accent bar), 2 cols per card × 5 cards
+    # Cards: rows 6–8 (label / value / accent bar), 2 cols per card × 5 cards
     cards_data = [
-        ("RECEITAS", f"R$ {_fmt_brl_value(receitas)}", "DRE", "2A9D8F"),
-        ("CUSTOS / DESPESAS", f"R$ {_fmt_brl_value(custos_despesas)}", "DRE", "E76F51"),
-        ("RESULTADO", f"R$ {_fmt_brl_value(resultado)}", "DRE", _C_CARD_ACCENT),
-        ("LANÇAMENTOS OK", str(total_ok), "classificados", "2A9D8F"),
-        ("EM REVISÃO", str(total_revisar), f"R$ {_fmt_brl_value(abs(valor_revisar))}", "E76F51" if total_revisar > 0 else "AAAAAA"),
+        ("DESPESAS OK (R$)", f"R$ {_fmt_brl_value(valor_ok)}", _C_CARD_ACCENT),
+        ("LANÇAMENTOS OK", str(total_ok), "2A9D8F"),
+        ("EM REVISÃO", str(total_revisar), "E76F51" if total_revisar > 0 else "AAAAAA"),
+        ("CONTAS ATIVAS", str(n_contas), _C_CARD_ACCENT),
+        ("MESES COBERTOS", str(len(periodos)), _C_CARD_ACCENT),
     ]
     ws.row_dimensions[6].height = 16
-    ws.row_dimensions[7].height = 42
-    ws.row_dimensions[8].height = 15
-    ws.row_dimensions[9].height = 5
+    ws.row_dimensions[7].height = 34
+    ws.row_dimensions[8].height = 5
 
-    for idx, (label, value, hint, accent) in enumerate(cards_data):
+    for idx, (label, value, accent) in enumerate(cards_data):
         cs = idx * 2 + 1
         ce = cs + 1
         ls = get_column_letter(cs)
@@ -749,7 +510,6 @@ def _write_dashboard(
         ws.merge_cells(f"{ls}6:{le}6")
         ws.merge_cells(f"{ls}7:{le}7")
         ws.merge_cells(f"{ls}8:{le}8")
-        ws.merge_cells(f"{ls}9:{le}9")
 
         lc = ws[f"{ls}6"]
         lc.value = label
@@ -760,33 +520,134 @@ def _write_dashboard(
         vc = ws[f"{ls}7"]
         vc.value = value
         vc.fill = _fill(_C_CARD_BG)
-        vc.font = Font(bold=True, size=24, color=_C_HEADER_BG)
+        vc.font = Font(bold=True, size=15, color=_C_HEADER_BG)
         vc.alignment = Alignment(horizontal="center", vertical="center")
 
-        hc = ws[f"{ls}8"]
-        hc.value = hint
-        hc.fill = _fill(_C_CARD_BG)
-        hc.font = Font(size=9, color="666666")
-        hc.alignment = Alignment(horizontal="center", vertical="top")
-
-        ac = ws[f"{ls}9"]
+        ac = ws[f"{ls}8"]
         ac.fill = _fill(accent)
 
-    # Row 10: spacer
-    ws.row_dimensions[10].height = 12
+    # Row 9: spacer
+    ws.row_dimensions[9].height = 14
 
-    _add_dashboard_charts(ws, monthly_range, group_range)
+    # DRE groups summary
+    row = 10
+    ws.merge_cells(f"A{row}:J{row}")
+    c = ws[f"A{row}"]
+    c.value = "RESUMO POR GRUPO DRE"
+    c.font = Font(bold=True, size=12, color=_C_HEADER_BG)
+    c.alignment = Alignment(horizontal="left", vertical="center")
+    ws.row_dimensions[row].height = 22
+    row += 1
 
-    row = 44
-    row = _write_leituras_rapidas(
-        ws, row, lancamentos_revisar, resumo_mensal, dre_geral, base_ok_dre, periodos,
-    )
+    grupo_header_row = row  # row 11 — table header for DRE groups
+    ws[f"A{row}"].value = "Grupo DRE"
+    ws[f"B{row}"].value = "Valor Total (R$)"
+    _style_header_cells(ws, row, 2)
+    ws.row_dimensions[row].height = 20
+    row += 1
+
+    grupo_data_start = row
+    grupo_data_end = row - 1  # will advance in loop
+
+    if dre_geral:
+        grupos: dict[str, Decimal] = {}
+        for dr in dre_geral:
+            g = str(dr.get("grupo_dre") or "—")
+            grupos[g] = grupos.get(g, Decimal("0")) + _to_decimal(dr.get("valor"))
+        grand = sum(grupos.values(), Decimal("0"))
+        for i, (g, v) in enumerate(grupos.items()):
+            bg = _row_bg(i)
+            ws[f"A{row}"].value = g
+            ws[f"B{row}"].value = float(v)
+            ws[f"B{row}"].number_format = _FMT_BRL
+            for cl in ("A", "B"):
+                ws[f"{cl}{row}"].fill = _fill(bg)
+                ws[f"{cl}{row}"].border = _THIN_BORDER
+            ws[f"B{row}"].alignment = Alignment(horizontal="right")
+            row += 1
+        grupo_data_end = row - 1
+
+        # Data bars on value column for quick visual comparison
+        _apply_databar(ws, "B", grupo_data_start, grupo_data_end, _C_CARD_ACCENT)
+
+        for cl in ("A", "B"):
+            ws[f"{cl}{row}"].fill = _fill(_C_HEADER_BG)
+            ws[f"{cl}{row}"].font = Font(bold=True, color="FFFFFF")
+            ws[f"{cl}{row}"].border = _THIN_BORDER
+        ws[f"A{row}"].value = "TOTAL GERAL"
+        ws[f"B{row}"].value = float(grand)
+        ws[f"B{row}"].number_format = _FMT_BRL
+        ws[f"B{row}"].alignment = Alignment(horizontal="right")
+        row += 1
+
+    row += 1  # spacer
+    ws.row_dimensions[row].height = 10
+    row += 1
+
+    # Monthly summary
+    ws.merge_cells(f"A{row}:J{row}")
+    c = ws[f"A{row}"]
+    c.value = "RESUMO MENSAL"
+    c.font = Font(bold=True, size=12, color=_C_HEADER_BG)
+    c.alignment = Alignment(horizontal="left", vertical="center")
+    ws.row_dimensions[row].height = 22
+    row += 1
+
+    ws[f"A{row}"].value = "Mês"
+    ws[f"B{row}"].value = "Lançamentos OK"
+    ws[f"C{row}"].value = "Valor OK (R$)"
+    ws[f"D{row}"].value = "Em Revisão"
+    ws[f"E{row}"].value = "Valor Revisão (R$)"
+    _style_header_cells(ws, row, 5)
+    ws.row_dimensions[row].height = 20
+    row += 1
+
+    for i, mr in enumerate(resumo_mensal):
+        bg = _row_bg(i)
+        ws[f"A{row}"].value = mr.get("competencia", "")
+        ws[f"B{row}"].value = mr.get("qtd_lancamentos_ok", 0)
+        ws[f"C{row}"].value = _float_safe(mr.get("valor_ok"))
+        ws[f"D{row}"].value = mr.get("qtd_lancamentos_revisar", 0)
+        ws[f"E{row}"].value = _float_safe(mr.get("valor_revisar"))
+        for cl in ("A", "B", "C", "D", "E"):
+            ws[f"{cl}{row}"].fill = _fill(bg)
+            ws[f"{cl}{row}"].border = _THIN_BORDER
+        ws[f"C{row}"].number_format = _FMT_BRL
+        ws[f"E{row}"].number_format = _FMT_BRL
+        ws[f"C{row}"].alignment = Alignment(horizontal="right")
+        ws[f"E{row}"].alignment = Alignment(horizontal="right")
+        row += 1
 
     row += 1
-    row = _write_pendencias(ws, row, lancamentos_revisar)
+
+    # Leituras rápidas — auto-insight block
+    row = _write_leituras_rapidas(ws, row, total_revisar, resumo_mensal, dre_geral, periodos)
 
     row += 1
-    _write_dashboard_links(ws, row)
+
+    # Instructions
+    ws.merge_cells(f"A{row}:J{row}")
+    ws[f"A{row}"].value = "Como usar este workbook:"
+    ws[f"A{row}"].font = Font(bold=True, size=10, color=_C_HEADER_BG)
+    ws[f"A{row}"].alignment = Alignment(horizontal="left", vertical="center")
+    ws.row_dimensions[row].height = 20
+    row += 1
+
+    instructions = [
+        "• Use os filtros das abas seguintes para analisar por mês, conta, fornecedor ou grupo DRE",
+        "• 02_DRE_DETTAGLIO — DRE detalhada por grupo, linha DRE, conta e mês (filtrável)",
+        "• 03_ANALISE_POR_CONTA — cada conta mês a mês com total e % do total (ordenado por valor)",
+        "• 04_GIORNALE — todos os lançamentos com filtros (REVISÃO destacada em amarelo)",
+        "• 05_BASE_TECNICA_AUDIT — base técnica completa para auditoria interna",
+        f"• Lançamentos em REVISÃO = {total_revisar} — verificar antes de emitir DRE definitiva",
+    ]
+    for instr in instructions:
+        ws.merge_cells(f"A{row}:J{row}")
+        ws[f"A{row}"].value = instr
+        ws[f"A{row}"].font = Font(size=10, color="444444")
+        ws[f"A{row}"].alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+        ws.row_dimensions[row].height = 16
+        row += 1
 
     # Column widths
     for cl, w in [("A", 34), ("B", 18), ("C", 18), ("D", 16), ("E", 20),
