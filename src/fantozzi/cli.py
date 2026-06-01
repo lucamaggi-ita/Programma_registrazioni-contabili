@@ -102,6 +102,11 @@ from fantozzi.dashboard_html_gerencial import (
     console_lines as dashboard_html_console_lines,
     gerar_dashboard_html,
 )
+from fantozzi.giornale_excel_leggibile import (
+    GiornaleExcelLeggibileError,
+    console_lines as giornale_leggibile_console_lines,
+    gerar_giornale_leggibile,
+)
 from fantozzi.excel_diagnostics import (
     ExcelDiagnosticError,
     ExcelDiagnosticFailure,
@@ -1269,6 +1274,34 @@ def build_parser() -> argparse.ArgumentParser:
     )
     gerar_dashboard_html_cmd.set_defaults(func=gerar_dashboard_html_command)
 
+    gerar_giornale_leggibile_cmd = subparsers.add_parser(
+        "gerar-giornale-leggibile",
+        help="Gera Excel gerencial bello, leggibile e interrogabile a partir de uma run ja existente.",
+        description=(
+            "Le os arquivos ja produzidos pela full run (pre-livro + DRE) e gera um Excel gerencial "
+            "com 5 abas: dashboard, DRE detalhada, analise por conta, giornale leggibile e base tecnica. "
+            "Nao recalcula contabilidade nem modifica dados de origem. "
+            "Output marcado como TESTE_TECNICO_NAO_OFICIAL."
+        ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    gerar_giornale_leggibile_cmd.add_argument(
+        "--run-dir",
+        required=True,
+        help=(
+            "Diretorio da run ja existente contendo o pre-livro e a DRE. "
+            "Exemplo: output\\multifonte_009_2026_01_04\\reprocessamento_reports\\runs\\2026-05-29_001"
+        ),
+    )
+    gerar_giornale_leggibile_cmd.add_argument(
+        "--output-dir",
+        help=(
+            "Diretorio de saida para o Excel. "
+            "Padrao: <run-dir>\\output_visual"
+        ),
+    )
+    gerar_giornale_leggibile_cmd.set_defaults(func=gerar_giornale_leggibile_command)
+
     preparar_run_cmd = subparsers.add_parser(
         "preparar-run-reprocessamento",
         help="Prepara infraestrutura segura para uma nova run de reprocessamento.",
@@ -2331,6 +2364,21 @@ def gerar_dre_gerencial_ok_provisoria_command(args: argparse.Namespace) -> int:
         return 1
 
     for line in dre_provisoria_console_lines(result):
+        print(line)
+    return 0
+
+
+def gerar_giornale_leggibile_command(args: argparse.Namespace) -> int:
+    output_dir = Path(args.output_dir) if args.output_dir else None
+    try:
+        result = gerar_giornale_leggibile(Path(args.run_dir), output_dir)
+    except GiornaleExcelLeggibileError as exc:
+        print(f"[ERRO] {exc}")
+        return 1
+    except Exception:
+        print(f"[ERRO] Nao foi possivel gerar Giornale Excel Leggibile: {args.run_dir}")
+        return 1
+    for line in giornale_leggibile_console_lines(result):
         print(line)
     return 0
 
