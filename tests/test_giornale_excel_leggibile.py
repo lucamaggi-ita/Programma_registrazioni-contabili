@@ -559,6 +559,99 @@ def test_dashboard_tem_leituras_rapidas(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# 003E — 01_DASHBOARD visual DRE / Conto Econômico
+# ---------------------------------------------------------------------------
+
+def test_dashboard_003e_sem_gridlines(tmp_path):
+    _make_prelivro(tmp_path)
+    _make_dre(tmp_path)
+    result = gerar_giornale_leggibile(tmp_path, tmp_path / "out")
+    wb = load_workbook(str(result.xlsx_path))
+    ws = wb["01_DASHBOARD"]
+    assert ws.sheet_view.showGridLines is False
+    wb.close()
+
+
+def test_dashboard_003e_kpis_grandes(tmp_path):
+    _make_prelivro(tmp_path)
+    _make_dre(tmp_path)
+    result = gerar_giornale_leggibile(tmp_path, tmp_path / "out")
+    wb = load_workbook(str(result.xlsx_path))
+    ws = wb["01_DASHBOARD"]
+    kpi_cells = ["A7", "C7", "E7", "G7", "I7"]
+    for cell_ref in kpi_cells:
+        assert ws[cell_ref].font.sz >= 20, f"KPI {cell_ref} com fonte pequena"
+    wb.close()
+
+
+def test_dashboard_003e_contem_dois_graficos_excel(tmp_path):
+    _make_prelivro(
+        tmp_path,
+        ok_rows=[_ok_row("2026-01"), _ok_row("2026-02", valor=-700.0)],
+        resumo_mensal_rows=[
+            ["2026-01", 1, -500.0, 0, 0.0, 1, -500.0],
+            ["2026-02", 1, -700.0, 0, 0.0, 1, -700.0],
+        ],
+    )
+    _make_dre(
+        tmp_path,
+        dre_geral_rows=[
+            [1, "Receitas", "Receita Bruta", 2000.0, "PROVISORIO"],
+            [2, "Custos", "CMV", -900.0, "PROVISORIO"],
+            [3, "Despesas Operacionais", "Administrativas", -300.0, "PROVISORIO"],
+        ],
+        dre_mensal_rows=[
+            ["2026-01", 1, "Receitas", "Receita Bruta", 1000.0],
+            ["2026-01", 2, "Custos", "CMV", -400.0],
+            ["2026-02", 1, "Receitas", "Receita Bruta", 1000.0],
+            ["2026-02", 2, "Custos", "CMV", -500.0],
+        ],
+    )
+    result = gerar_giornale_leggibile(tmp_path, tmp_path / "out")
+    wb = load_workbook(str(result.xlsx_path))
+    ws = wb["01_DASHBOARD"]
+    assert len(ws._charts) >= 2
+    wb.close()
+
+
+def test_dashboard_003e_dre_nao_fluxo_de_caixa(tmp_path):
+    _make_prelivro(tmp_path)
+    _make_dre(tmp_path)
+    result = gerar_giornale_leggibile(tmp_path, tmp_path / "out")
+    wb = load_workbook(str(result.xlsx_path))
+    ws = wb["01_DASHBOARD"]
+    all_text = " ".join(
+        str(cell.value or "")
+        for row in ws.iter_rows()
+        for cell in row
+        if cell.value is not None
+    )
+    forbidden = ["Fluxo de Caixa", "Saldo de Caixa", "Contas a Receber", "Contas a Pagar"]
+    for text in forbidden:
+        assert text.lower() not in all_text.lower()
+    assert "PAINEL ECONÔMICO GERENCIAL" in all_text
+    wb.close()
+
+
+def test_dashboard_003e_tem_pendencias_e_links_internos(tmp_path):
+    _make_prelivro(tmp_path, revisar_rows=[_revisar_row()])
+    _make_dre(tmp_path)
+    result = gerar_giornale_leggibile(tmp_path, tmp_path / "out")
+    wb = load_workbook(str(result.xlsx_path))
+    ws = wb["01_DASHBOARD"]
+    all_text = " ".join(
+        str(cell.value or "")
+        for row in ws.iter_rows()
+        for cell in row
+        if cell.value is not None
+    )
+    assert "PENDÊNCIAS" in all_text
+    assert "REVISAR" in all_text
+    assert any(cell.hyperlink for row in ws.iter_rows() for cell in row)
+    wb.close()
+
+
+# ---------------------------------------------------------------------------
 # 003C — 03_ANALISE_POR_CONTA: coluna % do Total
 # ---------------------------------------------------------------------------
 
