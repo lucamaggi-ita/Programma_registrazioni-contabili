@@ -289,6 +289,36 @@ Per ogni modifica:
 
 ---
 
+# Regole operative maturate (governance)
+
+Regole consolidate dopo i progetti Chiusura cassa, Statistiche fatturati e la
+ricognizione tecnica 2026-07-03 su Registrazioni Contabili / Fantozzi.
+
+## Precheck e stato Git
+
+- Precheck Git obbligatorio prima di qualunque lavoro non banale: `git status -sb`, `git branch --show-current`, `git diff --name-status`, `git diff --cached --name-status`.
+- Mai lavorare sopra uno stato misto staged/unstaged senza prima classificarlo esplicitamente.
+- Prima di consolidare modifiche locali importanti o rischiose, produrre una patch di sicurezza (`git diff > staged.patch` / `unstaged.patch`) come snapshot pre-modifica — pattern già osservato in `output/_patch_safety_003D_...`.
+
+## Commit e perimetro
+
+- Commit piccoli e a perimetro stretto: un commit, un tema.
+- Nessun output reale committato (run, report, PDF/HTML/Excel generati) — solo codice, config, test, documentazione.
+- Distinguere sempre codice (`src/`, `tests/`), audit (`docs/`, report di verifica) e output (`output/`, `reports/`, `runs/`).
+- Nessun merge/push/reset senza via libera esplicita dell'utente.
+
+## Fasi visuali (PDF/HTML/Excel/dashboard)
+
+- Se una fase visuale già pushata viene bocciata, preferire un revert pulito (pattern seguito con successo per la "003E": `4871e12` → `2d69d3a`, confermato zero residui di codice dopo il revert).
+- Per layout visuali, non "inventare": seguire il modello già approvato o produrre un'anteprima prima del commit.
+
+## Branch
+
+- Branch operativo attuale: **senza-incrementali**.
+- Non usare la vecchia linea "con incrementali" (`master`, `backup/con-incrementali`) salvo decisione esplicita dell'utente — è una linea storica superata, non una base di lavoro.
+
+---
+
 # Filosofia del progetto
 
 Il progetto NON ha obiettivo fiscale.

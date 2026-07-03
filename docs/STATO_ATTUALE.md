@@ -1,35 +1,50 @@
 # STATO_ATTUALE.md — Programma Registrazioni Contabili / Fantozzi
 
-Aggiornato: 2026-05-19
+Aggiornato: 2026-07-03 (allineato dopo ricognizione tecnica completa read-only)
+
+Nota storica: la versione precedente di questo file (2026-05-19) descriveva
+uno stato antecedente a diversi commit rilevanti (`bcea1c7`, `01b4d0a`,
+`2670acb` sulle registrazioni manuali; `9598e1a`, `1b4e2e9`, `4fc0fdd`,
+`4871e12`, `2d69d3a` sugli output visuali). I contenuti sotto sono stati
+verificati sul codice/git reale, non solo riportati.
 
 ## Stato sintetico
 
 La Fase 9 è conclusa fino alla Fase 9O.
 La Fase 13 è conclusa fino alla Fase 13W (parziale — diagnostica read-only eseguita, run reale non ancora materializzata).
 
-Ultimo stato confermato:
-- Commit `eb8b57d` — linea DRE 13.02 creata, 11.01.005/006 rimappate (pushato).
-- Commit `f0186a2` — .gitignore protetto, plano_contas aggiornato (pushato).
-- Audit YAML comprovantes: 0 erros, 0 alertas — 30 regole valide.
-- Audit mapeamento_dre: 0 erros — 121 contas, nessun dangling ref.
+Ultimo stato confermato (verificato 2026-07-03):
+- Branch operativo: `senza-incrementali`, allineato 1:1 con `origin/senza-incrementali`.
+- Strategia operativa corrente: **FULL RUN DA ZERO** — nessuna baseline, nessun workflow incrementale. `executar-run-incremental` non è un percorso operativo valido.
+- Registrazioni manuali gerenciais: **già implementate, validate e integrate nella pipeline reale** (non solo progettate) — 39 test automatizzati verdi.
+- Output visuali attivi: PDF DRE, dashboard HTML, Excel giornale leggibile (versione "003D" consolidata).
+- Un tentativo di dashboard integrata nell'Excel giornale leggibile ("003E") è stato bocciato e revertito in modo pulito — non è una linea attiva da riprendere.
 
 ## Stato repository
 
-Branch principale: master
+Branch principale operativo: **senza-incrementali**
 
-Commit recenti rilevanti:
-- `eb8b57d` — Cria linha DRE 13.02 e remapeia distribuicao e antecipacao de lucros
-- `f0186a2` — Protege repositorio e atualiza plano de contas
-- `93aa321` — Alinha metadados DRE das regras bancarias
-- `9b3571c` — Aplica exclusoes controladas nas regras de comprovantes
-- `e7492d4` — Executa classificacao real de comprovantes na Fase 13S
-- `90f6dc7` — Completa inventario do pacote contabil gerencial na Fase 9O
+Branch storici/non operativi (non usare come base di lavoro):
+- `master` e `backup/con-incrementali` — stessa HEAD, linea abbandonata "con incrementali" (baseline + run incrementali retroattivi), superata dalla strategia "senza incrementali".
+- `main` — ancestor diretto di `senza-incrementali`, fermo alla Fase 11A, non riceve più commit diretti.
+- `main-initial-backup` — snapshot congelato del primo commit del repository.
+
+Commit recenti rilevanti (linea `senza-incrementali`):
+- `2d69d3a` — Revert "Migliora dashboard DRE del Giornale Excel leggibile" (bocciata "003E")
+- `4871e12` — Migliora dashboard DRE del Giornale Excel leggibile ("003E", revertita da `2d69d3a`)
+- `4fc0fdd` — Consolida Giornale Excel leggibile ("003D", **valida e attiva**)
+- `1b4e2e9` — Adiciona dashboard HTML gerencial da DRE
+- `9598e1a` — Implementa gerador PDF DRE gerencial (FZ-OUTPUT-VISUAL-001 Fase 1)
+- `01b4d0a` — Corrige mapeamento DRE da contrapartida tecnica manual
+- `2670acb` — Corrige path default de saida CSV e template manuais gerenciais
+- `bcea1c7` — Operacionaliza registrazioni manuais
 
 Comandi iniziali consigliati per ogni sessione:
 ```powershell
 git status -sb
+git branch --show-current
 git log --oneline --decorate -5
-git rev-list --left-right --count origin/master...HEAD
+git rev-list --left-right --count origin/senza-incrementali...HEAD
 git diff --name-status
 git diff --check
 ```
@@ -66,7 +81,42 @@ Non entra in DRE. Fuori da report OK.
 
 ### Lançamentos manuais gerenciais
 
-Fase 9N conclusa. Controllati via CSV. Pre-livro: due righe tecniche (debito/credito). DRE: impatta una sola volta.
+Fase 9N conclusa. **Già operative tecnicamente**, non solo progettate: template
+XLSX operatore → validazione doppio livello (fail-closed) → CSV tecnico →
+conversione in due lançamentos standard (debito/credito) → integrazione nel
+pré-livro come fonte aggiuntiva → contropartida tecnica `99.99.998` esclusa
+per design dal DRE. Coperte da 39 test automatizzati (`test_lancamentos_manuais_gerenciais.py`,
+`test_lancamentos_manuais_template.py`). Pre-livro: due righe tecniche (debito/credito). DRE: impatta una sola volta.
+
+Path reali (verificati nel codice, `cli.py`):
+```text
+Database_Dev\Registrazioni_manuali\registrazioni_manuali_base.xlsx     - template operatore
+Database_Dev\Registrazioni_manuali\registrazioni_manuali_tecnico.csv   - CSV tecnico intermediario
+```
+
+Limiti noti (governance, non funzionali — vedi anche `docs/LANCAMENTOS_MANUAIS_GERENCIAIS_OPERADOR.md`):
+- nessuna anti-duplicazione automatica con XML (delegata alla revisione umana);
+- deduplicazione via hash valida solo dentro un singolo caricamento, non tra run/periodi diversi;
+- nessun test end-to-end automatico copre l'orchestrazione one-shot completa `executar-lancamentos-manuais-gerenciais` (solo i componenti separati).
+
+### Output visuais (post-run, non ufficiali)
+
+Tutti generati da un run completo esistente, marcati internamente `TESTE_TECNICO_NAO_OFICIAL`:
+
+| Output | Comando | Stato |
+|---|---|---|
+| PDF DRE | `gerar-pdf-dre --run-dir` | Attivo, 28 test |
+| Dashboard HTML | `gerar-dashboard-html --run-dir` | Attivo, 31 test |
+| Excel giornale leggibile ("003D") | `gerar-giornale-leggibile --run-dir` | Attivo, versione consolidata (`4fc0fdd`), 29 test |
+
+**"003E"** (tentativo di dashboard integrata nell'Excel giornale leggibile,
+commit `4871e12`) è stata **bocciata e revertita** (`2d69d3a`) — confermato che
+il codice tracciato oggi è identico alla versione pre-tentativo, nessun residuo.
+Non è una linea da riprendere così com'era.
+
+Rischio noto: `reportlab` (usato da `dre_pdf_gerencial.py` e dagli script in
+`scripts/`) non è dichiarato tra le dipendenze in `pyproject.toml` — funziona
+solo perché già installato nell'ambiente attuale.
 
 ### Piano dei conti e mapeamento DRE
 
@@ -125,3 +175,5 @@ CLI già disponibili: `gerar-pre-livro-diario-teste`, `gerar-dre-gerencial-ok-pr
 8. Non riusare run vecchie come base operativa dopo cambi logici.
 9. Non creare alias troppo generici.
 10. Non fare `git add .` — sempre aggiungere file specifici.
+11. Non usare `master`/`backup/con-incrementali` come base di lavoro o per merge/cherry-pick — è la linea storica "con incrementali" superata dalla strategia "senza incrementali".
+12. Per modifiche visuali (PDF/HTML/Excel leggibile), non "inventare" layout — seguire il modello approvato ("003D") o produrre un'anteprima prima del commit. La "003E" è l'esempio concreto di cosa evitare.

@@ -1,5 +1,10 @@
 # Lancamentos manuais gerenciais — operador
 
+Atualizado: 2026-07-03. Estado real confirmado por ricognizione tecnica: fluxo
+**ja implementado, validado e integrado na pipeline real** (`reprocessamento_pipeline.py`),
+com 39 testes automatizados verdes (`test_lancamentos_manuais_gerenciais.py`,
+`test_lancamentos_manuais_template.py`). Nao e um fluxo apenas projetado.
+
 Este fluxo serve para despesas gerenciais que nao vieram de XML e nao devem ser
 criadas automaticamente a partir de banco/comprovantes.
 
@@ -25,10 +30,10 @@ Se a CLI `fantozzi` estiver instalada no PATH, tambem e possivel usar:
 fantozzi gerar-template-lancamentos-manuais-gerenciais
 ```
 
-Output default:
+Output default (path real confirmado no codigo, `cli.py::DEFAULT_REGISTRAZIONI_MANUALI_BASE`):
 
 ```text
-Database_Dev\_templates\lancamentos_manuais_gerenciais_template.xlsx
+Database_Dev\Registrazioni_manuali\registrazioni_manuali_base.xlsx
 ```
 
 O template contem quatro abas:
@@ -92,6 +97,37 @@ CARTAO
 
 ---
 
+## O que o sistema NAO garante automaticamente
+
+A validacao tecnica e rigorosa (formato, contas existentes, guardrail DRE,
+duplicata interna dentro do mesmo arquivo), mas **nao substitui a revisao
+humana** nos seguintes pontos:
+
+- **Anti-duplicacao com XML**: o sistema nao verifica automaticamente se uma
+  despesa manual ja esta registrada em XML/NF-e. O proprio relatorio de
+  validacao imprime o aviso literal: *"ATENCAO: o sistema nao garante que esta
+  despesa ja nao exista em XML."* A responsabilidade de nao duplicar e do
+  operador, antes de preencher a linha.
+- **Duplicacao entre execucoes/periodos diferentes**: a chave de deduplicacao
+  (hash) so protege contra duplicatas *dentro do mesmo arquivo* carregado numa
+  execucao. Nao ha controle cruzado entre runs ou periodos diferentes — a
+  protecao depende da disciplina de usar sempre o arquivo canonico unico
+  (`Database_Dev\Registrazioni_manuali\registrazioni_manuali_base.xlsx`), nao de
+  um controle automatico de codigo.
+- **Guardrail de contas DRE**: o guardrail bloqueia apenas quando *ambos* os
+  lados (debito e credito) apontam para uma conta mapeada no DRE. E permitido
+  ter zero contas mapeadas — um erro de digitacao na conta escolhida pode gerar
+  um lancamento com impacto DRE nulo, sem aviso especifico.
+- **Gate humano do fluxo guiado**: o comando one-shot
+  `executar-lancamentos-manuais-gerenciais` e o caminho recomendado, mas nao e
+  tecnicamente obrigatorio — e possivel chamar diretamente
+  `reprocessar-importacao-real --lancamentos-manuais-gerenciais-csv` com um CSV
+  tecnico ja pronto, contornando o template/validacao guiada (a validacao
+  tecnica do CSV continua ativa, mas o "gate" de conferencia operador-antes-de-run
+  e apenas procedural).
+
+---
+
 ## Executar run completa
 
 Quando o template estiver preenchido, usar o comando one-shot:
@@ -117,8 +153,8 @@ O comando executa em sequencia:
 Opcoes disponíveis (todas opcionais, os defaults sao corretos para uso normal):
 
 ```text
---template         Template XLSX preenchido (default: Database_Dev\_templates\...)
---saida-csv        CSV tecnico intermediario (default: Database_Dev\_templates\...)
+--template         Template XLSX preenchido (default: Database_Dev\Registrazioni_manuali\registrazioni_manuali_base.xlsx)
+--saida-csv        CSV tecnico intermediario (default: Database_Dev\Registrazioni_manuali\registrazioni_manuali_tecnico.csv)
 --xml-base         Pasta raiz XML NF-e (default: Database_Dev\XML_fatture_acquisto)
 --saida-output     Pasta output run (default: output\importacao_real)
 --saida-reports    Pasta reports run (default: reports\importacao_real)
@@ -139,7 +175,7 @@ reports\importacao_real\runs\{run_id}\manifest_run.json                         
 reports\importacao_real\runs\{run_id}\dre_gerencial_ok_provisoria.xlsx               - DRE gerencial
 reports\importacao_real\runs\{run_id}\pre_livro_diario_gerencial_teste.xlsx          - pre-livro/giornale
 reports\importacao_real\runs\{run_id}\pacote_contabil_gerencial_provisorio\          - pacote contabil gerencial
-Database_Dev\_templates\..._tecnico.csv                                              - CSV tecnico intermediario
+Database_Dev\Registrazioni_manuali\registrazioni_manuali_tecnico.csv                 - CSV tecnico intermediario
 ```
 
 ---
