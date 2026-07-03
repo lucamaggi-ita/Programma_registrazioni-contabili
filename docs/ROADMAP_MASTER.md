@@ -155,7 +155,7 @@ La prossima macrofase numerata sarà **Fase 14** (integrazione giornale e DRE co
    - `git diff --check`
    - `git diff --name-status`
 4. Prima di push:
-   - verificare `git rev-list --left-right --count origin/master...HEAD`
+   - verificare `git rev-list --left-right --count origin/<branch-attivo>...HEAD` (branch attivo corrente: `senza-incrementali`, non `master`)
    - verificare che il diff contenga solo file attesi.
 5. Quando cambiano regole/parser/logica fiscale/contratto contabile:
    - generare nuova run fresca da XML;

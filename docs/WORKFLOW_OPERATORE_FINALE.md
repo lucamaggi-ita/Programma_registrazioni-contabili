@@ -3,6 +3,13 @@
 Versione: 1.0 — 2026-05-24
 Progetto: Programma_registrazioni_contabili
 
+**NOTA OPERATIVA 2026-07-03:** il branch operativo corrente è
+`senza-incrementali` (non `master`). Per le registrazioni manuali gerenciais
+(Step 8) la fonte di verità aggiornata è
+`docs/LANCAMENTOS_MANUAIS_GERENCIAIS_OPERADOR.md`: lo Step 8 di questo
+documento è stato riallineato di conseguenza, ma in caso di dubbio prevale
+sempre quel documento.
+
 ---
 
 ## Cosa produce questo workflow
@@ -73,7 +80,7 @@ Aprire PowerShell nella cartella del progetto ed eseguire:
 
 ```powershell
 git status -sb
-git rev-list --left-right --count origin/master...HEAD
+git rev-list --left-right --count origin/senza-incrementali...HEAD
 git diff --name-status
 ```
 
@@ -81,7 +88,7 @@ git diff --name-status
 
 | Colore | Condizione | Azione |
 |---|---|---|
-| VERDE | Nessun diff tracciato inatteso, origin/master...HEAD = 0 0 | Procedere |
+| VERDE | Nessun diff tracciato inatteso, origin/senza-incrementali...HEAD = 0 0 | Procedere |
 | GIALLO | Solo output locali ignorati (es. graphify-out/) | Procedere con attenzione |
 | ROSSO | File src/ o config/ modificati, o branch non allineato | **FERMARSI — supporto tecnico** |
 
@@ -288,8 +295,15 @@ Se non ci sono spese manuali: **saltare al Step 10.**
 ### 8a — Generare il template
 
 ```powershell
-.\.venv\Scripts\python.exe -m fantozzi.cli gerar-template-lancamentos-manuais-gerenciais `
-  --saida Database_Dev\_templates\lancamentos_manuais_gerenciais_TEMPLATE.xlsx
+.\.venv\Scripts\python.exe -m fantozzi.cli gerar-template-lancamentos-manuais-gerenciais
+```
+
+Il comando accetta opzionalmente `--saida` per un path diverso, ma il default
+corretto (confermato nel codice, `cli.py::DEFAULT_REGISTRAZIONI_MANUALI_BASE`)
+è già:
+
+```
+Database_Dev\Registrazioni_manuali\registrazioni_manuali_base.xlsx
 ```
 
 **Output atteso:**
@@ -305,34 +319,40 @@ Se vedi `[BLOQUEIO]` e il comando termina con `Exit code: 1`: **fermarsi — sup
 
 ### 8b — Compilare il template
 
-Aprire il file generato e compilare **solo queste colonne** nell'aba `lancamentos_manuais`:
+Aprire il file generato e compilare **solo queste colonne visibili** nell'aba `lancamentos_manuais`:
 
 | Colonna | Descrizione | Obbligatoria |
 |---|---|---|
 | `DATA` | Data della spesa in formato YYYY-MM-DD (es. 2026-04-15) | Si |
-| `HISTORICO` | Descrizione concreta della spesa (es. "Conserto pia cozinha") | Si |
-| `DOCUMENTO` | Numero fattura, ricevuta o riferimento interno | No |
-| `FORNECEDOR_OU_CONTRAPARTE` | Fornitore, persona o controparte | Si |
-| `CATEGORIA_GERENCIAL` | Scegliere dalla lista a discesa | Si |
+| `CONTA_ESCOLHIDA` | Conto selezionato dal dropdown `ID - NOME` (piano dei conti gestionale) | Si |
 | `VALOR` | Valore positivo (es. 150,00) | Si |
-| `CNPJ_ORIGEM` | CNPJ dell'impresa — opzionale per contanti o fornitori senza CNPJ | No |
-| `CENTRO_CUSTO` | Centro di costo — opzionale | No |
+| `DESCRICAO_DA_DESPESA` | Descrizione concreta di cosa è stato comprato/contrattato (es. "Conserto pia cozinha") | Si |
 | `OBSERVACAO` | Note, payment_id, riferimento comprovante, arquivo_origem | No |
 
-**Non compilare le colonne tecniche** (CONTA_*, STATUS_VALIDACAO, ecc.) — sono calcolate automaticamente e nascoste.
+Le colonne `CONTA_ID_APROVADA` e `CONTA_NOME_APROVADA` sono calcolate
+automaticamente via VLOOKUP a partire da `CONTA_ESCOLHIDA` — **non modificarle
+a mano.** Restano inoltre nascoste e calcolate dal sistema: `CONTA_CREDITO_ID`,
+`CONTA_CREDITO_NOME` (sempre `99.99.998`), `STATUS_VALIDACAO`,
+`MENSAGEM_VALIDACAO`, `CHAVE_PREVIEW`.
 
-**Convenzione per spese in contanti:**
+**Colonne obsolete — non compaiono più nel template e non vanno cercate o
+reintrodotte:** `HISTORICO`, `DOCUMENTO`, `FORNECEDOR_OU_CONTRAPARTE`,
+`CATEGORIA_GERENCIAL`, `CNPJ_ORIGEM`, `CENTRO_CUSTO`, `FORMA_PAGAMENTO`,
+`BANCO`, `CAIXA`, `CARTAO`. Il template descrive solo **cosa** è stato
+comprato/contrattato e il valore, non come è stato pagato o da quale conto
+patrimoniale.
+
+**Convenzione per spese in contanti o comprovante bancario approvato** — usare
+il campo libero `OBSERVACAO`, ad esempio:
 
 ```
-DOCUMENTO  = CASSA-2026-04-001
-OBSERVACAO = pagamento em dinheiro
+OBSERVACAO = pagamento em dinheiro (contanti)
 ```
 
-**Convenzione per comprovante bancario approvato:**
+oppure
 
 ```
-DOCUMENTO  = payment_id del comprovante
-OBSERVACAO = arquivo_origem: Analisi_regole_...xlsx / pagamento verificato
+OBSERVACAO = payment_id: <id> / arquivo_origem: Analisi_regole_...xlsx / pagamento verificado
 ```
 
 **Non lasciare righe vuote nel mezzo dei dati.**
@@ -343,9 +363,9 @@ OBSERVACAO = arquivo_origem: Analisi_regole_...xlsx / pagamento verificato
 
 ```powershell
 .\.venv\Scripts\python.exe -m fantozzi.cli validar-lancamentos-manuais-gerenciais `
-  --entrada Database_Dev\_templates\lancamentos_manuais_gerenciais_TEMPLATE.xlsx `
-  --saida-csv Database_Dev\_templates\lancamentos_manuais_gerenciais_validado.csv `
-  --relatorio Database_Dev\_templates\validacao_lancamentos_manuais.txt
+  --entrada Database_Dev\Registrazioni_manuali\registrazioni_manuali_base.xlsx `
+  --saida-csv Database_Dev\Registrazioni_manuali\registrazioni_manuali_tecnico.csv `
+  --relatorio Database_Dev\Registrazioni_manuali\validacao_lancamentos_manuais.txt
 ```
 
 **Output atteso:**
@@ -364,7 +384,27 @@ OBSERVACAO = arquivo_origem: Analisi_regole_...xlsx / pagamento verificato
 - Non procedere con un CSV errato
 
 **Avisos** (non bloccanti): leggere e verificare, ma il CSV viene generato.
-Verificare in particolare: "conferir se a despesa ja nao existe em XML."
+Verificare in particolare l'avviso letterale: *"ATENCAO: o sistema nao
+garante que esta despesa ja nao exista em XML."* — la responsabilità di non
+duplicare resta dell'operatore (dettagli in
+`docs/LANCAMENTOS_MANUAIS_GERENCIAIS_OPERADOR.md`, sezione "O que o sistema
+NAO garante automaticamente").
+
+**Alternativa raccomandata — comando one-shot:** invece di eseguire Step 8a +
+9 + 10 separatamente, è disponibile un comando unico che valida il template,
+genera il CSV tecnico ed esegue la run completa con pacote in un solo passo:
+
+```powershell
+.\.venv\Scripts\python.exe -m fantozzi.cli executar-lancamentos-manuais-gerenciais
+```
+
+La pipeline sottostante di questo comando
+(`validar_lancamentos_manuais_gerenciais_operador()` →
+`reprocessar_importacao_real_provisoria()`) è coperta dal test e2e
+`tests/test_lancamentos_manuais_e2e.py`. Non è invece coperto da un test e2e
+diretto l'entry point argparse del comando one-shot in sé (gap noto e non
+bloccante, non un'istruzione di non-uso — vedi
+`docs/LANCAMENTOS_MANUAIS_GERENCIAIS_OPERADOR.md`).
 
 ---
 
@@ -378,7 +418,7 @@ Verificare in particolare: "conferir se a despesa ja nao existe em XML."
   --saida-output output\importacao_real `
   --saida-reports reports\importacao_real `
   --modo provisorio `
-  --lancamentos-manuais-gerenciais-csv Database_Dev\_templates\lancamentos_manuais_gerenciais_validado.csv `
+  --lancamentos-manuais-gerenciais-csv Database_Dev\Registrazioni_manuali\registrazioni_manuali_tecnico.csv `
   --gerar-pacote-contabil-gerencial
 ```
 
@@ -502,7 +542,7 @@ reports\importacao_real\runs\<RUN_ID_FINAL>\pacote_contabil_gerencial_provisorio
 |---|---|---|
 | Comando bloccato / nessun output | Excel con lo stesso file aperto | Chiudere Excel e riprovare |
 | `RUN_ID non trovato` | RUN_ID errato o run non eseguita | Verificare cartella `reports\importacao_real\runs\` |
-| `CATEGORIA_GERENCIAL inexistente` | Categoria scritta a mano diversa dalla lista | Scegliere dalla lista a discesa nel template |
+| `CONTA_ESCOLHIDA inexistente` | Conto scritto a mano diverso dalla lista, o non presente nel piano conti | Scegliere dalla lista a discesa nel template (colonna `CONTA_ESCOLHIDA`) |
 | `VALOR deve ser maior que zero` | Valore zero o negativo | Inserire valore positivo |
 | `DATA invalida` | Data non in formato YYYY-MM-DD | Correggere in formato 2026-04-15 |
 | `Duplicata interna` | Stessa riga inserita due volte nel template | Rimuovere la riga duplicata |
