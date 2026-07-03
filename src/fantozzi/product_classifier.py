@@ -80,7 +80,7 @@ class ProductClassifier:
             if any(ev in norm_desc for ev in rule["evitar_norm"]):
                 continue
             for alias in rule["aliases_norm"]:
-                if alias in norm_desc:
+                if _alias_matches(alias, norm_desc):
                     hits.append((rule, alias))
 
         if not hits:
@@ -117,7 +117,7 @@ class ProductClassifier:
                 (
                     alias
                     for alias in rule["fornecedor_norm"]
-                    if alias and alias in norm_supplier
+                    if _alias_matches(alias, norm_supplier)
                 ),
                 "",
             )
@@ -125,7 +125,9 @@ class ProductClassifier:
                 continue
 
             product_aliases = rule["produto_norm"]
-            if product_aliases and not any(alias in norm_desc for alias in product_aliases):
+            if product_aliases and not any(
+                _alias_matches(alias, norm_desc) for alias in product_aliases
+            ):
                 continue
 
             conta = self._chart.get_by_id(rule["conta_id"])
@@ -140,3 +142,15 @@ class ProductClassifier:
 
 def _parse_conta_id(conta: str) -> str:
     return conta.split("-", 1)[0].strip() if conta else ""
+
+
+def _alias_matches(alias: str, text: str) -> bool:
+    norm_alias = normalize(alias)
+    if not norm_alias:
+        return False
+
+    norm_text = normalize(text)
+    if len(norm_alias) <= 3:
+        return f" {norm_alias} " in f" {norm_text} "
+
+    return norm_alias in norm_text

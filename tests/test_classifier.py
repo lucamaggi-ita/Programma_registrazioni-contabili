@@ -97,6 +97,36 @@ def test_product_unknown(product_clf):
     assert result.confianca == "NAO_CLASSIFICADO"
 
 
+def test_product_glp_alias_curto_matcha_palavra_inteira(product_clf):
+    result = product_clf.classify("BOTIJAO GLP 13KG")
+    assert result.conta.id == "4.01.013"
+    assert result.confianca == "OK"
+
+
+def test_product_glp_alias_curto_nao_matcha_substring(product_clf):
+    result = product_clf.classify("SUPERGLPINDUSTRIAL")
+    assert result.conta.id == "13.01.001"
+    assert result.confianca == "NAO_CLASSIFICADO"
+
+
+def test_product_fgo_alias_curto_fornecedor_matcha_palavra_inteira(product_clf):
+    result = product_clf.classify(
+        "FGO",
+        fornecedor="NATURAVES INDUSTRIA E COMERCIO DE ALIMENTOS LTDA",
+    )
+    assert result.conta.id == "2.02.002"
+    assert result.confianca == "OK"
+
+
+def test_product_fgo_alias_curto_fornecedor_nao_matcha_substring(product_clf):
+    result = product_clf.classify(
+        "AFGO",
+        fornecedor="NATURAVES INDUSTRIA E COMERCIO DE ALIMENTOS LTDA",
+    )
+    assert result.conta.id == "13.01.001"
+    assert result.confianca == "NAO_CLASSIFICADO"
+
+
 def test_product_canela_tempero(product_clf):
     result = product_clf.classify("CANELA EM PA 1KG")
     assert result.conta.id == "2.02.012"
