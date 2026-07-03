@@ -257,6 +257,7 @@ def _default_config_paths() -> list[Path]:
     return [
         config_dir / "plano_contas_gerencial.yaml",
         config_dir / "regras_classificacao_produtos.yaml",
+        config_dir / "regras_classificacao_comprovantes.yaml",
         config_dir / "mapeamento_dre.yaml",
     ]
 

@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+import fantozzi.run_manager as run_manager
 from fantozzi.run_manager import (
     PROJECT_ROOT,
     RunManagerError,
@@ -193,6 +194,39 @@ def test_manifesto_registra_hash_config(tmp_path):
 
     data = json.loads(result.manifest_path.read_text(encoding="utf-8"))
     entry = data["config_usado"]["plano"]
+    assert entry["hash_sha256"] is not None
+    assert len(entry["hash_sha256"]) == 64
+    assert entry["data_modificacao"] is not None
+
+
+def test_manifesto_registra_regras_comprovantes_no_config_default(
+    tmp_path, monkeypatch
+):
+    xml, out, rep = _dirs(tmp_path)
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    for file_name in (
+        "plano_contas_gerencial.yaml",
+        "regras_classificacao_produtos.yaml",
+        "regras_classificacao_comprovantes.yaml",
+        "mapeamento_dre.yaml",
+    ):
+        (config_dir / file_name).write_text("regras: []\n", encoding="utf-8")
+    regras_path = config_dir / "regras_classificacao_comprovantes.yaml"
+
+    monkeypatch.setattr(run_manager, "PROJECT_ROOT", tmp_path)
+
+    result = preparar_run(
+        xml,
+        out,
+        rep,
+        today=date(2026, 5, 6),
+        project_root=tmp_path,
+    )
+
+    data = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    entry = data["config_usado"]["regras_classificacao_comprovantes"]
+    assert entry["path"] == str(regras_path)
     assert entry["hash_sha256"] is not None
     assert len(entry["hash_sha256"]) == 64
     assert entry["data_modificacao"] is not None
