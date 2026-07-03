@@ -7,12 +7,9 @@ from pathlib import Path
 
 from openpyxl import load_workbook
 
+from fantozzi.cli import main
 from fantozzi.lancamentos_manuais_template import (
     gerar_template_lancamentos_manuais_gerenciais,
-    validar_lancamentos_manuais_gerenciais_operador,
-)
-from fantozzi.reprocessamento_pipeline import (
-    reprocessar_importacao_real_provisoria,
 )
 
 
@@ -28,62 +25,65 @@ CONTA_TECNICA_ID = "99.99.998"
 VALOR_MANUAL = Decimal("321.45")
 DESCRICAO_MANUAL = "Conserto emergencial forno - teste e2e"
 
-# NOTA (mandato Luca, 2026-07-03): o comando one-shot
-# `executar-lancamentos-manuais-gerenciais` nao aceita --project-root e chama
-# reprocessar_importacao_real_provisoria() sem passar project_root, entao
-# sempre usa o project_root real do repositorio (run_manager.PROJECT_ROOT).
-# run_manager._validate_paths exige que xml_base/saida_output/saida_reports
-# fiquem dentro do project_root, tornando impossivel testar o entry point
-# argparse literal de forma hermetica em tmp_path.
-# Por decisao explicita de Luca, este teste exercita as MESMAS duas funcoes
-# que o comando one-shot invoca internamente (validar_lancamentos_manuais_
-# gerenciais_operador + reprocessar_importacao_real_provisoria), passando
-# project_root=tmp_path e uma copia somente-leitura dos 3 YAML oficiais de
-# config, para permanecer 100% hermetico e usar as regras contabeis reais.
-
-
-def test_fluxo_manuais_gerenciais_end_to_end(tmp_path):
+def test_fluxo_manuais_gerenciais_cli_end_to_end(tmp_path):
     project_root = _preparar_project_root_com_config_real(tmp_path)
     xml_base = _preparar_xml_base(project_root)
-    template_path = _preparar_template_preenchido(tmp_path, project_root)
-    saida_csv = tmp_path / "tecnico" / "lancamentos_manuais_tecnico.csv"
-    relatorio_validacao = tmp_path / "tecnico" / "validacao.txt"
+    template_path = _preparar_template_preenchido(project_root)
+    saida_csv = (
+        project_root
+        / "Database_Dev"
+        / "Registrazioni_manuali"
+        / "registrazioni_manuali_tecnico.csv"
+    )
+    relatorio_validacao = project_root / "reports" / "validacao_manuais.txt"
     saida_output = project_root / "output" / "importacao_real"
     saida_reports = project_root / "reports" / "importacao_real"
 
-    val_result = validar_lancamentos_manuais_gerenciais_operador(
-        template_path,
-        saida_csv,
-        relatorio_validacao,
-        project_root / "config" / "plano_contas_gerencial.yaml",
-        project_root / "config" / "mapeamento_dre.yaml",
+    result = main(
+        [
+            "executar-lancamentos-manuais-gerenciais",
+            "--project-root",
+            str(project_root),
+            "--template",
+            str(template_path),
+            "--saida-csv",
+            str(saida_csv),
+            "--xml-base",
+            str(xml_base),
+            "--saida-output",
+            str(saida_output),
+            "--saida-reports",
+            str(saida_reports),
+            "--plano-contas",
+            str(project_root / "config" / "plano_contas_gerencial.yaml"),
+            "--mapeamento-dre",
+            str(project_root / "config" / "mapeamento_dre.yaml"),
+            "--relatorio-validacao",
+            str(relatorio_validacao),
+        ]
     )
 
-    assert val_result.linhas_validas == 1
+    assert result == 0
     assert saida_csv.exists()
+    assert relatorio_validacao.exists()
 
-    run_result = reprocessar_importacao_real_provisoria(
-        xml_base=xml_base,
-        saida_output=saida_output,
-        saida_reports=saida_reports,
-        project_root=project_root,
-        lancamentos_manuais_gerenciais_csv_path=saida_csv,
-        gerar_pacote_contabil_gerencial=True,
-    )
+    run_id = (saida_reports / "current_run.txt").read_text(encoding="utf-8").strip()
+    reports_run_dir = saida_reports / "runs" / run_id
+    manifest_path = reports_run_dir / "manifest_run.json"
 
-    assert run_result.status_run == "PROVISORIO_CONCLUIDO"
-    assert "PRE_LIVRO_GERADO" in run_result.etapas_executadas
-    assert "DRE_OK_PROVISORIA_GERADA" in run_result.etapas_executadas
-    assert "LANCAMENTOS_MANUAIS_GERENCIAIS_APLICADOS" in run_result.etapas_executadas
-
-    manifest = json.loads(run_result.manifest_path.read_text(encoding="utf-8"))
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["status_run"] == "PROVISORIO_CONCLUIDO"
     manuais = manifest["lancamentos_manuais_gerenciais"]
     assert manuais["executado"] is True
     assert manuais["lancamentos_aceitos"] == 1
     assert manuais["fonte"] == "MANUAL_GERENCIAL"
     assert manifest["pacote_contabil_gerencial"]["executado"] is True
 
-    pre_livro_path = run_result.reports_run_dir / "pre_livro_diario_gerencial_teste.xlsx"
+    for path_text in manifest["relatorios_gerados"]:
+        path = Path(path_text)
+        assert path.resolve().is_relative_to(project_root.resolve())
+
+    pre_livro_path = reports_run_dir / "pre_livro_diario_gerencial_teste.xlsx"
     assert pre_livro_path.exists()
     manuais_rows = _linhas_manuais_do_pre_livro(pre_livro_path)
     assert {row["conta_id"] for row in manuais_rows} == {CONTA_MANUAL_ID, CONTA_TECNICA_ID}
@@ -91,7 +91,7 @@ def test_fluxo_manuais_gerenciais_end_to_end(tmp_path):
         assert Decimal(str(row["valor"])) == VALOR_MANUAL
         assert row["status_revisao"] == "OK"
 
-    dre_path = run_result.reports_run_dir / "dre_gerencial_ok_provisoria.xlsx"
+    dre_path = reports_run_dir / "dre_gerencial_ok_provisoria.xlsx"
     assert dre_path.exists()
     dre_workbook = load_workbook(dre_path)
     dre_geral = dre_workbook["DRE_Geral"]
@@ -122,10 +122,15 @@ def _preparar_xml_base(tmp_path: Path) -> Path:
     return xml_base
 
 
-def _preparar_template_preenchido(tmp_path: Path, project_root: Path) -> Path:
+def _preparar_template_preenchido(project_root: Path) -> Path:
     plano_path = project_root / "config" / "plano_contas_gerencial.yaml"
     dre_path = project_root / "config" / "mapeamento_dre.yaml"
-    template_path = tmp_path / "template_manuais.xlsx"
+    template_path = (
+        project_root
+        / "Database_Dev"
+        / "Registrazioni_manuali"
+        / "registrazioni_manuali_base.xlsx"
+    )
     gerar_template_lancamentos_manuais_gerenciais(template_path, plano_path, dre_path)
 
     workbook = load_workbook(template_path)

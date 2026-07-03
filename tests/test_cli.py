@@ -1,6 +1,7 @@
 import csv
 from pathlib import Path
 from shutil import copyfile
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from openpyxl import Workbook, load_workbook
@@ -315,6 +316,121 @@ def test_parser_accepts_validar_lancamentos_manuais_gerenciais_command():
     assert args.entrada == "Database_Dev/_templates/lancamentos_manuais.xlsx"
     assert args.saida_csv == "reports/lancamentos_manuais.csv"
     assert args.relatorio == "reports/lancamentos_manuais.txt"
+
+
+def test_parser_accepts_executar_lancamentos_manuais_gerenciais_project_root():
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "executar-lancamentos-manuais-gerenciais",
+            "--project-root",
+            "tmp/project_root",
+        ]
+    )
+
+    assert args.command == "executar-lancamentos-manuais-gerenciais"
+    assert args.project_root == "tmp/project_root"
+
+
+def test_parser_executar_lancamentos_manuais_gerenciais_project_root_opcional():
+    parser = build_parser()
+
+    args = parser.parse_args(["executar-lancamentos-manuais-gerenciais"])
+
+    assert args.command == "executar-lancamentos-manuais-gerenciais"
+    assert args.project_root is None
+
+
+def test_executar_lancamentos_manuais_usa_defaults_do_project_root(
+    monkeypatch, tmp_path, capsys
+):
+    from fantozzi import cli
+
+    project_root = tmp_path / "project_root"
+    seen = {}
+
+    def _validar(template_path, csv_path, relatorio, plano_path, dre_path):
+        seen["validacao"] = {
+            "template": template_path,
+            "csv": csv_path,
+            "relatorio": relatorio,
+            "plano": plano_path,
+            "dre": dre_path,
+        }
+        return SimpleNamespace(linhas_validas=1, avisos=())
+
+    def _pipeline(**kwargs):
+        seen["pipeline"] = kwargs
+        manifest_path = (
+            project_root
+            / "reports"
+            / "importacao_real"
+            / "runs"
+            / "2026-07-03_001"
+            / "manifest_run.json"
+        )
+        manifest_path.parent.mkdir(parents=True)
+        manifest_path.write_text(
+            """{
+  "lancamentos_manuais_gerenciais": {
+    "executado": true,
+    "lancamentos_aceitos": 1,
+    "linhas_tecnicas_geradas": 2,
+    "total_manual": "1.00",
+    "total_controle_tecnico": "1.00",
+    "partida_dobrada_ok": true
+  },
+  "pacote_contabil_gerencial": {
+    "executado": true,
+    "diretorio": "tmp"
+  },
+  "erros": []
+}""",
+            encoding="utf-8",
+        )
+        return SimpleNamespace(
+            run_id="2026-07-03_001",
+            status_run="PROVISORIO_CONCLUIDO",
+            manifest_path=manifest_path,
+            avisos=(),
+        )
+
+    monkeypatch.setattr(cli, "validar_lancamentos_manuais_gerenciais_operador", _validar)
+    monkeypatch.setattr(
+        cli.reprocessamento_pipeline,
+        "reprocessar_importacao_real_provisoria",
+        _pipeline,
+    )
+
+    result = main(
+        [
+            "executar-lancamentos-manuais-gerenciais",
+            "--project-root",
+            str(project_root),
+        ]
+    )
+
+    capsys.readouterr()
+    assert result == 0
+    assert seen["validacao"]["template"] == (
+        project_root
+        / "Database_Dev"
+        / "Registrazioni_manuali"
+        / "registrazioni_manuali_base.xlsx"
+    )
+    assert seen["validacao"]["csv"] == (
+        project_root
+        / "Database_Dev"
+        / "Registrazioni_manuali"
+        / "registrazioni_manuali_tecnico.csv"
+    )
+    assert seen["validacao"]["plano"] == project_root / "config" / "plano_contas_gerencial.yaml"
+    assert seen["validacao"]["dre"] == project_root / "config" / "mapeamento_dre.yaml"
+    assert seen["pipeline"]["xml_base"] == project_root / "Database_Dev" / "XML_fatture_acquisto"
+    assert seen["pipeline"]["saida_output"] == project_root / "output" / "importacao_real"
+    assert seen["pipeline"]["saida_reports"] == project_root / "reports" / "importacao_real"
+    assert seen["pipeline"]["project_root"] == project_root.resolve()
 
 
 def test_parser_accepts_manifest_para_validar_lancamentos_manuais_gerenciais():
@@ -706,6 +822,15 @@ def test_validar_lancamentos_manuais_gerenciais_help_lists_options(capsys):
     assert "--relatorio" in captured.out
     assert "--plano-contas" in captured.out
     assert "--mapeamento-dre" in captured.out
+
+
+def test_executar_lancamentos_manuais_gerenciais_help_lists_project_root(capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        main(["executar-lancamentos-manuais-gerenciais", "--help"])
+
+    captured = capsys.readouterr()
+    assert exc_info.value.code == 0
+    assert "--project-root" in captured.out
 
 
 def test_gerar_pacote_revisao_contabil_help_returns_zero_and_lists_options(capsys):

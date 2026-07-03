@@ -1060,6 +1060,14 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Arquivo TXT opcional para salvar o relatorio de validacao.",
     )
+    executar_manuais.add_argument(
+        "--project-root",
+        default=None,
+        help=(
+            "Raiz de projeto opcional para testes/ambientes isolados. "
+            "Se omitida, usa a raiz real do projeto."
+        ),
+    )
     executar_manuais.set_defaults(
         func=executar_lancamentos_manuais_gerenciais_command
     )
@@ -2167,10 +2175,28 @@ def validar_lancamentos_manuais_gerenciais_command(args: argparse.Namespace) -> 
 
 
 def executar_lancamentos_manuais_gerenciais_command(args: argparse.Namespace) -> int:
-    template_path = Path(args.template)
-    csv_path = Path(args.saida_csv)
-    plano_path = Path(args.plano_contas)
-    dre_path = Path(args.mapeamento_dre)
+    project_root = Path(args.project_root).resolve() if args.project_root else None
+    template_path = _resolve_path_for_project_root(
+        args.template, DEFAULT_TEMPLATE_MANUAIS_PATH, project_root
+    )
+    csv_path = _resolve_path_for_project_root(
+        args.saida_csv, DEFAULT_TEMPLATE_MANUAIS_SAIDA_CSV, project_root
+    )
+    xml_base = _resolve_path_for_project_root(
+        args.xml_base, DEFAULT_XML_BASE, project_root
+    )
+    saida_output = _resolve_path_for_project_root(
+        args.saida_output, DEFAULT_OUTPUT_IMPORTACAO_REAL, project_root
+    )
+    saida_reports = _resolve_path_for_project_root(
+        args.saida_reports, DEFAULT_REPORTS_IMPORTACAO_REAL, project_root
+    )
+    plano_path = _resolve_path_for_project_root(
+        args.plano_contas, DEFAULT_PLANO_CONTAS, project_root
+    )
+    dre_path = _resolve_path_for_project_root(
+        args.mapeamento_dre, DEFAULT_MAPEAMENTO_DRE_PATH, project_root
+    )
     relatorio_val = Path(args.relatorio_validacao) if args.relatorio_validacao else None
 
     print(f"[INFO] Template: {template_path}")
@@ -2199,9 +2225,10 @@ def executar_lancamentos_manuais_gerenciais_command(args: argparse.Namespace) ->
     print("[INFO] Executando run provisoria com lancamentos manuais gerenciais...")
     try:
         run_result = reprocessamento_pipeline.reprocessar_importacao_real_provisoria(
-            xml_base=Path(args.xml_base),
-            saida_output=Path(args.saida_output),
-            saida_reports=Path(args.saida_reports),
+            xml_base=xml_base,
+            saida_output=saida_output,
+            saida_reports=saida_reports,
+            project_root=project_root,
             lancamentos_manuais_gerenciais_csv_path=csv_path,
             gerar_pacote_contabil_gerencial=True,
         )
@@ -2271,6 +2298,15 @@ def executar_lancamentos_manuais_gerenciais_command(args: argparse.Namespace) ->
         return 1
     print("RESULTADO: OK")
     return 0
+
+
+def _resolve_path_for_project_root(
+    value: str | Path, default_path: Path, project_root: Path | None
+) -> Path:
+    path = Path(value)
+    if project_root is None or path != default_path:
+        return path
+    return project_root / default_path.relative_to(PROJECT_ROOT)
 
 
 def gerar_pacote_revisao_contabil_command(args: argparse.Namespace) -> int:
