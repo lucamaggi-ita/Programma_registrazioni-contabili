@@ -21,8 +21,26 @@ def product_clf(chart):
 
 
 @pytest.fixture
-def expense_clf(chart):
-    return ExpenseClassifier(chart).load(CONFIG_DIR / "regras_classificacao_despesas.yaml")
+def expense_clf(chart, tmp_path):
+    # Synthetic fixture: it tests classifier behavior, not an official accounting YAML.
+    rules_path = tmp_path / "regras_classificacao_despesas_test.yaml"
+    rules_path.write_text(
+        """conta_fallback_id: "13.01.999"
+regras:
+  - conta_id: "4.01.011"
+    conta_nome: "Energia Eletrica"
+    prioridade: 100
+    aliases:
+      - energia eletrica
+  - conta_id: "3.01.020"
+    conta_nome: "FGTS"
+    prioridade: 100
+    aliases:
+      - fgts
+""",
+        encoding="utf-8",
+    )
+    return ExpenseClassifier(chart).load(rules_path)
 
 
 def test_product_coca_cola(product_clf):
