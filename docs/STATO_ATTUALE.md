@@ -1,6 +1,6 @@
 # STATO_ATTUALE.md — Programma Registrazioni Contabili / Fantozzi
 
-Aggiornato: 2026-07-03 (allineato dopo ricognizione tecnica completa read-only)
+Aggiornato: 2026-07-04 (patch docs-only 003B post hardening)
 
 Nota storica: la versione precedente di questo file (2026-05-19) descriveva
 uno stato antecedente a diversi commit rilevanti (`bcea1c7`, `01b4d0a`,
@@ -13,10 +13,13 @@ verificati sul codice/git reale, non solo riportati.
 La Fase 9 è conclusa fino alla Fase 9O.
 La Fase 13 è conclusa fino alla Fase 13W (parziale — diagnostica read-only eseguita, run reale non ancora materializzata).
 
-Ultimo stato confermato (verificato 2026-07-03):
+Ultimo stato confermato (verificato 2026-07-04):
 - Branch operativo: `senza-incrementali`, allineato 1:1 con `origin/senza-incrementali`.
 - Strategia operativa corrente: **FULL RUN DA ZERO** — nessuna baseline, nessun workflow incrementale. `executar-run-incremental` non è un percorso operativo valido.
 - Registrazioni manuali gerenciais: **già implementate, validate e integrate nella pipeline reale** (non solo progettate) — 39 test automatizzati verdi.
+- Hardening post-ricognizione consolidato: test despesas legacy ermetici; alias curtos
+  `<=3` con match whole-word; warning prudenziale Manuali XML nella stessa run;
+  CFOP 1949 coperto da NFref/refNFe e test E2E XML.
 - Output visuali attivi: PDF DRE, dashboard HTML, Excel giornale leggibile (versione "003D" consolidata).
 - Un tentativo di dashboard integrata nell'Excel giornale leggibile ("003E") è stato bocciato e revertito in modo pulito — non è una linea attiva da riprendere.
 
@@ -30,6 +33,11 @@ Branch storici/non operativi (non usare come base di lavoro):
 - `main-initial-backup` — snapshot congelato del primo commit del repository.
 
 Commit recenti rilevanti (linea `senza-incrementali`):
+- `eb956ee` — test(xml): copre CFOP 1949 end-to-end con NFref
+- `920668e` — feat(manuais): segnala possibili duplicati manuali XML
+- `1a6dcdf` — fix(classifier): applica whole-word a alias curtos
+- `1d6c46c` — test(classifier): rende ermetici i test despesas legacy
+- `1cb0ae4` — chore(deps): dichiara reportlab tra le dipendenze
 - `2d69d3a` — Revert "Migliora dashboard DRE del Giornale Excel leggibile" (bocciata "003E")
 - `4871e12` — Migliora dashboard DRE del Giornale Excel leggibile ("003E", revertita da `2d69d3a`)
 - `4fc0fdd` — Consolida Giornale Excel leggibile ("003D", **valida e attiva**)
@@ -70,6 +78,8 @@ CLI disponibili:
 - `gerar-pacote-revisao-comprovantes` — pacchetto revisione XLSX
 
 Regole: `config/regras_classificacao_comprovantes.yaml` — 30 regole, 0 erros.
+Matching automatico banca/comprovantes: ancora disabilitato. La fase 003B non
+ha toccato banca/comprovantes, YAML o logiche di classificazione.
 
 ### Bonificação recebida
 
@@ -95,9 +105,17 @@ Database_Dev\Registrazioni_manuali\registrazioni_manuali_tecnico.csv   - CSV tec
 ```
 
 Limiti noti (governance, non funzionali — vedi anche `docs/LANCAMENTOS_MANUAIS_GERENCIAIS_OPERADOR.md`):
-- nessuna anti-duplicazione automatica con XML (delegata alla revisione umana);
+- audit prudenziale Manuali XML nella stessa run: segnala possibili duplicati
+  con criterio `data esatta + valore assoluto a 2 decimali`, produce
+  `07_AUDITORIA_POSSIVEIS_DUPLICATAS_MANUAIS_XML.txt` e contatore
+  `possiveis_duplicatas_manuais_xml`, ma non blocca il giornale, non esclude
+  righe, non altera il DRE, non usa fuzzy matching e non fa cross-run;
 - deduplicazione via hash valida solo dentro un singolo caricamento, non tra run/periodi diversi;
 - nessun test end-to-end automatico copre l'orchestrazione one-shot completa `executar-lancamentos-manuais-gerenciais` (solo i componenti separati).
+
+Luca considera raro nella pratica il caso "manuale inserito perché XML mancante,
+poi arriva XML della stessa spesa". Il controllo Manuali XML è quindi una
+cintura di sicurezza leggera, non una regola contabile aggressiva.
 
 ### Output visuais (post-run, non ufficiali)
 
@@ -114,9 +132,8 @@ commit `4871e12`) è stata **bocciata e revertita** (`2d69d3a`) — confermato c
 il codice tracciato oggi è identico alla versione pre-tentativo, nessun residuo.
 Non è una linea da riprendere così com'era.
 
-Rischio noto: `reportlab` (usato da `dre_pdf_gerencial.py` e dagli script in
-`scripts/`) non è dichiarato tra le dipendenze in `pyproject.toml` — funziona
-solo perché già installato nell'ambiente attuale.
+Dipendenza PDF: `reportlab` è già dichiarato in `pyproject.toml` (commit
+`1cb0ae4`). Il vecchio rischio "reportlab non dichiarato" è chiuso.
 
 ### Piano dei conti e mapeamento DRE
 
@@ -177,3 +194,17 @@ CLI già disponibili: `gerar-pre-livro-diario-teste`, `gerar-dre-gerencial-ok-pr
 10. Non fare `git add .` — sempre aggiungere file specifici.
 11. Non usare `master`/`backup/con-incrementali` come base di lavoro o per merge/cherry-pick — è la linea storica "con incrementali" superata dalla strategia "senza incrementali".
 12. Per modifiche visuali (PDF/HTML/Excel leggibile), non "inventare" layout — seguire il modello approvato ("003D") o produrre un'anteprima prima del commit. La "003E" è l'esempio concreto di cosa evitare.
+
+## Stato hardening post 003A
+
+- Test hygiene despesas legacy: **CHIUSO** (`1d6c46c`).
+- Alias curtos `<=3`: **CHIUSO** con match whole-word in codice, YAML e test
+  (`1a6dcdf`).
+- Manuali XML: **CHIUSO** come warning prudenziale non bloccante nella stessa
+  run (`920668e`).
+- CFOP 1949: **CHIUSO** per il perimetro attuale con NFref/refNFe e test E2E
+  XML; i casi dubbi o senza origine sicura restano `REVISAR` / `13.01.001`
+  (`eb956ee`).
+- Banca/comprovantes: **NON TOCCATA** in questa fase; matching automatico ancora
+  disabilitato.
+- Workflow vivo: `senza-incrementali`, full run da zero.

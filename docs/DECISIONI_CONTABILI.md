@@ -1,6 +1,6 @@
 # DECISIONI_CONTABILI.md — Programma Registrazioni Contabili / Fantozzi
 
-Aggiornato: 2026-05-17
+Aggiornato: 2026-07-04 (patch docs-only 003B post hardening)
 
 ## Scopo
 
@@ -61,9 +61,20 @@ Trattamento:
 ## CFOP 1949 / recusa / estorno
 
 Decisione:
-non hardcodare CFOP 1949 come recusa/estorno automatico.
+nel contesto operativo Fantozzi, CFOP 1949 rappresenta il ritorno al fornitore
+di merce uscita con nota di vendita e non consegnata. Non deve generare
+automaticamente un nuovo costo/spesa.
 
-Ogni caso CFOP 1949 deve essere verificato con:
+Regola consolidata:
+- non usare euristica data+valore;
+- usare `NFref` / `refNFe` quando disponibile;
+- se il riferimento NF-e è sicuro e l'origine è presente nello stesso
+  perimetro/run, ridurre o stornare la fonte corretta;
+- se il caso è dubbio o l'origine non è presente, classificare
+  conservativamente come `REVISAR` / `13.01.001`;
+- mai trasformare automaticamente CFOP 1949 in costo/spesa nuovo.
+
+Ogni caso CFOP 1949 deve restare verificabile con:
 - XML;
 - natOp;
 - NFref;
@@ -78,6 +89,12 @@ NF 359680 con CFOP 1949 e NF collegata probabilmente 358780 non devono essere co
 Ma:
 CFOP 1949 può rappresentare anche altra saída/operação.
 Non generalizzare.
+
+Copertura automatica consolidata:
+- fixture XML origine;
+- fixture XML estorno con NFref;
+- fixture XML estorno senza origine;
+- test E2E in `tests/test_allocation.py`.
 
 ## NF mista venda/bonificação
 

@@ -1,6 +1,6 @@
 # ROADMAP_MASTER.md — Programma Registrazioni Contabili / Fantozzi
 
-Aggiornato: 2026-05-19
+Aggiornato: 2026-07-04 (patch docs-only 003B post hardening)
 
 ## Stato generale
 
@@ -46,6 +46,45 @@ Stato: **CONCLUSA** — chiusa e pushata fino a 9O.
 Stato: **CONCLUSA** — consolidata prima del ritorno alla Fase 9.
 
 Cautele stabilizzate: PATAXO, investimenti, refrigeradores/cervejeiras, bonificações, comodato.
+
+---
+
+### Consolidamento post-hardening 003B — documentazione
+
+Stato: **CONCLUSO COME PATCH DOCS-ONLY**
+
+Questa sezione registra fasi già chiuse e pushate. Non apre nuove modifiche
+codice/test/config e non cambia semantica contabile.
+
+#### Fasi chiuse e pushate
+
+| Tema | Stato | Commit | Contratto consolidato |
+|---|---|---|---|
+| Test hygiene despesas legacy | CHIUSO | `1d6c46c` | I test classifier legati a despesas legacy sono ermetici e non dipendono da file orfani rimossi. |
+| Alias curtos whole-word | CHIUSO | `1a6dcdf` | Gli alias prodotto/fornitore lunghi al massimo 3 caratteri matchano solo parola intera. |
+| Warning Manuali XML | CHIUSO | `920668e` | Audit prudenziale nella stessa run: segnala possibili duplicati, non blocca, non altera giornale/DRE. |
+| CFOP 1949 NFref/E2E | CHIUSO | `eb956ee` | NFref/refNFe sicuro stornano la fonte corretta; casi dubbi o senza origine restano `REVISAR`. |
+
+#### Futuri opzionali, non bloccanti
+
+Questi punti sono deliberatamente futuri/opzionali, non bloccano il workflow
+attuale e non devono essere implementati dentro 003B:
+
+- cross-run / CNPJ duplicati manuali, da trattare con cautela senza inferire
+  duplicato solo da data e valore;
+- CFOP 1949 con origine fuori run;
+- tracciabilità NFref/série nel `Lancamento` o negli export;
+- lettura `dhSaiEnt`, se diventa utile per audit;
+- `operacoes_especiais.txt` più leggibile sul 1949;
+- repo hygiene degli untracked storici.
+
+#### Temi non aperti ora
+
+- Nessuna nuova regola contabile.
+- Nessuna modifica YAML/config.
+- Nessun riavvio del matching automatico banca/comprovantes.
+- Nessuna euristica data+valore per CFOP 1949.
+- Nessuna conversione del warning Manuali XML in blocco.
 
 ---
 

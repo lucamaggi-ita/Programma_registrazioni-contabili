@@ -1,6 +1,6 @@
 # Lancamentos manuais gerenciais — operador
 
-Atualizado: 2026-07-03. Estado real confirmado por ricognizione tecnica: fluxo
+Atualizado: 2026-07-04. Estado real confirmado por ricognizione tecnica: fluxo
 **ja implementado, validado e integrado na pipeline real** (`reprocessamento_pipeline.py`),
 com 39 testes automatizados verdes (`test_lancamentos_manuais_gerenciais.py`,
 `test_lancamentos_manuais_template.py`). Nao e um fluxo apenas projetado.
@@ -103,11 +103,20 @@ A validacao tecnica e rigorosa (formato, contas existentes, guardrail DRE,
 duplicata interna dentro do mesmo arquivo), mas **nao substitui a revisao
 humana** nos seguintes pontos:
 
-- **Anti-duplicacao com XML**: o sistema nao verifica automaticamente se uma
-  despesa manual ja esta registrada em XML/NF-e. O proprio relatorio de
-  validacao imprime o aviso literal: *"ATENCAO: o sistema nao garante que esta
-  despesa ja nao exista em XML."* A responsabilidade de nao duplicar e do
-  operador, antes de preencher a linha.
+- **Anti-duplicacao com XML**: existe um audit prudencial e nao blocante
+  Manuali XML dentro da mesma run. O criterio e `data exata + valor absoluto a
+  2 decimais`; o output e
+  `07_AUDITORIA_POSSIVEIS_DUPLICATAS_MANUAIS_XML.txt`; o manifest registra o
+  contador `possiveis_duplicatas_manuais_xml`. Este controle apenas sinaliza:
+  nao bloqueia o giornale, nao exclui linhas, nao altera DRE, nao compara
+  banca/comprovantes, nao faz cross-run e nao usa fuzzy matching. Luca considera
+  raro na pratica o caso "manual inserido porque XML estava ausente, depois o
+  XML chega"; portanto o audit e uma cintura de seguranca leve, nao uma regra
+  contabil agressiva nem uma protecao contra risco frequente. O proprio
+  relatorio de validacao continua imprimindo o aviso literal:
+  *"ATENCAO: o sistema nao garante que esta despesa ja nao exista em XML."*
+  A responsabilidade de nao duplicar continua sendo do operador, antes de
+  preencher a linha.
 - **Duplicacao entre execucoes/periodos diferentes**: a chave de deduplicacao
   (hash) so protege contra duplicatas *dentro do mesmo arquivo* carregado numa
   execucao. Nao ha controle cruzado entre runs ou periodos diferentes — a
