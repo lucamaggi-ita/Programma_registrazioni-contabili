@@ -16,6 +16,18 @@ CONFIG_DIR = PROJECT_ROOT / "config"
 SAMPLE_XML = (
     PROJECT_ROOT / "samples" / "nfe_exemplo" / "nfe_oesa_12566_20260505.xml"
 )
+CFOP1949_ORIGEM_XML = (
+    PROJECT_ROOT / "samples" / "nfe_exemplo" / "nfe_cfop1949_origem_20260501.xml"
+)
+CFOP1949_ESTORNO_XML = (
+    PROJECT_ROOT / "samples" / "nfe_exemplo" / "nfe_cfop1949_estorno_20260502.xml"
+)
+CFOP1949_ESTORNO_SEM_ORIGEM_XML = (
+    PROJECT_ROOT
+    / "samples"
+    / "nfe_exemplo"
+    / "nfe_cfop1949_estorno_sem_origem_20260502.xml"
+)
 
 
 @pytest.fixture
@@ -420,6 +432,50 @@ def test_wide_remessa_nature_does_not_create_valor_inconsistente_when_cfops_clos
     assert by_conta["2.05.001"].valor == Decimal("16.65")
     assert all("VALOR_INCONSISTENTE" not in l.alertas for l in lancamentos)
     assert by_conta["2.05.003"].duplicatas == []
+
+
+def test_cfop_1949_e2e_xml_nfref_seguro_reduz_conta_origem(product_classifier):
+    origem = parse_nfe(CFOP1949_ORIGEM_XML)
+    estorno = parse_nfe(CFOP1949_ESTORNO_XML)
+
+    assert estorno.referenced_nfe_chaves == (origem.chave,)
+
+    lancamentos = allocate_nfe_to_lancamentos(
+        estorno, product_classifier, nfe_index={origem.chave: origem}
+    )
+
+    assert len(lancamentos) == 1
+    lancamento = lancamentos[0]
+    assert lancamento.conta_id == "2.01.001"
+    assert lancamento.conta_nome == "Cervejas"
+    assert lancamento.valor == Decimal("-249.13")
+    assert lancamento.status_revisao == "OK"
+    assert lancamento.alertas == ""
+    assert lancamento.cfop == "1949"
+    assert lancamento.tipo_operacao_especial == "ESTORNO_NF_REFERENCIADA"
+    assert lancamento.tratamento_operacao_especial == "REDUCAO_CUSTO"
+    assert lancamento.chave_origem == estorno.chave
+    assert lancamento.hash_registro
+
+
+def test_cfop_1949_e2e_xml_nfref_sem_origem_fica_revisar(product_classifier):
+    estorno = parse_nfe(CFOP1949_ESTORNO_SEM_ORIGEM_XML)
+
+    assert estorno.referenced_nfe_chaves == (
+        "35260512345678000195550010000099991000099991",
+    )
+
+    lancamentos = allocate_nfe_to_lancamentos(estorno, product_classifier, nfe_index={})
+
+    assert len(lancamentos) == 1
+    lancamento = lancamentos[0]
+    assert lancamento.conta_id == "13.01.001"
+    assert lancamento.valor == Decimal("249.13")
+    assert lancamento.status_revisao == "REVISAR"
+    assert "CFOP_1949_SEM_VINCULO_SEGURO" in lancamento.alertas
+    assert lancamento.cfop == "1949"
+    assert lancamento.tipo_operacao_especial == "ESTORNO_NF_REFERENCIADA"
+    assert lancamento.tratamento_operacao_especial == "REVISAR"
 
 
 def test_cfop_1949_with_safe_nfref_reduces_origin_account(product_classifier):

@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<nfeProc versao="4.00" xmlns="http://www.portalfiscal.inf.br/nfe">
+  <NFe xmlns="http://www.portalfiscal.inf.br/nfe">
+    <infNFe versao="4.00" Id="NFe35260512345678000195550010000010031000010037">
+      <ide>
+        <cUF>35</cUF>
+        <cNF>00010037</cNF>
+        <natOp>ESTORNO DE MERCADORIAS</natOp>
+        <mod>55</mod>
+        <serie>001</serie>
+        <nNF>1003</nNF>
+        <dhEmi>2026-05-02T09:00:00-03:00</dhEmi>
+        <tpNF>1</tpNF>
+        <idDest>2</idDest>
+        <cMunFG>3550308</cMunFG>
+        <tpImp>1</tpImp>
+        <tpEmis>1</tpEmis>
+        <tpAmb>2</tpAmb>
+        <finNFe>1</finNFe>
+        <indFinal>1</indFinal>
+        <indPres>1</indPres>
+        <procEmi>0</procEmi>
+        <verProc>4.00</verProc>
+        <NFref>
+          <refNFe>35260512345678000195550010000099991000099991</refNFe>
+        </NFref>
+      </ide>
+      <emit>
+        <CNPJ>12345678000195</CNPJ>
+        <xNome>CHECON DISTRIBUIDORA E TRANSPORTADORA LTDA</xNome>
+        <IE>123456789</IE>
+        <CRT>3</CRT>
+      </emit>
+      <dest>
+        <CNPJ>55746722000181</CNPJ>
+        <xNome>TRATTORIA DO SOSSEGO RESTAURANTE LTDA</xNome>
+        <indIEDest>9</indIEDest>
+      </dest>
+      <det nItem="1">
+        <prod>
+          <cProd>CERV001</cProd>
+          <cEAN>SEM GTIN</cEAN>
+          <xProd>CERV HEINEKEN PIL 0,60GFA RT 24UN</xProd>
+          <NCM>22030000</NCM>
+          <CFOP>1949</CFOP>
+          <uCom>UN</uCom>
+          <qCom>1.0000</qCom>
+          <vUnCom>249.1300</vUnCom>
+          <vProd>249.13</vProd>
+          <cEANTrib>SEM GTIN</cEANTrib>
+          <uTrib>UN</uTrib>
+          <qTrib>1.0000</qTrib>
+          <vUnTrib>249.1300</vUnTrib>
+          <indTot>1</indTot>
+        </prod>
+      </det>
+      <total>
+        <ICMSTot>
+          <vProd>249.13</vProd>
+          <vST>0.00</vST>
+          <vFCPST>0.00</vFCPST>
+          <vFrete>0.00</vFrete>
+          <vSeg>0.00</vSeg>
+          <vDesc>0.00</vDesc>
+          <vII>0.00</vII>
+          <vIPI>0.00</vIPI>
+          <vIPIDevol>0.00</vIPIDevol>
+          <vOutro>0.00</vOutro>
+          <vNF>249.13</vNF>
+        </ICMSTot>
+      </total>
+      <cobr>
+        <fat>
+          <nFat>1003</nFat>
+          <vOrig>249.13</vOrig>
+          <vDesc>0.00</vDesc>
+          <vLiq>249.13</vLiq>
+        </fat>
+        <dup>
+          <nDup>001</nDup>
+          <dVenc>2026-05-20</dVenc>
+          <vDup>249.13</vDup>
+        </dup>
+      </cobr>
+    </infNFe>
+  </NFe>
+</nfeProc>
