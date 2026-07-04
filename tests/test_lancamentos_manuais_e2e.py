@@ -77,6 +77,7 @@ def test_fluxo_manuais_gerenciais_cli_end_to_end(tmp_path):
     assert manuais["executado"] is True
     assert manuais["lancamentos_aceitos"] == 1
     assert manuais["fonte"] == "MANUAL_GERENCIAL"
+    assert manuais["possiveis_duplicatas_manuais_xml"] == 0
     assert manifest["pacote_contabil_gerencial"]["executado"] is True
 
     for path_text in manifest["relatorios_gerados"]:
@@ -84,7 +85,14 @@ def test_fluxo_manuais_gerenciais_cli_end_to_end(tmp_path):
         assert path.resolve().is_relative_to(project_root.resolve())
 
     pre_livro_path = reports_run_dir / "pre_livro_diario_gerencial_teste.xlsx"
+    auditoria_duplicatas = (
+        reports_run_dir / "07_AUDITORIA_POSSIVEIS_DUPLICATAS_MANUAIS_XML.txt"
+    )
     assert pre_livro_path.exists()
+    assert auditoria_duplicatas.exists()
+    assert "possiveis_duplicatas_manuais_xml: 0" in auditoria_duplicatas.read_text(
+        encoding="utf-8"
+    )
     manuais_rows = _linhas_manuais_do_pre_livro(pre_livro_path)
     assert {row["conta_id"] for row in manuais_rows} == {CONTA_MANUAL_ID, CONTA_TECNICA_ID}
     for row in manuais_rows:

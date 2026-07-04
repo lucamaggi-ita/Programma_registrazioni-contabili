@@ -50,8 +50,7 @@ def _fake_steps(calls: list[tuple[str, Path]], fail_at: str | None = None) -> Pi
                 / fonte.cnpj_pasta
                 / "lancamentos_fantozzi_real.xlsx"
             )
-            path.parent.mkdir(parents=True)
-            path.write_text("fake xlsx", encoding="utf-8")
+            _save_xml_lancamentos_xlsx(path)
             arquivos.append(path)
         return StepResult(
             arquivos_gerados=tuple(arquivos),
@@ -466,6 +465,10 @@ def test_pipeline_com_csv_manual_gera_outputs_e_manifest(tmp_path):
     auditoria_txt = (
         result.reports_run_dir / "auditoria_lancamentos_manuais_gerenciais.txt"
     )
+    auditoria_duplicatas = (
+        result.reports_run_dir
+        / "07_AUDITORIA_POSSIVEIS_DUPLICATAS_MANUAIS_XML.txt"
+    )
     manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
     manual = manifest["lancamentos_manuais_gerenciais"]
     checkpoints = [item["descricao"] for item in manifest["checkpoints"]]
@@ -473,6 +476,7 @@ def test_pipeline_com_csv_manual_gera_outputs_e_manifest(tmp_path):
     assert output_xlsx.exists()
     assert output_csv.exists()
     assert auditoria_txt.exists()
+    assert auditoria_duplicatas.exists()
     assert manual["executado"] is True
     assert manual["input_csv"] == str(csv_manual)
     assert manual["output_xlsx_tecnico"] == str(output_xlsx)
@@ -482,8 +486,13 @@ def test_pipeline_com_csv_manual_gera_outputs_e_manifest(tmp_path):
     assert manual["linhas_tecnicas_geradas"] == 2
     assert manual["total_manual"] == "10.50"
     assert manual["fonte"] == "MANUAL_GERENCIAL"
+    assert manual["possiveis_duplicatas_manuais_xml"] == 1
+    assert manual["auditoria_possiveis_duplicatas_manuais_xml_txt"] == str(
+        auditoria_duplicatas
+    )
     assert str(output_xlsx) in manifest["relatorios_gerados"]
     assert str(output_csv) in manifest["relatorios_gerados"]
+    assert str(auditoria_duplicatas) in manifest["relatorios_gerados"]
     assert checkpoints.index("OPERACOES_ESPECIAIS_AUDITADAS") < checkpoints.index(
         "LANCAMENTOS_MANUAIS_GERENCIAIS_APLICADOS"
     )
@@ -1049,6 +1058,38 @@ def _save_lancamentos_banca_xlsx(path: Path) -> None:
     }
     sheet.append([base_row[header] for header in HEADERS])
     sheet.append([second_row[header] for header in HEADERS])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    workbook.save(path)
+
+
+def _save_xml_lancamentos_xlsx(path: Path) -> None:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = LANCAMENTOS_SHEET
+    sheet.append(HEADERS)
+    row = {header: "" for header in HEADERS}
+    row.update(
+        {
+            "data_documento": date(2026, 5, 16),
+            "competencia": "2026-05",
+            "cnpj_empresa": "08884180000123",
+            "nome_empresa": "AMAMI RESTAURANTE LTDA",
+            "fornecedor_ou_favorecido": "FORNECEDOR XML TESTE",
+            "documento": "NF-100",
+            "tipo_documento": "XML_NFE",
+            "conta_id": "2.02.001",
+            "conta_nome": "Carnes Bovinas",
+            "valor": Decimal("10.50"),
+            "origem": "XML_NFE",
+            "arquivo_origem": "nfe.xml",
+            "chave_origem": f"xml-{path.parent.name}",
+            "hash_registro": f"hash-{path.parent.name}",
+            "status_revisao": "OK",
+            "tipo_lancamento": "custo",
+            "duplicatas_json": "[]",
+        }
+    )
+    sheet.append([row[header] for header in HEADERS])
     path.parent.mkdir(parents=True, exist_ok=True)
     workbook.save(path)
 

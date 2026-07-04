@@ -14,6 +14,7 @@ from fantozzi.pacote_contabil_gerencial import (
     MANIFEST_FILE,
     MANUAIS_AUDIT_FILE,
     PACOTE_DIR_NAME,
+    POSSIVEIS_DUPLICATAS_MANUAIS_XML_AUDIT_FILE,
     PRE_LIVRO_XLSX_FILE,
     RELATORIOS_XLSX_FILE,
     gerar_pacote_contabil_gerencial_provisorio,
@@ -45,6 +46,11 @@ def test_gera_indice_manifest_e_copia_arquivos_presentes(tmp_path):
     assert manifest["fase9_executada"] is False
     assert manifest["arquivos"][INDICE_FILE]["status"] == "OK"
     assert manifest["arquivos"][MANIFEST_FILE]["status"] == "OK"
+    assert (
+        manifest["arquivos"][POSSIVEIS_DUPLICATAS_MANUAIS_XML_AUDIT_FILE]["status"]
+        == "OK"
+    )
+    assert (pacote_dir / POSSIVEIS_DUPLICATAS_MANUAIS_XML_AUDIT_FILE).exists()
     assert "COMODATO fora DRE: OK" in indice
     assert "Extrato bancario" in indice
 
@@ -128,6 +134,19 @@ def test_audit_manuais_executado_true_confirma_partida_dobrada(tmp_path):
     assert "dre_impacta_uma_vez: OK" in text
 
 
+def test_audit_possiveis_duplicatas_manuais_xml_nao_aplicavel_sem_manuais(tmp_path):
+    reports_run = _make_run(tmp_path, manual_executado=False)
+
+    result = gerar_pacote_contabil_gerencial_provisorio(reports_run)
+
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    assert (
+        manifest["arquivos"][POSSIVEIS_DUPLICATAS_MANUAIS_XML_AUDIT_FILE]["status"]
+        == "NAO_APLICAVEL"
+    )
+    assert not (reports_run / PACOTE_DIR_NAME / POSSIVEIS_DUPLICATAS_MANUAIS_XML_AUDIT_FILE).exists()
+
+
 def _make_run(tmp_path: Path, *, manual_executado: bool) -> Path:
     reports_run = tmp_path / "reports" / "importacao_real" / "runs" / "2026-05-16_999"
     reports_run.mkdir(parents=True)
@@ -154,6 +173,11 @@ def _make_run(tmp_path: Path, *, manual_executado: bool) -> Path:
         json.dumps(manifest),
         encoding="utf-8",
     )
+    if manual_executado:
+        (reports_run / POSSIVEIS_DUPLICATAS_MANUAIS_XML_AUDIT_FILE).write_text(
+            "possiveis_duplicatas_manuais_xml: 0\n",
+            encoding="utf-8",
+        )
     return reports_run
 
 

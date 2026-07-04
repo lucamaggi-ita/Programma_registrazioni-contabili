@@ -10,6 +10,10 @@ from typing import Mapping
 
 from openpyxl import load_workbook
 
+from fantozzi.lancamentos_manuais_dedup import (
+    AUDITORIA_POSSIVEIS_DUPLICATAS_MANUAIS_XML_FILE,
+)
+
 
 PACOTE_DIR_NAME = "pacote_contabil_gerencial_provisorio"
 
@@ -23,6 +27,9 @@ RELATORIOS_TXT_FILE = "03_RELATORIOS_GERENCIAIS_OK.txt"
 COMODATO_AUDIT_FILE = "04_AUDITORIA_COMODATO_FORA_DRE.txt"
 BONIFICACAO_AUDIT_FILE = "05_AUDITORIA_BONIFICACAO_RECEBIDA_DRE.txt"
 MANUAIS_AUDIT_FILE = "06_AUDITORIA_LANCAMENTOS_MANUAIS_GERENCIAIS.txt"
+POSSIVEIS_DUPLICATAS_MANUAIS_XML_AUDIT_FILE = (
+    AUDITORIA_POSSIVEIS_DUPLICATAS_MANUAIS_XML_FILE
+)
 MANIFEST_FILE = "manifest_pacote_contabil_gerencial.json"
 
 BASE_OK_DRE_SHEET = "Base_OK_DRE"
@@ -89,6 +96,11 @@ def gerar_pacote_contabil_gerencial_provisorio(
         reports_run_dir / SOURCE_FILES[PRE_LIVRO_XLSX_FILE],
         run_manifest.get("lancamentos_manuais_gerenciais", {"executado": False}),
     )
+    duplicatas_audit = _copy_possiveis_duplicatas_manuais_xml_audit(
+        reports_run_dir,
+        pacote_dir,
+        run_manifest.get("lancamentos_manuais_gerenciais", {"executado": False}),
+    )
 
     audit_outputs = {
         COMODATO_AUDIT_FILE: comodato_audit,
@@ -103,6 +115,14 @@ def gerar_pacote_contabil_gerencial_provisorio(
             "destino": str(output_path),
         }
         generated.append(output_path)
+
+    if duplicatas_audit["generated_path"] is not None:
+        generated.append(duplicatas_audit["generated_path"])
+    files_manifest[POSSIVEIS_DUPLICATAS_MANUAIS_XML_AUDIT_FILE] = {
+        "status": duplicatas_audit["status"],
+        "origem": duplicatas_audit["origem"],
+        "destino": duplicatas_audit["destino"],
+    }
 
     status = (
         "OK"
@@ -131,6 +151,7 @@ def gerar_pacote_contabil_gerencial_provisorio(
         comodato_audit=comodato_audit,
         bonificacao_audit=bonificacao_audit,
         manuais_audit=manuais_audit,
+        duplicatas_audit=duplicatas_audit,
     )
     manifest_path.write_text(
         json.dumps(_json_ready(manifest), ensure_ascii=False, indent=2),
@@ -239,6 +260,40 @@ def _audit_manuais(pre_livro_xlsx_path: Path, manual_manifest: object) -> dict[s
     }
 
 
+def _copy_possiveis_duplicatas_manuais_xml_audit(
+    reports_run_dir: Path,
+    pacote_dir: Path,
+    manual_manifest: object,
+) -> dict[str, object]:
+    manual = manual_manifest if isinstance(manual_manifest, dict) else {"executado": False}
+    source_path = reports_run_dir / POSSIVEIS_DUPLICATAS_MANUAIS_XML_AUDIT_FILE
+    output_path = pacote_dir / POSSIVEIS_DUPLICATAS_MANUAIS_XML_AUDIT_FILE
+    if not manual.get("executado"):
+        return {
+            "status": "NAO_APLICAVEL",
+            "origem": str(source_path),
+            "destino": str(output_path),
+            "generated_path": None,
+            "quantidade": 0,
+        }
+    if source_path.exists() and source_path.is_file():
+        shutil.copy2(source_path, output_path)
+        return {
+            "status": "OK",
+            "origem": str(source_path),
+            "destino": str(output_path),
+            "generated_path": output_path,
+            "quantidade": int(manual.get("possiveis_duplicatas_manuais_xml") or 0),
+        }
+    return {
+        "status": "NAO_GERADO",
+        "origem": str(source_path),
+        "destino": str(output_path),
+        "generated_path": None,
+        "quantidade": int(manual.get("possiveis_duplicatas_manuais_xml") or 0),
+    }
+
+
 def _comodato_text(status: str, count: int | None, valor_total: Decimal | None) -> str:
     lines = [
         "AUDITORIA COMODATO FORA DRE",
@@ -317,6 +372,7 @@ def _build_manifest(
     comodato_audit: Mapping[str, object],
     bonificacao_audit: Mapping[str, object],
     manuais_audit: Mapping[str, object],
+    duplicatas_audit: Mapping[str, object],
 ) -> dict[str, object]:
     return {
         "tipo_pacote": "pacote_contabil_gerencial_provisorio",
@@ -347,6 +403,10 @@ def _build_manifest(
             "lancamentos_manuais_gerenciais": {
                 "status": manuais_audit["status"],
                 "executado": manuais_audit.get("executado"),
+            },
+            "possiveis_duplicatas_manuais_xml": {
+                "status": duplicatas_audit["status"],
+                "quantidade": duplicatas_audit.get("quantidade"),
             },
         },
         "arquivos": files_manifest,

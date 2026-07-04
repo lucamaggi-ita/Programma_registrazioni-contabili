@@ -34,6 +34,10 @@ from fantozzi.fase9_decision_engine import (
     load_fase9_decisions_from_csv,
 )
 from fantozzi.fase9_writeback import write_fase9_applied_csv
+from fantozzi.lancamentos_manuais_dedup import (
+    AUDITORIA_POSSIVEIS_DUPLICATAS_MANUAIS_XML_FILE,
+    auditar_possiveis_duplicatas_manuais_xml,
+)
 from fantozzi.lancamentos_manuais_gerenciais import (
     processar_lancamentos_manuais_gerenciais,
 )
@@ -750,6 +754,7 @@ def _step_lancamentos_manuais_gerenciais(context: PipelineContext) -> StepResult
     auditoria_txt = (
         context.reports_run_dir / "auditoria_lancamentos_manuais_gerenciais.txt"
     )
+    xml_lancamentos_xlsx = _lancamentos_xlsx(context)
     result = processar_lancamentos_manuais_gerenciais(
         csv_path,
         context.project_root / "config" / "plano_contas_gerencial.yaml",
@@ -758,9 +763,20 @@ def _step_lancamentos_manuais_gerenciais(context: PipelineContext) -> StepResult
         output_csv,
         auditoria_txt,
     )
+    auditoria_duplicatas = auditar_possiveis_duplicatas_manuais_xml(
+        output_xlsx,
+        xml_lancamentos_xlsx,
+        context.reports_run_dir / AUDITORIA_POSSIVEIS_DUPLICATAS_MANUAIS_XML_FILE,
+    )
     context.lancamentos_xlsx = (*_lancamentos_xlsx(context), output_xlsx)
     return StepResult(
-        arquivos_gerados=(output_xlsx, output_csv, auditoria_txt),
+        arquivos_gerados=(
+            output_xlsx,
+            output_csv,
+            auditoria_txt,
+            auditoria_duplicatas.output_path,
+        ),
+        avisos=auditoria_duplicatas.avisos,
         manifest_updates={
             "lancamentos_manuais_gerenciais": {
                 "executado": True,
@@ -773,6 +789,13 @@ def _step_lancamentos_manuais_gerenciais(context: PipelineContext) -> StepResult
                 "linhas_tecnicas_geradas": result.linhas_tecnicas_geradas,
                 "total_manual": result.total_manual,
                 "fonte": result.fonte,
+                "possiveis_duplicatas_manuais_xml": (
+                    auditoria_duplicatas.possiveis_duplicatas
+                ),
+                "auditoria_possiveis_duplicatas_manuais_xml_txt": (
+                    auditoria_duplicatas.output_path
+                ),
+                "lancamentos_xml_auditados": auditoria_duplicatas.xml_lidos,
             }
         },
     )
