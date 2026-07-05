@@ -19,6 +19,15 @@ reports/*.txt
 reports/comprovantes_classificacao/
 reports/documentacao_contabil/
 reports/importacao_real/
+
+# Fantozzi local/generated audit outputs - repo hygiene 004D
+/_QUARANTENA_*/
+/graphify-out/
+/output/_audit_*/
+/output/_patch_safety_*/
+/output/stat_fatturati_*/
+/output/multifonte_009_2026_01_04/
+
 pendenze_*.txt
 *.zip
 *.log
