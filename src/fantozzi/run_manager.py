@@ -115,7 +115,8 @@ def preparar_run(
         xml_base=xml_base,
         saida_output=saida_output,
         saida_reports=saida_reports,
-        config_paths=config_paths or _default_config_paths(),
+        config_paths=config_paths or _default_config_paths(_project_root),
+        project_root=_project_root,
         dry_run=False,
     )
     manifest_path.write_text(
@@ -210,10 +211,11 @@ def _build_manifest(
     saida_output: Path,
     saida_reports: Path,
     config_paths: list[Path],
+    project_root: Path,
     dry_run: bool,
 ) -> dict:
     status = STATUS_DRY_RUN if dry_run else STATUS_INICIADA
-    config_usado = {p.stem: _config_entry(p) for p in config_paths}
+    config_usado = {p.stem: _config_entry(p, project_root) for p in config_paths}
     fontes_xml = _collect_xml_fontes(xml_base)
     return {
         "run_id": run_id,
@@ -252,8 +254,8 @@ def _build_manifest(
     }
 
 
-def _default_config_paths() -> list[Path]:
-    config_dir = PROJECT_ROOT / "config"
+def _default_config_paths(project_root: Path | None = None) -> list[Path]:
+    config_dir = Path(project_root or PROJECT_ROOT) / "config"
     return [
         config_dir / "plano_contas_gerencial.yaml",
         config_dir / "regras_classificacao_produtos.yaml",
@@ -262,20 +264,35 @@ def _default_config_paths() -> list[Path]:
     ]
 
 
-def _config_entry(path: Path) -> dict:
+def _config_entry(path: Path, project_root: Path) -> dict:
+    path_relativo = _relative_path_text(path, project_root)
     if not path.exists():
         return {
             "path": str(path),
+            "path_relativo": path_relativo,
+            "exists": False,
+            "sha256": None,
             "hash_sha256": None,
             "data_modificacao": None,
             "nota": "arquivo nao encontrado",
         }
     mtime = datetime.fromtimestamp(path.stat().st_mtime).isoformat(timespec="seconds")
+    sha256 = _hash_file(path)
     return {
         "path": str(path),
-        "hash_sha256": _hash_file(path),
+        "path_relativo": path_relativo,
+        "exists": True,
+        "sha256": sha256,
+        "hash_sha256": sha256,
         "data_modificacao": mtime,
     }
+
+
+def _relative_path_text(path: Path, project_root: Path) -> str:
+    try:
+        return path.resolve().relative_to(project_root.resolve()).as_posix()
+    except ValueError:
+        return str(path)
 
 
 def _hash_file(path: Path) -> str:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import date
 from pathlib import Path
@@ -200,7 +201,7 @@ def test_manifesto_registra_hash_config(tmp_path):
 
 
 def test_manifesto_registra_regras_comprovantes_no_config_default(
-    tmp_path, monkeypatch
+    tmp_path,
 ):
     xml, out, rep = _dirs(tmp_path)
     config_dir = tmp_path / "config"
@@ -213,8 +214,7 @@ def test_manifesto_registra_regras_comprovantes_no_config_default(
     ):
         (config_dir / file_name).write_text("regras: []\n", encoding="utf-8")
     regras_path = config_dir / "regras_classificacao_comprovantes.yaml"
-
-    monkeypatch.setattr(run_manager, "PROJECT_ROOT", tmp_path)
+    expected_hash = hashlib.sha256(regras_path.read_bytes()).hexdigest()
 
     result = preparar_run(
         xml,
@@ -227,9 +227,34 @@ def test_manifesto_registra_regras_comprovantes_no_config_default(
     data = json.loads(result.manifest_path.read_text(encoding="utf-8"))
     entry = data["config_usado"]["regras_classificacao_comprovantes"]
     assert entry["path"] == str(regras_path)
-    assert entry["hash_sha256"] is not None
-    assert len(entry["hash_sha256"]) == 64
+    assert entry["path_relativo"] == "config/regras_classificacao_comprovantes.yaml"
+    assert entry["exists"] is True
+    assert entry["sha256"] == expected_hash
+    assert entry["hash_sha256"] == expected_hash
     assert entry["data_modificacao"] is not None
+
+
+def test_manifesto_registra_config_inexistente_sem_hash(tmp_path):
+    xml, out, rep = _dirs(tmp_path)
+    missing = tmp_path / "config" / "regras_classificacao_comprovantes.yaml"
+
+    result = preparar_run(
+        xml,
+        out,
+        rep,
+        config_paths=[missing],
+        today=date(2026, 5, 6),
+        project_root=tmp_path,
+    )
+
+    data = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    entry = data["config_usado"]["regras_classificacao_comprovantes"]
+    assert entry["path"] == str(missing)
+    assert entry["path_relativo"] == "config/regras_classificacao_comprovantes.yaml"
+    assert entry["exists"] is False
+    assert entry["sha256"] is None
+    assert entry["hash_sha256"] is None
+    assert entry["nota"] == "arquivo nao encontrado"
 
 
 def test_manifesto_checkpoint_adicionado(tmp_path):

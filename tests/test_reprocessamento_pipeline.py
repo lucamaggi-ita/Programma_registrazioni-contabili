@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 from datetime import date
 from decimal import Decimal
@@ -324,6 +325,35 @@ def test_pipeline_provisoria_atualiza_manifesto_final(tmp_path):
     assert manifest["totais"]["operacoes_especiais"] == 1
     assert manifest["totais"]["valor_total_incluido_ok"] == "75.00"
     assert manifest["avisos"]
+
+
+def test_pipeline_manifest_final_registra_hash_regras_comprovantes(tmp_path):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    for file_name in (
+        "plano_contas_gerencial.yaml",
+        "regras_classificacao_produtos.yaml",
+        "mapeamento_dre.yaml",
+    ):
+        (config_dir / file_name).write_text("regras: []\n", encoding="utf-8")
+    regras_path = config_dir / "regras_classificacao_comprovantes.yaml"
+    regras_path.write_text(
+        "versao: teste\nregras:\n  - id: REGRA_TESTE\n",
+        encoding="utf-8",
+    )
+    expected_hash = hashlib.sha256(regras_path.read_bytes()).hexdigest()
+
+    result, _, _, _ = _run_pipeline(tmp_path)
+
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    entry = manifest["config_usado"]["regras_classificacao_comprovantes"]
+    assert manifest["status_run"] == "PROVISORIO_CONCLUIDO"
+    assert entry["path_relativo"] == "config/regras_classificacao_comprovantes.yaml"
+    assert entry["exists"] is True
+    assert entry["sha256"] == expected_hash
+    assert entry["hash_sha256"] == expected_hash
+    assert "totais" in manifest
+    assert "classificacao" in manifest
 
 
 def test_pipeline_provisoria_nao_executa_fase9(tmp_path):
