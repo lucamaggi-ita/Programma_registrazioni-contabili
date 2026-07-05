@@ -457,9 +457,9 @@ regras:
   entra_dre: true
   match:
     modo: TODAS_AS_CONDICOES_NAO_VAZIAS
-    beneficiario_favorecido_contem_algum:
+    beneficiario_favorecido_contem_algum: []
+    referencia_empresa_contem_algum:
     - SIMPLES NACIONAL
-    referencia_empresa_contem_algum: []
 - regra_id: REGRA_6_01_002_IZALTINO_JOSE_ZANI_JUNIOR
   conta_id: 6.01.002
   conta_nome: Honorarios Juridicos
@@ -533,6 +533,13 @@ regras:
     - PIX DEVOLVIDO
 
 exclusoes:
+- regra_id: EXCLUSAO_ESCLUDERE_AGREGADO_TOTAL
+  acao: ESCLUDERE
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - TOTAL
+    referencia_empresa_contem_algum: []
 - regra_id: EXCLUSAO_XML_OESA_COMERCIO_E_REPRESENTACOES
   acao: XML
   match:

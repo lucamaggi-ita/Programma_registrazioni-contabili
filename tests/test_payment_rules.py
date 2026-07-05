@@ -560,6 +560,65 @@ def test_current_payment_rules_yaml_is_autonomous_from_planilha():
     assert "REGRA_ID_BASEADO_EM_LINHA" not in categories
 
 
+def test_current_payment_rules_apply_13y_confirmed_review_decisions_only():
+    rules_path = Path(__file__).resolve().parents[1] / "config" / (
+        "regras_classificacao_comprovantes.yaml"
+    )
+    rules = load_payment_rules(rules_path)
+    exclusions = load_payment_exclusion_rules(rules_path)
+
+    total = classify_payment_receipt(
+        {"beneficiary_name": "TOTAL", "reference_id": "", "payment_type": ""},
+        rules,
+        exclusions,
+    )
+    assert total.status_classificacao == STATUS_EXCLUIDO
+    assert total.acao == "ESCLUDERE"
+    assert total.conta_id == ""
+
+    for reference, expected_rule in (
+        ("PARCSN 2 RATA 29", "REGRA_5_01_003_PARCSN"),
+        ("PERTSN 9101 RATA 90", "REGRA_5_01_003_PERTSN"),
+        ("PGFN-SISPAR 8916087", "REGRA_5_01_003_SISPAR_PGFN_8916087"),
+    ):
+        result = classify_payment_receipt(
+            {
+                "beneficiary_name": "DAS-SIMPLES NACIONAL-COD BARRA",
+                "reference_id": reference,
+            },
+            rules,
+            exclusions,
+        )
+        assert result.status_classificacao == STATUS_CLASSIFICADO
+        assert result.conta_id == "5.01.003"
+        assert result.dre_linha_id == "07.01"
+        assert result.regra_id == expected_rule
+
+    simples_ordinario = classify_payment_receipt(
+        {
+            "beneficiary_name": "PAGAMENTOS TRIB COD BARRAS",
+            "reference_id": "SIMPLES NACIONAL",
+        },
+        rules,
+        exclusions,
+    )
+    assert simples_ordinario.status_classificacao == STATUS_CLASSIFICADO
+    assert simples_ordinario.conta_id == "5.01.001"
+    assert simples_ordinario.dre_linha_id == "02.01"
+
+    for beneficiary in (
+        "HIMEROS COMERCIO DE PESCADOS L",
+        "JOSE RUCAS ACHY NETO",
+        "PATAXO MATERIAIS DE CONSTRUCAO",
+    ):
+        result = classify_payment_receipt(
+            {"beneficiary_name": beneficiary, "reference_id": "-"},
+            rules,
+            exclusions,
+        )
+        assert result.status_classificacao == STATUS_SEM_REGRA
+
+
 def test_rule_with_missing_account_fails_validation(tmp_path):
     rules = load_payment_rules(
         _write_rules(
