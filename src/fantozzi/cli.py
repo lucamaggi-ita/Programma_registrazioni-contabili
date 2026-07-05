@@ -1341,6 +1341,14 @@ def build_parser() -> argparse.ArgumentParser:
         default=False,
         help="Calcula run_id e caminhos sem criar pastas nem escrever arquivos.",
     )
+    preparar_run_cmd.add_argument(
+        "--project-root",
+        default=None,
+        help=(
+            "Raiz de projeto opcional para testes/ambientes isolados. "
+            "Se omitida, usa a raiz real do projeto."
+        ),
+    )
     preparar_run_cmd.set_defaults(func=preparar_run_reprocessamento_command)
 
     reprocessar_real = subparsers.add_parser(
@@ -1412,6 +1420,14 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Gera pacote contabil gerencial provisorio ao final da run, com indice, "
             "auditorias e manifest dedicado."
+        ),
+    )
+    reprocessar_real.add_argument(
+        "--project-root",
+        default=None,
+        help=(
+            "Raiz de projeto opcional para testes/ambientes isolados. "
+            "Se omitida, usa a raiz real do projeto."
         ),
     )
     reprocessar_real.set_defaults(func=reprocessar_importacao_real_command)
@@ -2309,6 +2325,31 @@ def _resolve_path_for_project_root(
     return project_root / default_path.relative_to(PROJECT_ROOT)
 
 
+def _resolve_cli_path_under_project_root(
+    value: str | Path, project_root: Path | None
+) -> Path:
+    path = Path(value)
+    if project_root is None or path.is_absolute():
+        return path
+    return project_root / path
+
+
+def _resolve_optional_cli_path_under_project_root(
+    value: str | Path | None, project_root: Path | None
+) -> Path | None:
+    if value is None:
+        return None
+    return _resolve_cli_path_under_project_root(value, project_root)
+
+
+def _resolve_cli_paths_under_project_root(
+    values: list[str] | None, project_root: Path | None
+) -> list[Path] | None:
+    if values is None:
+        return None
+    return [_resolve_cli_path_under_project_root(value, project_root) for value in values]
+
+
 def gerar_pacote_revisao_contabil_command(args: argparse.Namespace) -> int:
     try:
         result = gerar_pacote_revisao_contabil(
@@ -2450,12 +2491,17 @@ def gerar_dashboard_html_command(args: argparse.Namespace) -> int:
 
 
 def preparar_run_reprocessamento_command(args: argparse.Namespace) -> int:
+    project_root = Path(args.project_root).resolve() if args.project_root else None
+    xml_base = _resolve_cli_path_under_project_root(args.xml_base, project_root)
+    saida_output = _resolve_cli_path_under_project_root(args.saida_output, project_root)
+    saida_reports = _resolve_cli_path_under_project_root(args.saida_reports, project_root)
     try:
         result = preparar_run(
-            xml_base=Path(args.xml_base),
-            saida_output=Path(args.saida_output),
-            saida_reports=Path(args.saida_reports),
+            xml_base=xml_base,
+            saida_output=saida_output,
+            saida_reports=saida_reports,
             dry_run=args.dry_run,
+            project_root=project_root,
         )
     except RunManagerError as exc:
         print(f"[ERRO] {exc}")
@@ -2482,18 +2528,30 @@ def preparar_run_reprocessamento_command(args: argparse.Namespace) -> int:
 
 
 def reprocessar_importacao_real_command(args: argparse.Namespace) -> int:
+    project_root = Path(args.project_root).resolve() if args.project_root else None
+    xml_base = _resolve_cli_path_under_project_root(args.xml_base, project_root)
+    saida_output = _resolve_cli_path_under_project_root(args.saida_output, project_root)
+    saida_reports = _resolve_cli_path_under_project_root(args.saida_reports, project_root)
+    fase9_csv_path = _resolve_cli_paths_under_project_root(args.fase9_csv, project_root)
+    lancamentos_manuais_path = _resolve_optional_cli_path_under_project_root(
+        args.lancamentos_manuais_gerenciais_csv,
+        project_root,
+    )
+    lancamentos_banca_path = _resolve_optional_cli_path_under_project_root(
+        args.lancamentos_banca_aprovados,
+        project_root,
+    )
     try:
         result = reprocessamento_pipeline.reprocessar_importacao_real_provisoria(
-            xml_base=Path(args.xml_base),
-            saida_output=Path(args.saida_output),
-            saida_reports=Path(args.saida_reports),
+            xml_base=xml_base,
+            saida_output=saida_output,
+            saida_reports=saida_reports,
             modo=args.modo,
             dry_run=args.dry_run,
-            fase9_csv_path=args.fase9_csv,
-            lancamentos_manuais_gerenciais_csv_path=(
-                args.lancamentos_manuais_gerenciais_csv
-            ),
-            lancamentos_banca_aprovados_path=args.lancamentos_banca_aprovados,
+            project_root=project_root,
+            fase9_csv_path=fase9_csv_path,
+            lancamentos_manuais_gerenciais_csv_path=lancamentos_manuais_path,
+            lancamentos_banca_aprovados_path=lancamentos_banca_path,
             gerar_pacote_contabil_gerencial=args.gerar_pacote_contabil_gerencial,
         )
     except reprocessamento_pipeline.ReprocessamentoPipelineError as exc:

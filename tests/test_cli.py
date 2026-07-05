@@ -2053,6 +2053,24 @@ def test_parser_aceita_preparar_run_reprocessamento():
     assert args.saida_output == "output/importacao_real"
     assert args.saida_reports == "reports/importacao_real"
     assert args.dry_run is False
+    assert args.project_root is None
+
+
+def test_parser_aceita_preparar_run_reprocessamento_project_root():
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "preparar-run-reprocessamento",
+            "--xml-base", "XML_fatture_acquisto",
+            "--saida-output", "output/importacao_real",
+            "--saida-reports", "reports/importacao_real",
+            "--project-root", "tmp/project_root",
+        ]
+    )
+
+    assert args.command == "preparar-run-reprocessamento"
+    assert args.project_root == "tmp/project_root"
 
 
 def test_parser_aceita_reprocessar_importacao_real():
@@ -2073,6 +2091,24 @@ def test_parser_aceita_reprocessar_importacao_real():
     assert args.saida_reports == "reports/importacao_real"
     assert args.modo == "provisorio"
     assert args.dry_run is False
+    assert args.project_root is None
+
+
+def test_parser_aceita_reprocessar_importacao_real_project_root():
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "reprocessar-importacao-real",
+            "--xml-base", "XML_fatture_acquisto",
+            "--saida-output", "output/importacao_real",
+            "--saida-reports", "reports/importacao_real",
+            "--project-root", "tmp/project_root",
+        ]
+    )
+
+    assert args.command == "reprocessar-importacao-real"
+    assert args.project_root == "tmp/project_root"
 
 
 def test_parser_aceita_lancamentos_manuais_gerenciais_csv():
@@ -2156,6 +2192,52 @@ def test_cli_preparar_run_cria_pastas_manifesto_current_run(tmp_path, capsys):
 
     # Manifesto NAO em output
     assert not (saida_output / "runs" / run_id / "manifest_run.json").exists()
+
+
+def test_cli_preparar_run_project_root_propaga_paths_relativos(
+    monkeypatch, tmp_path, capsys
+):
+    from fantozzi import cli
+
+    project_root = tmp_path / "project_root"
+    seen = {}
+
+    def _preparar_run(**kwargs):
+        seen.update(kwargs)
+        return SimpleNamespace(
+            dry_run=True,
+            run_id="2026-07-03_001",
+            output_run_dir=project_root / "output" / "runs" / "2026-07-03_001",
+            reports_run_dir=project_root / "reports" / "runs" / "2026-07-03_001",
+            manifest_path=(
+                project_root
+                / "reports"
+                / "runs"
+                / "2026-07-03_001"
+                / "manifest_run.json"
+            ),
+        )
+
+    monkeypatch.setattr(cli, "preparar_run", _preparar_run)
+
+    result = main(
+        [
+            "preparar-run-reprocessamento",
+            "--xml-base", "xml",
+            "--saida-output", "output",
+            "--saida-reports", "reports",
+            "--dry-run",
+            "--project-root", str(project_root),
+        ]
+    )
+
+    capsys.readouterr()
+    assert result == 0
+    assert seen["xml_base"] == project_root / "xml"
+    assert seen["saida_output"] == project_root / "output"
+    assert seen["saida_reports"] == project_root / "reports"
+    assert seen["dry_run"] is True
+    assert seen["project_root"] == project_root.resolve()
 
 
 def test_cli_preparar_run_dry_run_nao_escreve_nada(tmp_path, capsys):
@@ -2246,6 +2328,65 @@ def test_cli_reprocessar_importacao_real_dry_run_nao_escreve(tmp_path, capsys):
     assert not (saida_reports / "runs").exists()
     assert not (saida_output / "current_run.txt").exists()
     assert not (saida_reports / "current_run.txt").exists()
+
+
+def test_cli_reprocessar_importacao_real_project_root_propaga_paths_relativos(
+    monkeypatch, tmp_path, capsys
+):
+    from fantozzi import cli
+
+    project_root = tmp_path / "project_root"
+    seen = {}
+
+    def _reprocessar(**kwargs):
+        seen.update(kwargs)
+        return SimpleNamespace(
+            dry_run=True,
+            run_id="2026-07-03_001",
+            output_run_dir=project_root / "output" / "runs" / "2026-07-03_001",
+            reports_run_dir=project_root / "reports" / "runs" / "2026-07-03_001",
+            manifest_path=(
+                project_root
+                / "reports"
+                / "runs"
+                / "2026-07-03_001"
+                / "manifest_run.json"
+            ),
+            etapas_previstas=("PREPARAR_RUN",),
+        )
+
+    monkeypatch.setattr(
+        cli.reprocessamento_pipeline,
+        "reprocessar_importacao_real_provisoria",
+        _reprocessar,
+    )
+
+    result = main(
+        [
+            "reprocessar-importacao-real",
+            "--xml-base", "xml",
+            "--saida-output", "output",
+            "--saida-reports", "reports",
+            "--fase9-csv", "fase9.csv",
+            "--lancamentos-manuais-gerenciais-csv", "manual.csv",
+            "--lancamentos-banca-aprovados", "banca.xlsx",
+            "--dry-run",
+            "--project-root", str(project_root),
+        ]
+    )
+
+    capsys.readouterr()
+    assert result == 0
+    assert seen["xml_base"] == project_root / "xml"
+    assert seen["saida_output"] == project_root / "output"
+    assert seen["saida_reports"] == project_root / "reports"
+    assert seen["project_root"] == project_root.resolve()
+    assert seen["fase9_csv_path"] == [project_root / "fase9.csv"]
+    assert seen["lancamentos_manuais_gerenciais_csv_path"] == (
+        project_root / "manual.csv"
+    )
+    assert seen["lancamentos_banca_aprovados_path"] == project_root / "banca.xlsx"
+    assert seen["dry_run"] is True
 
 
 def test_cli_reprocessar_importacao_real_bloqueia_modo_definitivo(tmp_path, capsys):
