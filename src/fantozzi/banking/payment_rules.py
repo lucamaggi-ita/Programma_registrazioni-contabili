@@ -38,6 +38,19 @@ CLASSIFICATION_HEADERS = [
 ]
 
 CONDITION_FIELDS = {
+    "cnpj_empresa_igual_algum": (
+        "cnpj",
+        "empresa_cnpj",
+        "cnpj_pagador",
+        "cnpj_destinatario",
+    ),
+    "cnpj_beneficiario_igual_algum": (
+        "beneficiary_document",
+        "beneficiario_documento",
+        "cnpj_beneficiario",
+        "cnpj_fornecedor",
+        "cnpj_emitente",
+    ),
     "beneficiario_favorecido_contem_algum": (
         "beneficiary_name",
         "beneficiario_favorecido",
@@ -126,6 +139,13 @@ def normalize_match_text(value: object) -> str:
     ascii_text = "".join(ch for ch in normalized if not unicodedata.combining(ch))
     text = re.sub(r"[^A-Za-z0-9]+", " ", ascii_text.upper())
     return re.sub(r"\s+", " ", text).strip()
+
+
+def _normalize_condition_value(condition: str, value: object) -> str:
+    text = normalize_match_text(value)
+    if condition.endswith("_igual_algum"):
+        return text.replace(" ", "")
+    return text
 
 
 def load_payment_rules(path: Path | str) -> list[PaymentRule]:
@@ -521,7 +541,7 @@ def _rule_from_data(data: Any, index: int) -> PaymentRule:
         aliases = tuple(
             normalized
             for item in _as_list(match_data.get(condition))
-            if (normalized := normalize_match_text(item))
+            if (normalized := _normalize_condition_value(condition, item))
         )
         match[condition] = aliases
 
@@ -559,7 +579,7 @@ def _exclusion_rule_from_data(data: Any, index: int) -> PaymentExclusionRule:
         aliases = tuple(
             normalized
             for item in _as_list(match_data.get(condition))
-            if (normalized := normalize_match_text(item))
+            if (normalized := _normalize_condition_value(condition, item))
         )
         match[condition] = aliases
     if not any(match.values()):
@@ -700,9 +720,16 @@ def _matches_rule(receipt: dict[str, str], rule: PaymentRule) -> bool:
         if aliases
     }
     for condition, aliases in active_conditions.items():
-        field_text = normalize_match_text(_first_value(receipt, CONDITION_FIELDS[condition]))
+        field_text = _normalize_condition_value(
+            condition,
+            _first_value(receipt, CONDITION_FIELDS[condition]),
+        )
         if not field_text:
             return False
+        if condition.endswith("_igual_algum"):
+            if field_text not in aliases:
+                return False
+            continue
         if not any(alias in field_text for alias in aliases):
             return False
     return True

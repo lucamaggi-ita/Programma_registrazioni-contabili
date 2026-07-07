@@ -557,6 +557,26 @@ exclusoes:
     beneficiario_favorecido_contem_algum:
     - PATAXO MATERIAIS DE CONSTRUCAO
     referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_HIMEROS_TRATTORIA
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    cnpj_empresa_igual_algum:
+    - 55746722000181
+    cnpj_beneficiario_igual_algum:
+    - 42870341000168
+    beneficiario_favorecido_contem_algum:
+    - HIMEROS COMERCIO DE PESCADOS
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_VJ_COMERCIAL_DE_BOMBAS
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    cnpj_beneficiario_igual_algum:
+    - 07721708000180
+    beneficiario_favorecido_contem_algum:
+    - VJ COMERCIAL DE BOMBAS
+    referencia_empresa_contem_algum: []
 - regra_id: EXCLUSAO_XML_OESA_COMERCIO_E_REPRESENTACOES
   acao: XML
   match:

@@ -137,6 +137,49 @@ def test_exclusion_rule_marks_receipt_without_account_or_dre(tmp_path):
     assert result.entra_dre is False
 
 
+def test_exclusion_rule_can_match_exact_company_and_beneficiary_cnpj(tmp_path):
+    rules_path = _write_rules_with_exclusions(
+        tmp_path,
+        positive_rules=[],
+        exclusions=[
+            _exclusion_rule(
+                "EXCLUSAO_XML_FORNECEDOR_TRATTORIA",
+                "XML",
+                beneficiary=["FORNECEDOR XML"],
+                company_cnpj=["55746722000181"],
+                beneficiary_cnpj=["42870341000168"],
+            )
+        ],
+    )
+    rules = load_payment_rules(rules_path)
+    exclusions = load_payment_exclusion_rules(rules_path)
+
+    trattoria = classify_payment_receipt(
+        {
+            "cnpj": "55.746.722/0001-81",
+            "beneficiary_name": "Fornecedor XML LTDA",
+            "beneficiary_document": "42.870.341/0001-68",
+            "reference_id": "-",
+        },
+        rules,
+        exclusions,
+    )
+    amami = classify_payment_receipt(
+        {
+            "cnpj": "08.884.180/0001-23",
+            "beneficiary_name": "Fornecedor XML LTDA",
+            "beneficiary_document": "42.870.341/0001-68",
+            "reference_id": "-",
+        },
+        rules,
+        exclusions,
+    )
+
+    assert trattoria.status_classificacao == STATUS_EXCLUIDO
+    assert trattoria.acao == "XML"
+    assert amami.status_classificacao == STATUS_SEM_REGRA
+
+
 def test_inss_reference_exclusion_does_not_match_empty_reference(tmp_path):
     rules_path = _write_rules_with_exclusions(
         tmp_path,
@@ -625,12 +668,69 @@ def test_current_payment_rules_apply_13y_confirmed_review_decisions_only():
     assert pataxo.acao == "XML"
     assert pataxo.conta_id == ""
 
-    himeros = classify_payment_receipt(
-        {"beneficiary_name": "HIMEROS COMERCIO DE PESCADOS L", "reference_id": "-"},
+    himeros_trattoria = classify_payment_receipt(
+        {
+            "cnpj": "55746722000181",
+            "beneficiary_name": "HIMEROS COMERCIO DE PESCADOS L",
+            "beneficiary_document": "42.870.341/0001-68",
+            "reference_id": "-",
+        },
         rules,
         exclusions,
     )
-    assert himeros.status_classificacao == STATUS_SEM_REGRA
+    assert himeros_trattoria.status_classificacao == STATUS_EXCLUIDO
+    assert himeros_trattoria.acao == "XML"
+    assert himeros_trattoria.regra_id == "EXCLUSAO_XML_HIMEROS_TRATTORIA"
+
+    himeros_amami = classify_payment_receipt(
+        {
+            "cnpj": "08884180000123",
+            "beneficiary_name": "HIMEROS COMERCIO DE PESCADOS L",
+            "beneficiary_document": "42.870.341/0001-68",
+            "reference_id": "-",
+        },
+        rules,
+        exclusions,
+    )
+    assert himeros_amami.status_classificacao == STATUS_SEM_REGRA
+
+    vj = classify_payment_receipt(
+        {
+            "cnpj": "08884180000123",
+            "beneficiary_name": "VJ COMERCIAL DE BOMBAS LTDA",
+            "beneficiary_document": "07.721.708/0001-80",
+            "reference_id": "-",
+        },
+        rules,
+        exclusions,
+    )
+    assert vj.status_classificacao == STATUS_EXCLUIDO
+    assert vj.acao == "XML"
+    assert vj.regra_id == "EXCLUSAO_XML_VJ_COMERCIAL_DE_BOMBAS"
+
+    rei_das_bombas = classify_payment_receipt(
+        {
+            "cnpj": "08884180000123",
+            "beneficiary_name": "REI DAS BOMBAS MANUTENCAO E RE",
+            "beneficiary_document": "56.198.626/0001-09",
+            "reference_id": "-",
+        },
+        rules,
+        exclusions,
+    )
+    assert rei_das_bombas.status_classificacao == STATUS_SEM_REGRA
+
+    informatica_porto_seguro = classify_payment_receipt(
+        {
+            "cnpj": "08884180000123",
+            "beneficiary_name": "INFORMATICA PORTO SEGURO 2000",
+            "beneficiary_document": "02.938.301/0001-96",
+            "reference_id": "-",
+        },
+        rules,
+        exclusions,
+    )
+    assert informatica_porto_seguro.status_classificacao == STATUS_SEM_REGRA
 
 
 def test_rule_with_missing_account_fails_validation(tmp_path):
@@ -1117,13 +1217,21 @@ def _exclusion_rule(
     *,
     beneficiary: list[str] | None = None,
     reference: list[str] | None = None,
+    company_cnpj: list[str] | None = None,
+    beneficiary_cnpj: list[str] | None = None,
 ) -> str:
     beneficiary_items = _yaml_list(beneficiary or [])
     reference_items = _yaml_list(reference or [])
+    company_cnpj_items = _yaml_list(company_cnpj or [])
+    beneficiary_cnpj_items = _yaml_list(beneficiary_cnpj or [])
     return f"""- regra_id: {regra_id}
   acao: {acao}
   match:
     modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    cnpj_empresa_igual_algum:
+{company_cnpj_items}
+    cnpj_beneficiario_igual_algum:
+{beneficiary_cnpj_items}
     beneficiario_favorecido_contem_algum:
 {beneficiary_items}
     referencia_empresa_contem_algum:
