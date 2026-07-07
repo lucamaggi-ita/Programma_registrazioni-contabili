@@ -250,6 +250,16 @@ regras:
     beneficiario_favorecido_contem_algum:
     - MAK IURI FERNANDES PORTUGAL
     referencia_empresa_contem_algum: []
+- regra_id: REGRA_2_02_001_JOSE_RUCAS_ACHY_NETO
+  conta_id: 2.02.001
+  conta_nome: Carnes Bovinas
+  dre_linha_id: '03.01'
+  entra_dre: true
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - JOSE RUCAS ACHY NETO
+    referencia_empresa_contem_algum: []
 - regra_id: REGRA_5_01_002_SEFAZ_BAHIA_DAE
   conta_id: 5.01.002
   conta_nome: ICMS Estadual / Parcelamento Estadual
@@ -539,6 +549,13 @@ exclusoes:
     modo: TODAS_AS_CONDICOES_NAO_VAZIAS
     beneficiario_favorecido_contem_algum:
     - TOTAL
+    referencia_empresa_contem_algum: []
+- regra_id: EXCLUSAO_XML_PATAXO_MATERIAIS_DE_CONSTRUCAO
+  acao: XML
+  match:
+    modo: TODAS_AS_CONDICOES_NAO_VAZIAS
+    beneficiario_favorecido_contem_algum:
+    - PATAXO MATERIAIS DE CONSTRUCAO
     referencia_empresa_contem_algum: []
 - regra_id: EXCLUSAO_XML_OESA_COMERCIO_E_REPRESENTACOES
   acao: XML

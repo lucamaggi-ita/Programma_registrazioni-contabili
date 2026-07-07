@@ -606,17 +606,31 @@ def test_current_payment_rules_apply_13y_confirmed_review_decisions_only():
     assert simples_ordinario.conta_id == "5.01.001"
     assert simples_ordinario.dre_linha_id == "02.01"
 
-    for beneficiary in (
-        "HIMEROS COMERCIO DE PESCADOS L",
-        "JOSE RUCAS ACHY NETO",
-        "PATAXO MATERIAIS DE CONSTRUCAO",
-    ):
-        result = classify_payment_receipt(
-            {"beneficiary_name": beneficiary, "reference_id": "-"},
-            rules,
-            exclusions,
-        )
-        assert result.status_classificacao == STATUS_SEM_REGRA
+    jose = classify_payment_receipt(
+        {"beneficiary_name": "JOSE RUCAS ACHY NETO", "reference_id": "-"},
+        rules,
+        exclusions,
+    )
+    assert jose.status_classificacao == STATUS_CLASSIFICADO
+    assert jose.conta_id == "2.02.001"
+    assert jose.dre_linha_id == "03.01"
+    assert jose.regra_id == "REGRA_2_02_001_JOSE_RUCAS_ACHY_NETO"
+
+    pataxo = classify_payment_receipt(
+        {"beneficiary_name": "PATAXO MATERIAIS DE CONSTRUCAO", "reference_id": "-"},
+        rules,
+        exclusions,
+    )
+    assert pataxo.status_classificacao == STATUS_EXCLUIDO
+    assert pataxo.acao == "XML"
+    assert pataxo.conta_id == ""
+
+    himeros = classify_payment_receipt(
+        {"beneficiary_name": "HIMEROS COMERCIO DE PESCADOS L", "reference_id": "-"},
+        rules,
+        exclusions,
+    )
+    assert himeros.status_classificacao == STATUS_SEM_REGRA
 
 
 def test_rule_with_missing_account_fails_validation(tmp_path):
