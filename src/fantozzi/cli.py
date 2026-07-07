@@ -7,6 +7,12 @@ from datetime import date
 from pathlib import Path
 
 from fantozzi.allocation import allocate_nfe_to_lancamentos
+from fantozzi.audit_xml_comprovantes import (
+    AuditXmlComprovantesError,
+    console_lines as audit_xml_comprovantes_console_lines,
+    run_audit as run_audit_xml_comprovantes,
+    write_outputs as write_audit_xml_comprovantes_outputs,
+)
 from fantozzi.auditoria_relatorios_gerenciais_ok import (
     AuditoriaRelatoriosGerenciaisOkError,
     auditar_relatorios_gerenciais_ok_provisorios,
@@ -188,6 +194,14 @@ DEFAULT_XML_DECISOES_DIR = PROJECT_ROOT / "Database_Dev" / "_decisoes_regras" / 
 DEFAULT_REPORTS_RUNS_ROOT = PROJECT_ROOT / "reports" / "importacao_real" / "runs"
 DEFAULT_COMPROVANTES_REAL_INPUT = PROJECT_ROOT / "bank_raw" / "_audit" / "fase_13c"
 DEFAULT_COMPROVANTES_REAL_REPORTS = PROJECT_ROOT / "reports" / "comprovantes_classificacao"
+DEFAULT_COMPROVANTES_A_REVISAR = (
+    PROJECT_ROOT
+    / "reports"
+    / "comprovantes_classificacao"
+    / "runs"
+    / "2026-07-04_001"
+    / "comprovantes_a_revisar.csv"
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1449,6 +1463,55 @@ def build_parser() -> argparse.ArgumentParser:
     )
     validar_template_banca.set_defaults(func=validar_template_revisao_banca_command)
 
+    auditar_comprovantes_xml = subparsers.add_parser(
+        "auditar-comprovantes-xml-cnpj",
+        help="Audit read-only de segundo nivel: cruza comprovantes com XML/NF-e por CNPJ.",
+        description=(
+            "Le comprovantes de pagamento e XML/NF-e e cruza por CNPJ fornecedor, "
+            "CNPJ empresa, valor e proximidade de data, produzindo evidencia de "
+            "auditoria em output/. Nao classifica, nao exclui e nao altera nenhuma "
+            "regra YAML ou output existente."
+        ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    auditar_comprovantes_xml.add_argument(
+        "--comprovantes-csv",
+        default=str(DEFAULT_COMPROVANTES_A_REVISAR),
+        help="CSV de comprovantes (ex.: comprovantes_a_revisar.csv de uma run).",
+    )
+    auditar_comprovantes_xml.add_argument(
+        "--xml-root",
+        default=str(DEFAULT_XML_BASE),
+        help="Pasta raiz com XML/NF-e (varredura recursiva).",
+    )
+    auditar_comprovantes_xml.add_argument(
+        "--output-dir",
+        help=(
+            "Pasta de saida. Default: "
+            "output/audit_xml_comprovantes_<YYYYMMDD>/ (data de execucao)."
+        ),
+    )
+    auditar_comprovantes_xml.add_argument(
+        "--dias-tolerancia",
+        type=int,
+        default=7,
+        help="Janela em dias entre data de emissao XML e data de pagamento.",
+    )
+    auditar_comprovantes_xml.add_argument(
+        "--fornecedor-cnpj",
+        help="Filtra por CNPJ do fornecedor/beneficiario (com ou sem pontuacao).",
+    )
+    auditar_comprovantes_xml.add_argument(
+        "--empresa-cnpj",
+        help="Filtra por CNPJ da empresa/pagador (com ou sem pontuacao).",
+    )
+    auditar_comprovantes_xml.add_argument(
+        "--somente-revisar",
+        action="store_true",
+        help="Considera apenas comprovantes com status_classificacao iniciando por REVISAR.",
+    )
+    auditar_comprovantes_xml.set_defaults(func=auditar_comprovantes_xml_cnpj_command)
+
     return parser
 
 
@@ -2692,6 +2755,35 @@ def _try_save_proposal_report(report_path: Path, text: str) -> bool:
         print(f"[ERRO] Nao foi possivel salvar relatorio: {report_path}")
         return False
     return True
+
+
+def auditar_comprovantes_xml_cnpj_command(args: argparse.Namespace) -> int:
+    output_dir = (
+        Path(args.output_dir)
+        if args.output_dir
+        else PROJECT_ROOT / "output" / f"audit_xml_comprovantes_{date.today():%Y%m%d}"
+    )
+    try:
+        result = run_audit_xml_comprovantes(
+            Path(args.comprovantes_csv),
+            Path(args.xml_root),
+            dias_tolerancia=args.dias_tolerancia,
+            fornecedor_cnpj=args.fornecedor_cnpj,
+            empresa_cnpj=args.empresa_cnpj,
+            somente_revisar=args.somente_revisar,
+        )
+        outputs = write_audit_xml_comprovantes_outputs(result, output_dir)
+    except (OSError, AuditXmlComprovantesError, ValueError) as exc:
+        print(f"[ERRO] Nao foi possivel executar audit XML x comprovantes: {exc}")
+        return 1
+
+    for line in audit_xml_comprovantes_console_lines(result):
+        print(line)
+    print(f"Relatorio: {outputs['markdown']}")
+    print(f"CSV detalhado: {outputs['csv']}")
+    print(f"Resumo por fornecedor: {outputs['resumo']}")
+    print(f"Manifesto: {outputs['manifest']}")
+    return 0
 
 
 if __name__ == "__main__":
