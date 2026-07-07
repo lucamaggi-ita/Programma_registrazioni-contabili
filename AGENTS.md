@@ -371,7 +371,11 @@ Fonti aggiornate principali:
 - `docs/DECISIONI_CONTABILI.md`;
 - `docs/GOVERNANCA_REGRAS_CONTABEIS.md`;
 - `docs/DIRETRIZ_FONTES_BANCARIAS_COMPROVANTES.md`;
-- `docs/WORKFLOW_CONTABIL_GERENCIAL.md`.
+- `docs/WORKFLOW_CONTABIL_GERENCIAL.md`;
+- `docs/WORKFLOW_OPERATORE_FINALE.md`;
+- `docs/IMPORTA_REVISIONE_XML_OPERADOR.md`;
+- `docs/BANK_RAW_CONVENTION.md`;
+- `docs/ROADMAP_MASTER.md`.
 
 Documenti noti come storici/stale o da trattare con cautela:
 
@@ -383,6 +387,30 @@ Documenti noti come storici/stale o da trattare con cautela:
 
 Se una documentazione contraddice codice/test/YAML aggiornati, segnalarlo prima
 di agire.
+
+---
+
+## Stato della cartella `.agents/`
+
+La cartella `.agents/` esiste nel repository, non è ignorata da Git, ma è
+**attualmente vuota**: non contiene skill, tool o sub-agent.
+
+Le 13 skill operative del progetto (banca, XML, manuali, run/giornale/DRE,
+audit, piano conti/DRE — vedi `CLAUDE.md`, sezione "Skill disponibili") vivono
+esclusivamente sotto `.claude/skills/`, cartella locale **non tracciata da Git**
+(vedi `.gitignore` e la sezione "Note su .claude/skills/" in `CLAUDE.md`).
+
+AGENTS.md descrive le regole operative in forma tool-agnostica, ma le skill
+stesse restano oggi un artefatto specifico di Claude Code: non sono duplicate
+né portate in `.agents/` per altri agenti AI che seguissero quella convenzione.
+
+Un agente diverso da Claude Code che leggesse solo `AGENTS.md` e `.agents/`
+vedrebbe le regole operative ma nessuna delle skill che le implementano.
+
+Se in futuro si vuole rendere disponibili le stesse capacità operative ad altri
+agenti tramite `.agents/`, serve una decisione esplicita dell'utente su formato,
+perimetro e strategia di mantenimento — non va dedotta o creata autonomamente
+da un agente.
 
 ---
 

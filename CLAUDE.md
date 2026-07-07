@@ -296,7 +296,7 @@ ricognizione tecnica 2026-07-03 su Registrazioni Contabili / Fantozzi.
 
 ## Precheck e stato Git
 
-- Precheck Git obbligatorio prima di qualunque lavoro non banale: `git status -sb`, `git branch --show-current`, `git diff --name-status`, `git diff --cached --name-status`.
+- Precheck Git obbligatorio prima di qualunque lavoro non banale: `git status -sb`, `git branch --show-current`, `git rev-list --left-right --count origin/senza-incrementali...HEAD`, `git diff --name-status`, `git diff --cached --name-status`.
 - Mai lavorare sopra uno stato misto staged/unstaged senza prima classificarlo esplicitamente.
 - Prima di consolidare modifiche locali importanti o rischiose, produrre una patch di sicurezza (`git diff > staged.patch` / `unstaged.patch`) come snapshot pre-modifica — pattern già osservato in `output/_patch_safety_003D_...`.
 
@@ -316,6 +316,7 @@ ricognizione tecnica 2026-07-03 su Registrazioni Contabili / Fantozzi.
 
 - Branch operativo attuale: **senza-incrementali**.
 - Non usare la vecchia linea "con incrementali" (`master`, `backup/con-incrementali`) salvo decisione esplicita dell'utente — è una linea storica superata, non una base di lavoro.
+- `main` e `main-initial-backup` sono rami storici/di backup, non operativi.
 
 ---
 
