@@ -104,6 +104,13 @@ Database_Dev\Registrazioni_manuali\registrazioni_manuali_base.xlsx     - templat
 Database_Dev\Registrazioni_manuali\registrazioni_manuali_tecnico.csv   - CSV tecnico intermediario
 ```
 
+Nota governance template legacy (2026-07-07): il path
+`Database_Dev\_templates\lancamentos_manuais_gerenciais_TEMPLATE.xlsx` non e il
+template operativo delle registrazioni manuali gerenciais. La cartella
+`Database_Dev\_templates\` contiene artefatti storici/locali non usati dai
+default della CLI attuale; l'operatore deve usare il template in
+`Database_Dev\Registrazioni_manuali\registrazioni_manuali_base.xlsx`.
+
 Limiti noti (governance, non funzionali — vedi anche `docs/LANCAMENTOS_MANUAIS_GERENCIAIS_OPERADOR.md`):
 - audit prudenziale Manuali XML nella stessa run: segnala possibili duplicati
   con criterio `data esatta + valore assoluto a 2 decimali`, produce

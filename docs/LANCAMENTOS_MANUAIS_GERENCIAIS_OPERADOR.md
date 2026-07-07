@@ -36,6 +36,19 @@ Output default (path real confirmado no codigo, `cli.py::DEFAULT_REGISTRAZIONI_M
 Database_Dev\Registrazioni_manuali\registrazioni_manuali_base.xlsx
 ```
 
+Nota de governanca sobre template legacy (2026-07-07):
+
+- usar sempre o template operacional acima para preenchimento manual;
+- nao usar `Database_Dev\_templates\lancamentos_manuais_gerenciais_TEMPLATE.xlsx`
+  para lancamentos manuais gerenciais;
+- arquivos em `Database_Dev\_templates\` sao artefatos historicos/locais, nao
+  sao o default da CLI atual;
+- o CSV tecnico gerado pelo fluxo fica em
+  `Database_Dev\Registrazioni_manuali\registrazioni_manuali_tecnico.csv`;
+- o comando one-shot `executar-lancamentos-manuais-gerenciais` valida o
+  template operacional, gera o CSV tecnico e entra no full run da zero da linha
+  `senza-incrementali`.
+
 O template contem quatro abas:
 
 - `lancamentos_manuais`: aba principal para preenchimento.
