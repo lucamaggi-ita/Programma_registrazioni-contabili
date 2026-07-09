@@ -140,6 +140,11 @@ from fantozzi.lancamentos_manuais_template import (
 )
 from fantozzi.logging_utils import error, info, warning
 from fantozzi.nfe_importer import parse_nfe
+from fantozzi.nfstock_ingest import (
+    NfstockIngestError,
+    console_lines as nfstock_ingest_console_lines,
+    ingest_nfstock_xml,
+)
 from fantozzi.operation_classifier import (
     OperationAuditError,
     auditar_operacoes_especiais,
@@ -1512,6 +1517,37 @@ def build_parser() -> argparse.ArgumentParser:
     )
     auditar_comprovantes_xml.set_defaults(func=auditar_comprovantes_xml_cnpj_command)
 
+    ingestar_nfstock = subparsers.add_parser(
+        "ingestar-nfstock-xml",
+        help="Prepara ingest seguro de XML NFSTOCK em dry-run por default.",
+        description=(
+            "Escaneia XML NF-e/NFS-e exportados do NFSTOCK, valida CNPJ tomador, "
+            "deduplica e gera manifest. Por default nao copia nada; use --apply "
+            "somente com confirmacao operacional explicita."
+        ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    ingestar_nfstock.add_argument(
+        "--source-dir",
+        required=True,
+        help="Pasta de exportacao NFSTOCK com XML ja extraidos.",
+    )
+    ingestar_nfstock.add_argument(
+        "--xml-base",
+        default=str(DEFAULT_XML_BASE),
+        help="Pasta raiz oficial Database_Dev/XML_fatture_acquisto.",
+    )
+    ingestar_nfstock.add_argument(
+        "--output-dir",
+        help="Pasta de saida dos manifest. Default: output/nfstock_ingest_<timestamp>.",
+    )
+    ingestar_nfstock.add_argument(
+        "--apply",
+        action="store_true",
+        help="Executa copia real. Sem este flag, o comando e dry-run.",
+    )
+    ingestar_nfstock.set_defaults(func=ingestar_nfstock_xml_command)
+
     return parser
 
 
@@ -2783,6 +2819,24 @@ def auditar_comprovantes_xml_cnpj_command(args: argparse.Namespace) -> int:
     print(f"CSV detalhado: {outputs['csv']}")
     print(f"Resumo por fornecedor: {outputs['resumo']}")
     print(f"Manifesto: {outputs['manifest']}")
+    return 0
+
+
+def ingestar_nfstock_xml_command(args: argparse.Namespace) -> int:
+    output_dir = Path(args.output_dir) if args.output_dir else None
+    try:
+        result = ingest_nfstock_xml(
+            Path(args.source_dir),
+            Path(args.xml_base),
+            output_dir=output_dir,
+            apply=args.apply,
+        )
+    except (OSError, NfstockIngestError, ValueError) as exc:
+        print(f"[ERRO] Nao foi possivel executar ingest NFSTOCK: {exc}")
+        return 1
+
+    for line in nfstock_ingest_console_lines(result):
+        print(line)
     return 0
 
 
