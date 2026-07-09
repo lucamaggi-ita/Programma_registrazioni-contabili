@@ -148,6 +148,114 @@ Per i launcher operativi/modificativi:
   il template legacy, non fa `git add`/`commit`/`push`, non esegue workflow
   incrementali.
 
+### `scripts/reprocessar_importacao_real.ps1` / `.bat`
+
+- **Comando Python equivalente**:
+  `.\.venv\Scripts\python.exe -m fantozzi.cli reprocessar-importacao-real`
+- **Operativo/modificativo**: si. Puo creare una nuova run sicura, importare
+  XML reali dentro la run e generare output/reports contabili.
+- **Conferma obbligatoria**: senza `-ConfirmarExecucao` il launcher stampa il
+  riepilogo, non avvia Python ed esce con codice `2`.
+- **Git guardrail**: con `-ConfirmarExecucao`, prima di avviare Python blocca
+  se `git diff --name-status` o `git diff --cached --name-status` non sono
+  vuoti. `-SkipGitCheck` e una deroga esplicita e non va usata come default.
+- **Parametri principali della CLI**:
+  `--xml-base`, `--saida-output`, `--saida-reports`,
+  `--modo {provisorio,definitivo}`, `--dry-run`, `--fase9-csv`,
+  `--lancamentos-manuais-gerenciais-csv`,
+  `--lancamentos-banca-aprovados`, `--gerar-pacote-contabil-gerencial`,
+  `--project-root`.
+- **Pass-through argomenti**: gli argomenti dopo i parametri del launcher
+  vengono passati alla CLI senza inventare parametri business.
+- **Uso sicuro senza esecuzione reale**:
+
+  ```powershell
+  scripts\reprocessar_importacao_real.ps1
+  ```
+
+  oppure, da `cmd.exe`:
+
+  ```cmd
+  scripts\reprocessar_importacao_real.bat
+  ```
+
+- **Uso reale solo con conferma esplicita**:
+
+  ```powershell
+  scripts\reprocessar_importacao_real.ps1 -ConfirmarExecucao `
+    --xml-base Database_Dev\XML_fatture_acquisto `
+    --saida-output output\importacao_real `
+    --saida-reports reports\importacao_real
+  ```
+
+### `scripts/importar_revisao_banca.ps1` / `.bat`
+
+- **Comando Python equivalente**:
+  `.\.venv\Scripts\python.exe -m fantozzi.cli importar-revisao-banca`
+- **Operativo/modificativo**: si. Legge `bank_raw` e genera planilhas
+  decisorie banca e manifest operativi.
+- **Conferma obbligatoria**: senza `-ConfirmarExecucao` il launcher stampa il
+  riepilogo, non avvia Python ed esce con codice `2`.
+- **Git guardrail**: con `-ConfirmarExecucao`, prima di avviare Python blocca
+  se `git diff --name-status` o `git diff --cached --name-status` non sono
+  vuoti. `-SkipGitCheck` e una deroga esplicita e non va usata come default.
+- **Parametri principali della CLI**:
+  `--bank-raw-dir`, `--ano`, `--mes`, `--saida-dir`, `--regras`,
+  `--plano-contas`, `--mapeamento-dre`.
+- **Pass-through argomenti**: gli argomenti dopo i parametri del launcher
+  vengono passati alla CLI senza inventare parametri business.
+- **Uso sicuro senza esecuzione reale**:
+
+  ```powershell
+  scripts\importar_revisao_banca.ps1
+  ```
+
+  oppure, da `cmd.exe`:
+
+  ```cmd
+  scripts\importar_revisao_banca.bat
+  ```
+
+- **Uso reale solo con conferma esplicita**:
+
+  ```powershell
+  scripts\importar_revisao_banca.ps1 -ConfirmarExecucao --ano 2026 --mes 04
+  ```
+
+### `scripts/importar_revisao_xml.ps1` / `.bat`
+
+- **Comando Python equivalente**:
+  `.\.venv\Scripts\python.exe -m fantozzi.cli importar-revisao-xml`
+- **Operativo/modificativo**: si. Gera planilha decisoria XML e manifest a
+  partire da una run di reports gia esistente.
+- **Conferma obbligatoria**: senza `-ConfirmarExecucao` il launcher stampa il
+  riepilogo, non avvia Python ed esce con codice `2`.
+- **Git guardrail**: con `-ConfirmarExecucao`, prima di avviare Python blocca
+  se `git diff --name-status` o `git diff --cached --name-status` non sono
+  vuoti. `-SkipGitCheck` e una deroga esplicita e non va usata come default.
+- **Parametri principali della CLI**:
+  `--run-reports-dir`, `--run-id`, `--reports-runs-root`, `--saida-dir`,
+  `--regras`, `--plano-contas`, `--allow-stale-run`.
+- **Pass-through argomenti**: gli argomenti dopo i parametri del launcher
+  vengono passati alla CLI senza inventare parametri business.
+- **Uso sicuro senza esecuzione reale**:
+
+  ```powershell
+  scripts\importar_revisao_xml.ps1
+  ```
+
+  oppure, da `cmd.exe`:
+
+  ```cmd
+  scripts\importar_revisao_xml.bat
+  ```
+
+- **Uso reale solo con conferma esplicita**:
+
+  ```powershell
+  scripts\importar_revisao_xml.ps1 -ConfirmarExecucao --run-id <RUN_ID>
+  ```
+
 ## Cosa NON fanno questi launcher
 
 - Non classificano, non escludono, non alterano nessuna regola YAML.
