@@ -19,6 +19,7 @@ EMPRESA_CNPJ = "08884180000123"
 OUTRA_EMPRESA_CNPJ = "55746722000181"
 FORNECEDOR_CNPJ = "42870341000168"
 NFSE_FIXTURES = Path(__file__).parent / "fixtures" / "nfse"
+NFSE_NACIONAL_FIXTURES = Path(__file__).parent / "fixtures" / "nfse_nacional"
 
 
 def _nfe_xml(
@@ -82,6 +83,12 @@ def _write_nfe(path: Path, **kwargs) -> Path:
 def _copy_nfse(path: Path, fixture_name: str = "17755939000169202610000000111CFEQ5H12-nfse.xml") -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(NFSE_FIXTURES / fixture_name, path)
+    return path
+
+
+def _copy_nfse_nacional(path: Path, fixture_name: str = "amami-nfse-nacional.xml") -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(NFSE_NACIONAL_FIXTURES / fixture_name, path)
     return path
 
 
@@ -156,6 +163,23 @@ def test_nfse_destinada_a_cnpj_xml(tmp_path):
     ].dest_path.endswith(f"{EMPRESA_CNPJ}/xml/nfse.xml")
 
 
+def test_nfse_nacional_destinada_a_cnpj_xml(tmp_path):
+    source = tmp_path / "source"
+    xml_base = tmp_path / "xml_base"
+    xml_base.mkdir()
+    _copy_nfse_nacional(source / "nfse_nacional.xml")
+
+    result = ingest_nfstock_xml(source, xml_base, output_dir=tmp_path / "out")
+
+    assert result.rows[0].tipo_documento == "NFSE"
+    assert result.rows[0].cnpj_tomador == EMPRESA_CNPJ
+    assert result.rows[0].status == STATUS_COPIARIA
+    assert result.rows[0].chave == "29253031202938301000196202610000032126050073035066"
+    assert result.rows[0].dest_path.endswith(
+        f"{EMPRESA_CNPJ}\\xml\\nfse_nacional.xml"
+    ) or result.rows[0].dest_path.endswith(f"{EMPRESA_CNPJ}/xml/nfse_nacional.xml")
+
+
 def test_duplicado_non_viene_copiato(tmp_path):
     source = tmp_path / "source"
     xml_base = tmp_path / "xml_base"
@@ -188,6 +212,41 @@ def test_duplicado_em_destino_com_nome_diferente_non_viene_copiato(tmp_path):
     assert _statuses(result) == [STATUS_DUPLICADO]
     assert existing.is_file()
     assert not (xml_base / EMPRESA_CNPJ / "xml" / "novo_nome.xml").exists()
+
+
+def test_nfstock_ingest_dedup_nfse_por_chave_acesso(tmp_path):
+    source = tmp_path / "source"
+    xml_base = tmp_path / "xml_base"
+    xml_base.mkdir()
+    _copy_nfse_nacional(source / "a.xml")
+    _copy_nfse_nacional(source / "b.xml")
+
+    result = ingest_nfstock_xml(source, xml_base, output_dir=tmp_path / "out")
+
+    assert _statuses(result) == [STATUS_COPIARIA, STATUS_DUPLICADO]
+    assert result.rows[0].chave == result.rows[1].chave
+
+
+def test_nfstock_ingest_dedup_nfse_por_chave_sintetica(tmp_path):
+    source = tmp_path / "source"
+    xml_base = tmp_path / "xml_base"
+    xml_base.mkdir()
+    xml_text = (NFSE_NACIONAL_FIXTURES / "amami-nfse-nacional.xml").read_text(
+        encoding="utf-8"
+    )
+    xml_text = xml_text.replace(
+        ' Id="NFS29253031202938301000196202610000032126050073035066"',
+        "",
+    )
+    source.mkdir(parents=True)
+    (source / "a.xml").write_text(xml_text, encoding="utf-8")
+    (source / "b.xml").write_text(xml_text, encoding="utf-8")
+
+    result = ingest_nfstock_xml(source, xml_base, output_dir=tmp_path / "out")
+
+    assert _statuses(result) == [STATUS_COPIARIA, STATUS_DUPLICADO]
+    assert result.rows[0].chave.startswith("NFSE|02938301000196|08884180000123|")
+    assert result.rows[0].chave == result.rows[1].chave
 
 
 def test_file_destinazione_esistente_non_viene_sovrascritto(tmp_path):

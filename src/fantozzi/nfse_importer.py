@@ -103,21 +103,32 @@ def _party_cnpj(party: ET.Element | None) -> str:
 
 
 def _party_name(party: ET.Element | None) -> str:
-    return _descendant_text(party, "RazaoSocial") or _descendant_text(party, "NomeFantasia")
+    return (
+        _descendant_text(party, "RazaoSocial")
+        or _descendant_text(party, "NomeFantasia")
+        or _descendant_text(party, "xNome")
+        or _descendant_text(party, "xFant")
+    )
 
 
 def parse_nfse(xml_path: Path | str) -> NFSE:
-    """Parse an ABRASF NFS-e XML file and return an NFSE dataclass.
+    """Parse a supported NFS-e XML file and return an NFSE dataclass.
 
     Raises ValueError when the XML is not a supported NFS-e document. The parser
-    is namespace-agnostic because ABRASF exporters vary the namespace URI.
+    is namespace-agnostic because exporters vary the namespace URI.
     """
     xml_path = Path(xml_path)
     root = ET.parse(xml_path).getroot()
+    root_name = _local_name(root)
 
-    if _local_name(root) != "CompNfse":
-        raise ValueError(f"Nao e uma NFS-e valida: {xml_path.name}")
+    if root_name == "CompNfse":
+        return _parse_abrasf_nfse(root, xml_path)
+    if root_name == "NFSe":
+        return _parse_nacional_nfse(root, xml_path)
+    raise ValueError(f"Nao e uma NFS-e valida: {xml_path.name}")
 
+
+def _parse_abrasf_nfse(root: ET.Element, xml_path: Path) -> NFSE:
     inf_nfse = _first_descendant(root, "InfNfse")
     if inf_nfse is None:
         raise ValueError(f"NFS-e sem InfNfse: {xml_path.name}")
@@ -148,3 +159,45 @@ def parse_nfse(xml_path: Path | str) -> NFSE:
         discriminacao=_descendant_text(inf_nfse, "Discriminacao"),
         arquivo_origem=str(xml_path),
     )
+
+
+def _parse_nacional_nfse(root: ET.Element, xml_path: Path) -> NFSE:
+    inf_nfse = _first_descendant(root, "infNFSe")
+    if inf_nfse is None:
+        raise ValueError(f"NFS-e nacional sem infNFSe: {xml_path.name}")
+
+    inf_dps = _first_descendant(inf_nfse, "infDPS")
+    if inf_dps is None:
+        raise ValueError(f"NFS-e nacional sem DPS/infDPS: {xml_path.name}")
+
+    prestador = _first_descendant(inf_dps, "prest")
+    emitente = _first_descendant(inf_nfse, "emit")
+    tomador = _first_descendant(inf_dps, "toma")
+
+    valor_servicos = _parse_decimal(_descendant_text(inf_dps, "vServ"))
+    valor_liquido = _parse_decimal(_descendant_text(inf_nfse, "vLiq")) or valor_servicos
+
+    return NFSE(
+        tipo_documento="NFSE",
+        numero=_child_text(inf_nfse, "nNFSe") or _child_text(inf_dps, "nDPS"),
+        codigo_verificacao="",
+        chave_acesso=_nacional_chave_acesso(inf_nfse),
+        data_emissao=_required_date(
+            _child_text(inf_dps, "dhEmi") or _child_text(inf_nfse, "dhProc"),
+            xml_path,
+        ),
+        competencia=_parse_date(_child_text(inf_dps, "dCompet")),
+        cnpj_prestador=_party_cnpj(prestador) or _party_cnpj(emitente),
+        razao_social_prestador=_party_name(emitente) or _party_name(prestador),
+        cnpj_tomador=_party_cnpj(tomador),
+        razao_social_tomador=_party_name(tomador),
+        valor_servicos=valor_servicos,
+        valor_liquido=valor_liquido,
+        discriminacao=_descendant_text(inf_dps, "xDescServ"),
+        arquivo_origem=str(xml_path),
+    )
+
+
+def _nacional_chave_acesso(inf_nfse: ET.Element) -> str:
+    key = (inf_nfse.attrib.get("Id") or "").strip()
+    return key[3:] if key.startswith("NFS") else key

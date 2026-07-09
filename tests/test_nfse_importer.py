@@ -9,8 +9,11 @@ from fantozzi.nfse_importer import parse_nfse
 
 
 FIXTURES = Path(__file__).parent / "fixtures" / "nfse"
+NACIONAL_FIXTURES = Path(__file__).parent / "fixtures" / "nfse_nacional"
 NFSE_TOMADOR = FIXTURES / "17755939000169202610000000111CFEQ5H12-nfse.xml"
 NFSE_TOMADOR_SERVICO = FIXTURES / "422162670001604742ZSLDD6CV-nfse.xml"
+NFSE_NACIONAL_AMAMI = NACIONAL_FIXTURES / "amami-nfse-nacional.xml"
+NFSE_NACIONAL_TRATTORIA = NACIONAL_FIXTURES / "trattoria-nfse-nacional.xml"
 
 
 def test_parse_nfse_abrasf_layout_com_tomador():
@@ -61,6 +64,60 @@ def test_parse_nfse_valor_com_virgula():
 
     assert nfse.valor_servicos == Decimal("1440.20")
     assert nfse.valor_liquido == Decimal("1440.20")
+
+
+def test_parse_nfse_nacional_amami():
+    nfse = parse_nfse(NFSE_NACIONAL_AMAMI)
+
+    assert nfse.tipo_documento == "NFSE"
+    assert nfse.numero == "2026100000321"
+    assert nfse.chave_acesso == "29253031202938301000196202610000032126050073035066"
+    assert nfse.cnpj_prestador == "02938301000196"
+    assert nfse.razao_social_prestador == "INFORMATICA PORTO SEGURO 2000 LTDA"
+    assert nfse.cnpj_tomador == "08884180000123"
+    assert nfse.razao_social_tomador == "AMAMI RESTAURANTE LTDA"
+    assert "TROCA PLACA" in nfse.discriminacao
+
+
+def test_parse_nfse_nacional_trattoria():
+    nfse = parse_nfse(NFSE_NACIONAL_TRATTORIA)
+
+    assert nfse.tipo_documento == "NFSE"
+    assert nfse.numero == "137145"
+    assert nfse.chave_acesso == "43149022201579286000174000000013714526077317298417"
+    assert nfse.cnpj_prestador == "01579286000174"
+    assert nfse.razao_social_prestador == "SAFEWEB SEGURANCA DA INFORMACAO LTDA."
+    assert nfse.cnpj_tomador == "55746722000181"
+    assert nfse.razao_social_tomador == "Trattoria do Sossego Restaurante Ltda"
+    assert "Certificado Digital" in nfse.discriminacao
+
+
+def test_parse_nfse_nacional_normaliza_cnpj():
+    nfse = parse_nfse(NFSE_NACIONAL_TRATTORIA)
+
+    assert nfse.cnpj_prestador == "01579286000174"
+    assert nfse.cnpj_tomador == "55746722000181"
+
+
+def test_parse_nfse_nacional_extrai_valor():
+    nfse = parse_nfse(NFSE_NACIONAL_AMAMI)
+
+    assert nfse.valor_servicos == Decimal("100.00")
+    assert nfse.valor_liquido == Decimal("100.00")
+
+
+def test_parse_nfse_nacional_extrai_data():
+    nfse = parse_nfse(NFSE_NACIONAL_TRATTORIA)
+
+    assert nfse.data_emissao == date(2026, 7, 6)
+    assert nfse.competencia == date(2026, 7, 6)
+
+
+def test_parse_nfse_nacional_nao_quebra_abrasf():
+    nfse = parse_nfse(NFSE_TOMADOR)
+
+    assert nfse.numero == "202610000000111"
+    assert nfse.chave_acesso == "29253031217755939000169261000000011126020070216971"
 
 
 def test_parse_nfse_nao_confunde_nfe_com_nfse(tmp_path):

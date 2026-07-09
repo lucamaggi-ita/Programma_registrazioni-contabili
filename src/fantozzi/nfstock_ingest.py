@@ -234,7 +234,9 @@ def _parse_candidate(
             "",
         )
 
-    if _local_name(root) == "CompNfse" or "InfNfse" in local_names:
+    is_nfse_root = _local_name(root) in {"CompNfse", "NFSe"}
+    has_nfse_payload = bool({"InfNfse", "infNFSe"} & local_names)
+    if is_nfse_root or has_nfse_payload:
         try:
             nfse = parse_nfse(source_path)
         except (ValueError, ET.ParseError, OSError) as exc:
