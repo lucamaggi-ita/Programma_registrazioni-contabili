@@ -5,6 +5,12 @@ Atualizado: 2026-07-04. Estado real confirmado por ricognizione tecnica: fluxo
 com 39 testes automatizados verdes (`test_lancamentos_manuais_gerenciais.py`,
 `test_lancamentos_manuais_template.py`). Nao e um fluxo apenas projetado.
 
+Nota launcher: per l'esecuzione operativa preferire
+`scripts\executar_lancamentos_manuais_gerenciais.ps1` o `.bat`. Senza
+`-ConfirmarExecucao` il launcher stampa il riepilogo, non avvia Python ed esce
+con codice `2`; con conferma applica il guardrail Git e blocca il template
+legacy. Gli esempi CLI diretti restano riferimenti tecnici avanzati.
+
 Este fluxo serve para despesas gerenciais que nao vieram de XML e nao devem ser
 criadas automaticamente a partir de banco/comprovantes.
 
@@ -155,13 +161,13 @@ humana** nos seguintes pontos:
 Quando o template estiver preenchido, usar o comando one-shot:
 
 ```powershell
-.\.venv\Scripts\python.exe -m fantozzi.cli executar-lancamentos-manuais-gerenciais
+scripts\executar_lancamentos_manuais_gerenciais.ps1 -ConfirmarExecucao
 ```
 
-Se a CLI `fantozzi` estiver instalada no PATH, tambem e possivel usar:
+Uso tecnico avanzato equivalente:
 
 ```powershell
-fantozzi executar-lancamentos-manuais-gerenciais
+.\.venv\Scripts\python.exe -m fantozzi.cli executar-lancamentos-manuais-gerenciais
 ```
 
 O comando executa em sequencia:

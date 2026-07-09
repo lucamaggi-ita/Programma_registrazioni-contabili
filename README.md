@@ -1,8 +1,8 @@
 # Fantozzi - Registrazioni Contabili Gerenciais
 
-Fantozzi e un programma Python locale per importare XML NF-e di acquisti,
-classificare i produtos secondo un `plano_contas_gerencial`, generare
-`Lancamentos` e scrivere un Excel controllabile manualmente.
+Fantozzi e un programma Python locale per costruire una contabilita
+gerenciale auditabile a partire da XML NF-e, banca/comprovantes, registrazioni
+manuali e regole dichiarate dall'utente.
 
 Principio guida:
 
@@ -11,47 +11,120 @@ controllo > automazione cieca
 revisione > classificazione inventata
 ```
 
-Quando Fantozzi non e sicuro, manda il lancamento in revisione invece di
-inventare una classificazione. Le decisioni contabili o fiscali finali vanno
-sempre validate con il contador.
+Quando Fantozzi non e sicuro, lascia il movimento in revisione invece di
+inventare una classificazione. Le decisioni contabili appartengono all'utente e
+non vengono dedotte automaticamente.
+
+## Stato Operativo Corrente
+
+- Branch operativo: `senza-incrementali`.
+- Remote operativo: `origin/senza-incrementali`.
+- Workflow vivo: full run da zero sulle fonti disponibili.
+- Non usare `master`, `main` o `backup/con-incrementali` come base operativa:
+  sono linee storiche/di backup.
+- Non usare workflow incrementali o baseline retroattive come percorso
+  operativo corrente.
 
 ## Cosa Fa Oggi
 
-- importa XML NF-e;
-- estrae `produtos`, valores e `duplicatas`;
-- classifica prodotti tramite `config/regras_classificacao_produtos.yaml`;
-- raggruppa i `Lancamentos` per `conta_id`, non per singolo prodotto;
-- ripartisce le `duplicatas` proporzionalmente tra i `Lancamentos`;
-- gestisce `fretes`, `seguros`, `outras despesas` e `descontos` sulle compras;
-- scrive un file Excel `.xlsx`;
-- preserva righe manuali;
-- evita duplicati;
-- crea l'aba `Revisao` per i `Lancamentos` da controllare;
-- offre una CLI per importare 1 XML o una cartella di XML.
+- importa e classifica XML/NF-e;
+- importa revisioni banca/comprovantes;
+- applica regole dichiarate in YAML/config;
+- lascia in `REVISAR` cio che non ha regola sicura;
+- valida registrazioni manuali gerenciais;
+- genera CSV tecnico manuali;
+- esegue full run provvisorie da zero;
+- genera giornale, pre-livro, DRE, pacote contabile gerencial e report;
+- genera PDF DRE, dashboard HTML e Excel giornale leggibile da run gia
+  prodotte;
+- produce audit e output etichettati.
 
-## Requisiti
+## Launcher Operativi
 
-- Windows 10/11;
-- PowerShell;
-- Python 3.14 o versione compatibile gia usata nel progetto;
-- virtualenv locale `.venv`;
-- dipendenze installate dal `pyproject.toml`;
-- Excel o LibreOffice solo per controllo visivo del `.xlsx`, non per i test.
+Il riferimento completo e `docs/LAUNCHERS_OPERACIONAIS.md`.
 
-Su questo PC `python` puo non essere nel PATH. Nei comandi usare:
+Usare i launcher `.ps1`/`.bat` quando esistono. La CLI Python diretta resta un
+riferimento tecnico avanzato, non il percorso operatore preferito.
+
+### Audit Read-Only
+
+- `scripts/auditar_regras_comprovantes.ps1` / `.bat`
+- `scripts/auditar_comprovantes_xml_cnpj.ps1` / `.bat`
+
+Contratto: read-only rispetto a regole e fonti. L'audit XML x comprovantes
+scrive solo nella cartella `-OutputDir` indicata e blocca sovrascritture
+silenziose.
+
+### Operativi/Modificativi
+
+- `scripts/executar_lancamentos_manuais_gerenciais.ps1` / `.bat`
+- `scripts/reprocessar_importacao_real.ps1` / `.bat`
+- `scripts/importar_revisao_banca.ps1` / `.bat`
+- `scripts/importar_revisao_xml.ps1` / `.bat`
+
+Contratto: richiedono `-ConfirmarExecucao`. Senza conferma stampano il riepilogo,
+non avviano Python ed escono con codice `2`. Con conferma applicano guardrail
+Git su diff tracked/staged, salvo deroga esplicita `-SkipGitCheck`.
+
+### Generativi/Output
+
+- `scripts/gerar_dre_gerencial_ok_provisoria.ps1` / `.bat`
+- `scripts/gerar_pdf_dre.ps1` / `.bat`
+- `scripts/gerar_dashboard_html.ps1` / `.bat`
+- `scripts/gerar_giornale_leggibile.ps1` / `.bat`
+
+Contratto: richiedono `-ConfirmarExecucao`. Senza conferma non avviano Python,
+non generano output ed escono con codice `2`.
+
+Esempio sicuro senza esecuzione reale:
+
+```powershell
+scripts\gerar_dashboard_html.ps1
+```
+
+Esempio reale solo dopo verifica operativa:
+
+```powershell
+scripts\gerar_dashboard_html.ps1 -ConfirmarExecucao --run-dir output\run
+```
+
+## Registrazioni Manuali
+
+Template operativo ufficiale:
+
+```text
+Database_Dev\Registrazioni_manuali\registrazioni_manuali_base.xlsx
+```
+
+CSV tecnico generato:
+
+```text
+Database_Dev\Registrazioni_manuali\registrazioni_manuali_tecnico.csv
+```
+
+Template legacy da non usare:
+
+```text
+Database_Dev\_templates\lancamentos_manuais_gerenciais_TEMPLATE.xlsx
+```
+
+Il launcher `executar_lancamentos_manuais_gerenciais` verifica il template
+ufficiale e blocca il template legacy.
+
+## Ambiente
+
+Aprire PowerShell nella root del repository:
+
+```powershell
+cd "C:\Users\Recanto do Sossego\Documents\Luca\GitHub\Gestione_Ristorante\Programma_registrazioni_contabili"
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
+.\.venv\Scripts\Activate.ps1
+```
+
+Su questo PC `python` puo non essere nel PATH. Nei comandi tecnici usare:
 
 ```powershell
 .\.venv\Scripts\python.exe
-```
-
-## Preparazione Ambiente
-
-Aprire PowerShell nella cartella del progetto:
-
-```powershell
-cd "C:\Users\Luca Maggi\Documents\Git_Hub\Programma_Registrazioni_Contabili"
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
-.\.venv\Scripts\Activate.ps1
 ```
 
 Se serve installare o riallineare le dipendenze:
@@ -60,188 +133,49 @@ Se serve installare o riallineare le dipendenze:
 .\.venv\Scripts\python.exe -m pip install -e .[dev]
 ```
 
-## Eseguire I Test
+## Test
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest -v
 ```
 
-Risultato atteso attuale:
+Per modifiche mirate, preferire prima i test dell'area toccata e poi ampliare
+solo se il rischio lo richiede.
 
-```text
-53 passed
-```
+## Fonti E Config Ufficiali
 
-## Importare Un Singolo XML NF-e
+- `config/plano_contas_gerencial.yaml`
+- `config/mapeamento_dre.yaml`
+- `config/regras_classificacao_produtos.yaml`
+- `config/regras_classificacao_comprovantes.yaml`
+- `Database_Dev\XML_fatture_acquisto`
+- `bank_raw\`
+- `Database_Dev\Registrazioni_manuali\registrazioni_manuali_base.xlsx`
 
-```powershell
-.\.venv\Scripts\python.exe -m fantozzi.cli importar-nfe `
-  --xml "samples\nfe_exemplo\nfe_oesa_12566_20260505.xml" `
-  --excel "output\lancamentos_fantozzi.xlsx"
-```
+Non modificare YAML/config o fonti operative senza decisione esplicita.
 
-Parametri:
+## Output
 
-- `--xml` indica il file XML NF-e da importare;
-- `--excel` indica il file Excel da creare o aggiornare.
-
-Il comando stampa log semplici in PowerShell, per esempio quanti `Lancamentos`
-sono stati generati e dove e stato aggiornato l'Excel.
-
-## Importare Una Cartella Di XML NF-e
-
-```powershell
-.\.venv\Scripts\python.exe -m fantozzi.cli importar-pasta-nfe `
-  --pasta "samples\nfe_exemplo" `
-  --excel "output\lancamentos_fantozzi.xlsx"
-```
-
-Il comando:
-
-- legge i file `.xml` e `.XML` nella cartella indicata;
-- ordina i file per nome;
-- importa gli XML NF-e validi;
-- segnala XML non validi senza bloccare gli altri;
-- scrive tutti i `Lancamentos` nello stesso Excel.
-
-Se la cartella non esiste, non e una cartella, non contiene XML, o nessun XML
-valido viene importato, il comando termina con errore e non crea l'Excel.
-
-## Config Opzionali
-
-La CLI usa automaticamente:
-
-```text
-config/plano_contas_gerencial.yaml
-config/regras_classificacao_produtos.yaml
-```
-
-E possibile indicare file diversi:
-
-```powershell
-.\.venv\Scripts\python.exe -m fantozzi.cli importar-nfe `
-  --xml "samples\nfe_exemplo\nfe_oesa_12566_20260505.xml" `
-  --excel "output\lancamentos_fantozzi.xlsx" `
-  --plano-contas "config\plano_contas_gerencial.yaml" `
-  --regras-produtos "config\regras_classificacao_produtos.yaml"
-```
-
-Usare config alternative solo con attenzione: `plano_contas_gerencial` e
-`regras_classificacao_produtos` guidano la classificazione contabile.
-
-## Excel Generato
-
-Il file Excel viene creato o aggiornato nel path passato con `--excel`.
-Esempio:
-
-```text
-output\lancamentos_fantozzi.xlsx
-```
-
-Il workbook contiene almeno due abas:
-
-```text
-Lancamentos
-Revisao
-```
-
-### Lancamentos
-
-Contiene i `Lancamentos` generati dagli XML importati.
-
-Campi importanti:
-
-- `data_documento`: data di emissione del documento;
-- `competencia`: mese di competenza in formato `YYYY-MM`;
-- `fornecedor_ou_favorecido`: nome del fornecedor;
-- `documento`: numero della NF-e;
-- `conta_id`: codice della conta gerencial;
-- `conta_nome`: nome della conta gerencial;
-- `grupo_conta`: gruppo della conta;
-- `descricao_itens`: prodotti riassunti nel lancamento;
-- `valor`: valore del lancamento;
-- `duplicatas_json`: duplicatas ripartite sul lancamento, in formato JSON;
-- `origem`: origine del lancamento, per esempio `XML_NFE` o `MANUAL`;
-- `chave_origem`: chave NF-e usata come origine;
-- `hash_registro`: chiave tecnica usata per evitare duplicati;
-- `status_revisao`: `OK` oppure `REVISAR`;
-- `alertas`: motivi di attenzione o revisione;
-- `observacoes`: campo libero per note manuali.
-
-### Revisao
-
-Contiene i `Lancamentos` con:
-
-```text
-status_revisao != OK
-```
-
-Questa aba serve per controllo manuale. Quando compare un lancamento in
-`Revisao`, va controllato prima di usare i dati per analisi gerenciale.
-
-## Anti-Duplicati
-
-Rilanciare lo stesso comando sullo stesso XML o sulla stessa cartella non
-duplica i `Lancamentos` gia importati.
-
-La deduplica usa `hash_registro` quando disponibile. Se manca, usa una chiave
-stabile basata su:
-
-```text
-origem
-chave_origem
-conta_id
-valor
-```
-
-## Righe Manuali
-
-Le righe manuali inserite dall'utente nell'Excel non vengono cancellate.
-
-Le righe con:
-
-```text
-origem = MANUAL
-```
-
-sono preservate e non entrano nella deduplica automatica degli XML.
+`output/`, `reports/` e `runs/` contengono output generati, audit o run. Non
+committare output reali salvo mandato esplicito e motivato.
 
 ## Revisione Manuale
 
-Se il comando stampa warning o se l'Excel contiene righe nella aba `Revisao`:
+Se un output contiene `REVISAR`, `MANCANTE`, `NON_VERIFICATO`,
+`NON_DISPONIBILE` o `N.A.`, il dato va trattato come stato esplicito e non come
+zero tecnico. La revisione umana resta parte del contratto operativo.
 
-1. aprire l'Excel;
-2. controllare l'aba `Revisao`;
-3. verificare `conta_id`, `conta_nome`, `valor`, `descricao_itens` e `alertas`;
-4. correggere o completare manualmente se necessario;
-5. validare eventuali dubbi contabili o fiscali con il contador.
+## Limiti Operativi
 
-Esempi di motivi di revisione:
-
-- prodotto non classificato;
-- classificazione ambigua;
-- valore inconsistente;
-- possibile investimento;
-- altri casi da controllare manualmente.
-
-## Limiti Attuali
-
-Oggi Fantozzi non fa ancora:
-
-- DRE gerencial completa automatica;
-- dashboard;
-- importazione PDF;
-- lettura di email;
-- integrazione bancaria;
-- invio automatico al contador;
-- validazione fiscale ufficiale.
-
-Fantozzi non sostituisce il contador e non rende definitivo un trattamento
-contabile o fiscale.
+Fantozzi non sostituisce il contador, non rende definitivo un trattamento
+contabile o fiscale, non classifica senza regola approvata e non deve essere
+usato per automazione cieca.
 
 ## Comandi Git Utili
 
 ```powershell
-git status --short
+git status -sb
+git diff --name-status
+git diff --cached --name-status
 git log --oneline -n 8
 ```

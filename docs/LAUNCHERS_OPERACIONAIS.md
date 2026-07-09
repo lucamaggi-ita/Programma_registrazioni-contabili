@@ -38,6 +38,24 @@ Per i launcher operativi/modificativi:
 
 ## Launcher disponibili
 
+### Indice rapido
+
+| Categoria | Launcher | Contratto |
+|---|---|---|
+| Audit read-only | `auditar_regras_comprovantes.ps1` / `.bat` | Non modifica YAML/config e scrive solo a console. |
+| Audit read-only | `auditar_comprovantes_xml_cnpj.ps1` / `.bat` | Legge fonti e scrive solo in `-OutputDir`, con blocco anti-sovrascrittura. |
+| Operativo/modificativo | `executar_lancamentos_manuais_gerenciais.ps1` / `.bat` | Richiede `-ConfirmarExecucao`; senza conferma exit `2` e Python non avviato. |
+| Operativo/modificativo | `reprocessar_importacao_real.ps1` / `.bat` | Richiede `-ConfirmarExecucao`; guardrail Git prima della run. |
+| Operativo/modificativo | `importar_revisao_banca.ps1` / `.bat` | Richiede `-ConfirmarExecucao`; guardrail Git prima della generazione decisionale. |
+| Operativo/modificativo | `importar_revisao_xml.ps1` / `.bat` | Richiede `-ConfirmarExecucao`; guardrail Git prima della generazione decisionale. |
+| Generativo/output | `gerar_dre_gerencial_ok_provisoria.ps1` / `.bat` | Richiede `-ConfirmarExecucao`; senza conferma non genera output. |
+| Generativo/output | `gerar_pdf_dre.ps1` / `.bat` | Richiede `-ConfirmarExecucao`; senza conferma non genera PDF. |
+| Generativo/output | `gerar_dashboard_html.ps1` / `.bat` | Richiede `-ConfirmarExecucao`; senza conferma non genera dashboard. |
+| Generativo/output | `gerar_giornale_leggibile.ps1` / `.bat` | Richiede `-ConfirmarExecucao`; senza conferma non genera Excel. |
+
+Per i comandi operativi/generativi, `-SkipGitCheck` e una deroga pericolosa e
+mai default: usarla solo con autorizzazione esplicita e consapevole.
+
 ### `scripts/auditar_regras_comprovantes.ps1` / `.bat`
 
 - **Comando Python equivalente**:

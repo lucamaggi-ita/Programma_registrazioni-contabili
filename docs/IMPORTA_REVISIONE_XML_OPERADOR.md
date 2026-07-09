@@ -2,6 +2,12 @@
 
 Versione: 1.0 - 2026-05-24
 
+Nota launcher: per `reprocessar-importacao-real` e `importar-revisao-xml`
+preferire i launcher in `scripts\reprocessar_importacao_real.ps1` e
+`scripts\importar_revisao_xml.ps1`. Richiedono `-ConfirmarExecucao`; senza
+conferma escono con codice `2` e non avviano Python. Gli esempi CLI diretti
+restano riferimenti tecnici avanzati.
+
 ## Scopo
 
 Questo workflow prepara il file Excel ufficiale per revisionare prodotti XML/NF-e

@@ -10,6 +10,13 @@ Progetto: Programma_registrazioni_contabili
 documento è stato riallineato di conseguenza, ma in caso di dubbio prevale
 sempre quel documento.
 
+**NOTA LAUNCHER 2026-07-09:** quando esiste un launcher in `scripts/*.ps1` o
+`scripts/*.bat`, quello e il percorso operatore preferito. Gli esempi con
+`.\.venv\Scripts\python.exe -m fantozzi.cli ...` restano riferimenti tecnici
+avanzati. I comandi operativi/generativi tramite launcher richiedono
+`-ConfirmarExecucao`; senza conferma escono con codice `2` e non avviano
+Python. Il riferimento completo e `docs/LAUNCHERS_OPERACIONAIS.md`.
+
 ---
 
 ## Cosa produce questo workflow
