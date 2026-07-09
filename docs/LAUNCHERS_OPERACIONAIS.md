@@ -256,6 +256,143 @@ Per i launcher operativi/modificativi:
   scripts\importar_revisao_xml.ps1 -ConfirmarExecucao --run-id <RUN_ID>
   ```
 
+### `scripts/gerar_dre_gerencial_ok_provisoria.ps1` / `.bat`
+
+- **Comando Python equivalente**:
+  `.\.venv\Scripts\python.exe -m fantozzi.cli gerar-dre-gerencial-ok-provisoria`
+- **Operativo/generativo**: si. Genera XLSX e TXT provvisori della DRE
+  gerencial usando solo lancamentos con `status_revisao OK` non speciali.
+- **Conferma obbligatoria**: senza `-ConfirmarExecucao` il launcher stampa il
+  riepilogo, non avvia Python ed esce con codice `2`.
+- **Git guardrail**: con `-ConfirmarExecucao`, prima di avviare Python blocca
+  se `git diff --name-status` o `git diff --cached --name-status` non sono
+  vuoti. `-SkipGitCheck` e una deroga esplicita e non va usata come default.
+- **Parametri principali della CLI**:
+  `--entrada`, `--mapeamento-dre`, `--saida-xlsx`, `--relatorio`,
+  `--pasta-operacoes-especiais`.
+- **Pass-through argomenti**: gli argomenti dopo i parametri del launcher
+  vengono passati alla CLI senza inventare parametri business.
+- **Uso sicuro senza esecuzione reale**:
+
+  ```powershell
+  scripts\gerar_dre_gerencial_ok_provisoria.ps1
+  ```
+
+  oppure, da `cmd.exe`:
+
+  ```cmd
+  scripts\gerar_dre_gerencial_ok_provisoria.bat
+  ```
+
+- **Uso reale solo con conferma esplicita**:
+
+  ```powershell
+  scripts\gerar_dre_gerencial_ok_provisoria.ps1 -ConfirmarExecucao `
+    --entrada output\run\lancamentos.xlsx `
+    --saida-xlsx output\run\dre_ok_provisoria.xlsx
+  ```
+
+### `scripts/gerar_pdf_dre.ps1` / `.bat`
+
+- **Comando Python equivalente**:
+  `.\.venv\Scripts\python.exe -m fantozzi.cli gerar-pdf-dre`
+- **Operativo/generativo**: si. Legge una run gia prodotta e genera un PDF DRE
+  marcato come `TESTE_TECNICO_NAO_OFICIAL`; non ricalcola la contabilita.
+- **Conferma obbligatoria**: senza `-ConfirmarExecucao` il launcher stampa il
+  riepilogo, non avvia Python ed esce con codice `2`.
+- **Git guardrail**: con `-ConfirmarExecucao`, prima di avviare Python blocca
+  se `git diff --name-status` o `git diff --cached --name-status` non sono
+  vuoti. `-SkipGitCheck` e una deroga esplicita e non va usata come default.
+- **Parametri principali della CLI**:
+  `--run-dir`, `--output-dir`.
+- **Pass-through argomenti**: gli argomenti dopo i parametri del launcher
+  vengono passati alla CLI senza inventare parametri business.
+- **Uso sicuro senza esecuzione reale**:
+
+  ```powershell
+  scripts\gerar_pdf_dre.ps1
+  ```
+
+  oppure, da `cmd.exe`:
+
+  ```cmd
+  scripts\gerar_pdf_dre.bat
+  ```
+
+- **Uso reale solo con conferma esplicita**:
+
+  ```powershell
+  scripts\gerar_pdf_dre.ps1 -ConfirmarExecucao --run-dir output\run
+  ```
+
+### `scripts/gerar_dashboard_html.ps1` / `.bat`
+
+- **Comando Python equivalente**:
+  `.\.venv\Scripts\python.exe -m fantozzi.cli gerar-dashboard-html`
+- **Operativo/generativo**: si. Legge una run gia prodotta e genera dashboard
+  HTML offline marcata come `TESTE_TECNICO_NAO_OFICIAL`; non ricalcola la
+  contabilita.
+- **Conferma obbligatoria**: senza `-ConfirmarExecucao` il launcher stampa il
+  riepilogo, non avvia Python ed esce con codice `2`.
+- **Git guardrail**: con `-ConfirmarExecucao`, prima di avviare Python blocca
+  se `git diff --name-status` o `git diff --cached --name-status` non sono
+  vuoti. `-SkipGitCheck` e una deroga esplicita e non va usata come default.
+- **Parametri principali della CLI**:
+  `--run-dir`, `--output-dir`.
+- **Pass-through argomenti**: gli argomenti dopo i parametri del launcher
+  vengono passati alla CLI senza inventare parametri business.
+- **Uso sicuro senza esecuzione reale**:
+
+  ```powershell
+  scripts\gerar_dashboard_html.ps1
+  ```
+
+  oppure, da `cmd.exe`:
+
+  ```cmd
+  scripts\gerar_dashboard_html.bat
+  ```
+
+- **Uso reale solo con conferma esplicita**:
+
+  ```powershell
+  scripts\gerar_dashboard_html.ps1 -ConfirmarExecucao --run-dir output\run
+  ```
+
+### `scripts/gerar_giornale_leggibile.ps1` / `.bat`
+
+- **Comando Python equivalente**:
+  `.\.venv\Scripts\python.exe -m fantozzi.cli gerar-giornale-leggibile`
+- **Operativo/generativo**: si. Legge pre-livro e DRE gia prodotti dalla full
+  run e genera un Excel gerencial leggibile marcato come
+  `TESTE_TECNICO_NAO_OFICIAL`; non ricalcola la contabilita.
+- **Conferma obbligatoria**: senza `-ConfirmarExecucao` il launcher stampa il
+  riepilogo, non avvia Python ed esce con codice `2`.
+- **Git guardrail**: con `-ConfirmarExecucao`, prima di avviare Python blocca
+  se `git diff --name-status` o `git diff --cached --name-status` non sono
+  vuoti. `-SkipGitCheck` e una deroga esplicita e non va usata come default.
+- **Parametri principali della CLI**:
+  `--run-dir`, `--output-dir`.
+- **Pass-through argomenti**: gli argomenti dopo i parametri del launcher
+  vengono passati alla CLI senza inventare parametri business.
+- **Uso sicuro senza esecuzione reale**:
+
+  ```powershell
+  scripts\gerar_giornale_leggibile.ps1
+  ```
+
+  oppure, da `cmd.exe`:
+
+  ```cmd
+  scripts\gerar_giornale_leggibile.bat
+  ```
+
+- **Uso reale solo con conferma esplicita**:
+
+  ```powershell
+  scripts\gerar_giornale_leggibile.ps1 -ConfirmarExecucao --run-dir output\run
+  ```
+
 ## Cosa NON fanno questi launcher
 
 - Non classificano, non escludono, non alterano nessuna regola YAML.
