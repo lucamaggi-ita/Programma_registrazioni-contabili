@@ -1,6 +1,7 @@
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
+import shutil
 
 import pytest
 
@@ -22,6 +23,8 @@ from fantozzi.cli import build_parser, main
 EMITENTE_CNPJ = "42870341000168"
 DESTINATARIO_CNPJ = "55746722000181"
 OUTRA_EMPRESA_CNPJ = "08884180000123"
+NFSE_PRESTADOR_CNPJ = "17755939000169"
+NFSE_FIXTURES = Path(__file__).parent / "fixtures" / "nfse"
 
 
 def _nfe_xml(
@@ -178,7 +181,31 @@ def test_scan_xml_root_extracts_cnpj_valor_data(tmp_path):
     assert records[0].cnpj_destinatario == DESTINATARIO_CNPJ
     assert records[0].valor_total == Decimal("6857.00")
     assert records[0].data_emissao == date(2026, 1, 5)
+    assert records[0].tipo_documento == "NFE"
     assert xml_por_pasta[DESTINATARIO_CNPJ] == 1
+    assert len(manifest) == 1
+    assert ignoradas == 0
+
+
+def test_scan_xml_root_extracts_nfse_candidate(tmp_path):
+    xml_root = tmp_path / "xml"
+    destino = xml_root / OUTRA_EMPRESA_CNPJ / "nfse.xml"
+    destino.parent.mkdir(parents=True)
+    shutil.copyfile(
+        NFSE_FIXTURES / "17755939000169202610000000111CFEQ5H12-nfse.xml",
+        destino,
+    )
+
+    records, xml_por_pasta, manifest, ignoradas = scan_xml_root(xml_root)
+
+    assert len(records) == 1
+    assert records[0].tipo_documento == "NFSE"
+    assert records[0].cnpj_emitente == NFSE_PRESTADOR_CNPJ
+    assert records[0].cnpj_destinatario == OUTRA_EMPRESA_CNPJ
+    assert records[0].valor_total == Decimal("1830")
+    assert records[0].data_emissao == date(2026, 2, 25)
+    assert records[0].chave == "29253031217755939000169261000000011126020070216971"
+    assert xml_por_pasta[OUTRA_EMPRESA_CNPJ] == 1
     assert len(manifest) == 1
     assert ignoradas == 0
 
@@ -226,8 +253,39 @@ def test_run_audit_match_alta_and_sem_xml(tmp_path):
     by_id = {row.comprovante_id: row for row in result.rows}
     assert by_id["match_alta"].status_audit == STATUS_MATCH_ALTA
     assert by_id["match_alta"].xml_chave.endswith("1" * 44)
+    assert by_id["match_alta"].tipo_documento == "NFE"
     assert by_id["sem_xml"].status_audit == STATUS_SEM_XML_NO_DATASET
     assert "Nenhuma XML encontrada" in by_id["sem_xml"].observacao
+
+
+def test_run_audit_match_alta_with_nfse_candidate(tmp_path):
+    xml_root = tmp_path / "xml"
+    destino = xml_root / OUTRA_EMPRESA_CNPJ / "nfse.xml"
+    destino.parent.mkdir(parents=True)
+    shutil.copyfile(
+        NFSE_FIXTURES / "17755939000169202610000000111CFEQ5H12-nfse.xml",
+        destino,
+    )
+    csv_path = tmp_path / "comprovantes_a_revisar.csv"
+    _write_comprovantes_csv(
+        csv_path,
+        [
+            _comprovante_row(
+                payment_id="nfse_match",
+                cnpj_pagador=OUTRA_EMPRESA_CNPJ,
+                beneficiary_document="17.755.939/0001-69",
+                beneficiary_name="FC CONTABILIDADE LTDA ME",
+                data_pagamento="2026-02-26",
+                valor="1830",
+            )
+        ],
+    )
+
+    result = run_audit(csv_path, xml_root, dias_tolerancia=7)
+
+    assert result.rows[0].status_audit == STATUS_MATCH_ALTA
+    assert result.rows[0].tipo_documento == "NFSE"
+    assert result.rows[0].xml_chave == "29253031217755939000169261000000011126020070216971"
 
 
 def test_run_audit_does_not_pick_a_decision_for_sem_xml(tmp_path):

@@ -1,4 +1,4 @@
-"""Audit read-only de segundo nivel: cruza comprovantes de pagamento com XML/NF-e.
+"""Audit read-only de segundo nivel: cruza comprovantes de pagamento com XML fiscal.
 
 Este modulo NAO classifica, NAO exclui e NAO altera nenhuma decisao contabil.
 Ele apenas produz evidencia de auditoria (candidatos de match por CNPJ + valor +
@@ -18,6 +18,7 @@ from pathlib import Path
 
 from fantozzi.csv_utils import sniff_delimiter
 from fantozzi.nfe_importer import parse_nfe
+from fantozzi.nfse_importer import parse_nfse
 from fantozzi.normalization import normalize_cnpj
 
 STATUS_MATCH_ALTA = "MATCH_ALTA"
@@ -58,6 +59,7 @@ class ComprovanteRecord:
 
 @dataclass(frozen=True)
 class XmlRecord:
+    tipo_documento: str
     chave: str
     data_emissao: date
     valor_total: Decimal
@@ -86,6 +88,7 @@ class AuditRow:
     status_classificacao: str
     status_audit: str
     confidencia: str
+    tipo_documento: str = ""
     xml_chave: str = ""
     xml_data_emissao: str = ""
     xml_valor: str = ""
@@ -209,13 +212,34 @@ def scan_xml_root(
         try:
             nfe = parse_nfe(xml_path)
         except (ValueError, ET.ParseError, OSError):
-            total_ignoradas += 1
+            try:
+                nfse = parse_nfse(xml_path)
+            except (ValueError, ET.ParseError, OSError):
+                total_ignoradas += 1
+                continue
+
+            pasta = rel_path.parts[0] if rel_path.parts else "."
+            xml_por_pasta[pasta] = xml_por_pasta.get(pasta, 0) + 1
+            xml_records.append(
+                XmlRecord(
+                    tipo_documento=nfse.tipo_documento,
+                    chave=nfse.chave_acesso or nfse.codigo_verificacao,
+                    data_emissao=nfse.data_emissao,
+                    valor_total=nfse.valor_liquido or nfse.valor_servicos,
+                    cnpj_emitente=nfse.cnpj_prestador,
+                    nome_emitente=nfse.razao_social_prestador,
+                    cnpj_destinatario=nfse.cnpj_tomador,
+                    nome_destinatario=nfse.razao_social_tomador,
+                    arquivo=str(rel_path).replace("\\", "/"),
+                )
+            )
             continue
 
         pasta = rel_path.parts[0] if rel_path.parts else "."
         xml_por_pasta[pasta] = xml_por_pasta.get(pasta, 0) + 1
         xml_records.append(
             XmlRecord(
+                tipo_documento="NFE",
                 chave=nfe.chave,
                 data_emissao=nfe.data_emissao,
                 valor_total=nfe.valor_total,
@@ -335,6 +359,7 @@ def _match_comprovante(
                     **base_kwargs,
                     status_audit=STATUS_MULTIPLOS_CANDIDATOS,
                     confidencia=tier,
+                    tipo_documento=xml.tipo_documento,
                     xml_chave=xml.chave,
                     xml_data_emissao=xml.data_emissao.isoformat(),
                     xml_valor=f"{xml.valor_total:.2f}",
@@ -357,6 +382,7 @@ def _match_comprovante(
             **base_kwargs,
             status_audit=tier,
             confidencia=tier,
+            tipo_documento=xml.tipo_documento,
             xml_chave=xml.chave,
             xml_data_emissao=xml.data_emissao.isoformat(),
             xml_valor=f"{xml.valor_total:.2f}",
@@ -542,7 +568,7 @@ def report_markdown(result: AuditXmlComprovantesResult) -> str:
         f"- Pastas XML escaneadas: `{result.xml_root}` -> "
         f"{', '.join(result.pastas_escaneadas) or '(nenhuma)'}",
         f"- Total XML lidas: {result.total_xml_lidas} "
-        f"(ignoradas/nao NF-e validas: {result.total_xml_ignoradas})",
+        f"(ignoradas/nao NF-e/NFS-e validas: {result.total_xml_ignoradas})",
         f"- Total comprovantes lidos: {result.total_comprovantes_lidos}",
         f"- Total comprovantes avaliados (apos filtros): {result.total_comprovantes_avaliados}",
         f"- Dias de tolerancia de data: {result.dias_tolerancia}",
@@ -552,8 +578,8 @@ def report_markdown(result: AuditXmlComprovantesResult) -> str:
         "",
         "## Criterios de matching",
         "",
-        "- Chave primaria: CNPJ emitente XML = CNPJ beneficiario comprovante, "
-        "e CNPJ destinatario XML = CNPJ pagador comprovante.",
+        "- Chave primaria: CNPJ emitente/prestador XML = CNPJ beneficiario "
+        "comprovante, e CNPJ destinatario/tomador XML = CNPJ pagador comprovante.",
         "- MATCH_ALTA: valor exato + data dentro da tolerancia.",
         "- MATCH_MEDIA: valor exato + data fora da tolerancia mas plausivel, "
         "ou valor proximo + data dentro da tolerancia.",
@@ -616,6 +642,7 @@ _CSV_HEADERS = [
     "status_classificacao",
     "status_audit",
     "confidencia",
+    "tipo_documento",
     "xml_chave",
     "xml_data_emissao",
     "xml_valor",
