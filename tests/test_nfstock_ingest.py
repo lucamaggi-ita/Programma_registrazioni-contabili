@@ -11,6 +11,7 @@ from fantozzi.nfstock_ingest import (
     STATUS_JA_EXISTE,
     STATUS_IGNORADO_CNPJ_TOMADOR_NAO_SUPORTADO,
     STATUS_IGNORADO_XML_NAO_SUPORTADO,
+    STATUS_REVISAR_CHAVE_NFSE_INSUFICIENTE,
     ingest_nfstock_xml,
 )
 
@@ -77,6 +78,54 @@ def _nfe_xml(
 def _write_nfe(path: Path, **kwargs) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(_nfe_xml(**kwargs), encoding="utf-8")
+    return path
+
+
+def _nfse_service_xml(
+    *,
+    numero: str = "4742",
+    codigo: str = "FUTURO123",
+    chave_acesso: str = "",
+    prestador_cnpj: str = "42.216.267/0001-60",
+    prestador_nome: str = "ALEX STRAUCH BATISTA",
+    tomador_cnpj: str = "08.884.180/0001-23",
+    tomador_nome: str = "AMAMI RESTAURANTE LTDA",
+    valor: str = "1440,20",
+    discriminacao: str = "Acompanhamento de marca junto ao INPI",
+) -> str:
+    chave_node = f"<ChaveAcesso>{chave_acesso}</ChaveAcesso>" if chave_acesso else ""
+    return f"""<CompNfse xmlns="http://www.abrasf.org.br/ABRASF/arquivos/nfse.xsd">
+  <Nfse>
+    <InfNfse>
+      <Numero>{numero}</Numero>
+      <CodigoVerificacao>{codigo}</CodigoVerificacao>
+      {chave_node}
+      <DataEmissao>2026-03-03T15:42:24-03:00</DataEmissao>
+      <Competencia>2026-03-01T00:00:00-03:00</Competencia>
+      <Servico>
+        <Valores>
+          <ValorServicos>{valor}</ValorServicos>
+          <ValorLiquidoNfse>{valor}</ValorLiquidoNfse>
+        </Valores>
+        <Discriminacao>{discriminacao}</Discriminacao>
+      </Servico>
+      <PrestadorServico>
+        <IdentificacaoPrestador><Cnpj>{prestador_cnpj}</Cnpj></IdentificacaoPrestador>
+        <RazaoSocial>{prestador_nome}</RazaoSocial>
+      </PrestadorServico>
+      <TomadorServico>
+        <IdentificacaoTomador><CpfCnpj><Cnpj>{tomador_cnpj}</Cnpj></CpfCnpj></IdentificacaoTomador>
+        <RazaoSocial>{tomador_nome}</RazaoSocial>
+      </TomadorServico>
+    </InfNfse>
+  </Nfse>
+</CompNfse>
+"""
+
+
+def _write_nfse_service(path: Path, **kwargs) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(_nfse_service_xml(**kwargs), encoding="utf-8")
     return path
 
 
@@ -163,6 +212,28 @@ def test_nfse_destinada_a_cnpj_xml(tmp_path):
     ].dest_path.endswith(f"{EMPRESA_CNPJ}/xml/nfse.xml")
 
 
+def test_nfstock_entrypoint_classifies_nfse_service_in_manifest(tmp_path):
+    source = tmp_path / "source"
+    xml_base = tmp_path / "xml_base"
+    xml_base.mkdir()
+    _write_nfse_service(source / "alex.xml", codigo="FUTURO123")
+
+    result = ingest_nfstock_xml(source, xml_base, output_dir=tmp_path / "out")
+
+    row = result.rows[0]
+    assert row.status == STATUS_COPIARIA
+    assert row.nfse_status_classificacao == "CLASSIFICADO_XML_NFSE"
+    assert row.nfse_regra_id == "NFSE_SERVICO_ALEX_INPI_6_01_002"
+    assert row.nfse_conta_id == "6.01.002"
+    assert row.nfse_dre_linha_id == "08.01"
+    assert row.nfse_centro_custo == "CC-005 - Administracao"
+    assert row.nfse_fonte == "XML_NFSE"
+    assert row.nfse_proposta_economica == "true"
+
+    manifest = json.loads(result.json_path.read_text(encoding="utf-8"))
+    assert manifest["rows"][0]["nfse_status_classificacao"] == "CLASSIFICADO_XML_NFSE"
+
+
 def test_nfse_nacional_destinada_a_cnpj_xml(tmp_path):
     source = tmp_path / "source"
     xml_base = tmp_path / "xml_base"
@@ -227,6 +298,34 @@ def test_nfstock_ingest_dedup_nfse_por_chave_acesso(tmp_path):
     assert result.rows[0].chave == result.rows[1].chave
 
 
+def test_nfstock_ingest_dedup_nfse_persistente_con_xml_base(tmp_path):
+    source = tmp_path / "source"
+    xml_base = tmp_path / "xml_base"
+    existing = xml_base / EMPRESA_CNPJ / "xml" / "ja_importada.xml"
+    _write_nfse_service(existing, numero="9999", codigo="FUTURO123")
+    _write_nfse_service(source / "nova_copia.xml", numero="9999", codigo="OUTROCODIGO")
+
+    result = ingest_nfstock_xml(source, xml_base, output_dir=tmp_path / "out")
+
+    assert _statuses(result) == [STATUS_DUPLICADO]
+    assert result.rows[0].nfse_status_classificacao == "CLASSIFICADO_XML_NFSE"
+    assert result.rows[0].nfse_proposta_economica == "false"
+
+
+def test_nfstock_ingest_dedup_nfse_abrasf_e_nacional_mesma_chave(tmp_path):
+    source = tmp_path / "source"
+    xml_base = tmp_path / "xml_base"
+    xml_base.mkdir()
+    chave = "29253031202938301000196202610000032126050073035066"
+    _write_nfse_service(source / "a_abrasf.xml", chave_acesso=chave)
+    _copy_nfse_nacional(source / "b_nacional.xml")
+
+    result = ingest_nfstock_xml(source, xml_base, output_dir=tmp_path / "out")
+
+    assert _statuses(result) == [STATUS_COPIARIA, STATUS_DUPLICADO]
+    assert result.rows[0].nfse_chave_dedup == result.rows[1].nfse_chave_dedup
+
+
 def test_nfstock_ingest_dedup_nfse_por_chave_sintetica(tmp_path):
     source = tmp_path / "source"
     xml_base = tmp_path / "xml_base"
@@ -247,6 +346,19 @@ def test_nfstock_ingest_dedup_nfse_por_chave_sintetica(tmp_path):
     assert _statuses(result) == [STATUS_COPIARIA, STATUS_DUPLICADO]
     assert result.rows[0].chave.startswith("NFSE|02938301000196|08884180000123|")
     assert result.rows[0].chave == result.rows[1].chave
+
+
+def test_nfstock_ingest_nfse_chave_insuficiente_fica_revisar(tmp_path):
+    source = tmp_path / "source"
+    xml_base = tmp_path / "xml_base"
+    xml_base.mkdir()
+    _write_nfse_service(source / "sem_numero.xml", numero="")
+
+    result = ingest_nfstock_xml(source, xml_base, output_dir=tmp_path / "out")
+
+    assert _statuses(result) == [STATUS_REVISAR_CHAVE_NFSE_INSUFICIENTE]
+    assert result.rows[0].nfse_status_classificacao == "REVISAR_CHAVE_NFSE_INSUFICIENTE"
+    assert result.rows[0].nfse_proposta_economica == "false"
 
 
 def test_file_destinazione_esistente_non_viene_sovrascritto(tmp_path):

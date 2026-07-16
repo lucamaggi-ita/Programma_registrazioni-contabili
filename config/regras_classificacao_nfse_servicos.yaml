@@ -1,0 +1,87 @@
+versao: "1.0"
+idioma: pt-BR
+descricao: Regras de classificacao de NFS-e de servicos com politica XML-only.
+
+politicas_xml_only:
+  - policy_id: XML_ONLY_AKIRA_DESINSETIZADORA
+    fornecedor: AKIRA DESINSETIZADORA E DESENTUPIDORA LTDA
+    cnpj_prestador: "07690972000102"
+    comprovante: SOMENTE_RECONCILIACAO
+    assenza_xml: REVISAR_SEM_XML_AUTORIZZATO
+    fallback_comprovante: VIETATO
+    escopo: NFSE_SERVICO
+    observacao: >
+      Fonte contabile primaria NFS-e/XML. Comprovante nao classifica e nao
+      gera lancamento autonomo.
+
+  - policy_id: XML_ONLY_ALEX_STRAUCH_BATISTA_INPI
+    fornecedor: ALEX STRAUCH BATISTA
+    cnpj_prestador: "42216267000160"
+    comprovante: SOMENTE_RECONCILIACAO
+    assenza_xml: REVISAR_SEM_XML_AUTORIZZATO
+    fallback_comprovante: VIETATO
+    escopo: NFSE_SERVICO
+    observacao: >
+      Fonte contabile primaria NFS-e/XML para servicos de marca/INPI.
+      Diferencas irrisorias ficam somente em diagnostico de reconciliacao.
+
+  - policy_id: XML_ONLY_REI_DAS_BOMBAS_BLOCCO_005E_B
+    fornecedor: REI DAS BOMBAS MANUTENCAO E RE
+    cnpj_prestador: "56198626000109"
+    comprovante: REVISAR_005E_B
+    assenza_xml: REVISAR_SEM_XML_AUTORIZZATO
+    fallback_comprovante: VIETATO
+    escopo: BLOCCATO_MULTI_XML_005E_B
+    observacao: >
+      Contratto XML-only registrato, ma nessuna esclusione o classificazione
+      automatica in 005E-A. Non creare conto unico sul pagamento aggregato.
+
+regras:
+  - regra_id: NFSE_SERVICO_AKIRA_DEDETIZACAO_4_01_015
+    tipo_documento: NFSE
+    cnpj_prestador: "07690972000102"
+    cnpj_tomador: "08884180000123"
+    discriminacao_contem:
+      - DEDETIZACAO PREVENTIVA
+      - DEDETIZAÇÃO PREVENTIVA
+      - DESINSETIZACAO
+      - DESINSETIZAÇÃO
+      - CONTROLE DE PRAGAS
+    conta_id: "4.01.015"
+    dre_linha_id: "06.02"
+    centro_custo_id: CC-006
+    precedencia: XML
+    xml_only: true
+    assenza_xml: REVISAR_SEM_XML_AUTORIZZATO
+    fallback_comprovante: VIETATO
+    valor_contabil: VALOR_FISCAL_XML
+    observacao: >
+      Regra aprovada para NFS-e de servico de dedetizacao/desinsetizacao
+      AKIRA. Nao usar comprovante como fonte classificatoria.
+
+  - regra_id: NFSE_SERVICO_ALEX_INPI_6_01_002
+    tipo_documento: NFSE
+    cnpj_prestador: "42216267000160"
+    cnpj_tomador: "08884180000123"
+    discriminacao_contem:
+      - INPI
+      - ACOMPANHAMENTO DE MARCA
+      - REGISTRO DE MARCA
+      - REGISTRACAO DE MARCA
+      - REGISTRAÇÃO DE MARCA
+      - MARCA JUNTO AO INPI
+    conta_id: "6.01.002"
+    dre_linha_id: "08.01"
+    centro_custo_id: CC-005
+    precedencia: XML
+    xml_only: true
+    assenza_xml: REVISAR_SEM_XML_AUTORIZZATO
+    fallback_comprovante: VIETATO
+    valor_contabil: VALOR_FISCAL_XML
+    reconciliacao:
+      diferenca_irrisoria_max: "1.00"
+      efeito_contabil: NENHUM
+      regra: DIFERENCA_SOMENTE_DIAGNOSTICA
+    observacao: >
+      Regra especifica para acompanhamento/registro de marca junto ao INPI.
+      Nao classifica genericamente todo servico futuro do prestador.

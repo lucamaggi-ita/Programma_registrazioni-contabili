@@ -12,6 +12,13 @@ from pathlib import Path
 
 from fantozzi.nfe_importer import parse_nfe
 from fantozzi.nfse_importer import parse_nfse
+from fantozzi.nfse_service_classifier import (
+    NfseServiceClassification,
+    NfseServiceRuleSet,
+    classify_nfse_service,
+    load_nfse_service_rules,
+    nfse_dedup_key,
+)
 from fantozzi.normalization import normalize_cnpj
 
 
@@ -22,10 +29,14 @@ STATUS_DUPLICADO = "DUPLICADO"
 STATUS_IGNORADO_CNPJ_TOMADOR_NAO_SUPORTADO = "IGNORADO_CNPJ_TOMADOR_NAO_SUPORTADO"
 STATUS_IGNORADO_XML_NAO_SUPORTADO = "IGNORADO_XML_NAO_SUPORTADO"
 STATUS_ERRO_PARSE = "ERRO_PARSE"
+STATUS_REVISAR_CHAVE_NFSE_INSUFICIENTE = "REVISAR_CHAVE_NFSE_INSUFICIENTE"
 
 SUPPORTED_TOMADOR_CNPJS = ("08884180000123", "55746722000181")
 CSV_NAME = "manifest_nfstock_ingest.csv"
 JSON_NAME = "manifest_nfstock_ingest.json"
+NFSE_RULES_PATH = Path("config/regras_classificacao_nfse_servicos.yaml")
+PLANO_CONTAS_PATH = Path("config/plano_contas_gerencial.yaml")
+MAPEAMENTO_DRE_PATH = Path("config/mapeamento_dre.yaml")
 
 
 @dataclass(frozen=True)
@@ -40,6 +51,7 @@ class FiscalXmlCandidate:
     valor_total: Decimal
     chave: str
     dedup_key: str
+    nfse: object | None = None
 
 
 @dataclass(frozen=True)
@@ -56,6 +68,16 @@ class NfstockIngestRow:
     valor_total: str
     chave: str
     motivo: str
+    nfse_status_classificacao: str = ""
+    nfse_regra_id: str = ""
+    nfse_conta_id: str = ""
+    nfse_conta_nome: str = ""
+    nfse_dre_linha_id: str = ""
+    nfse_centro_custo: str = ""
+    nfse_fonte: str = ""
+    nfse_chave_dedup: str = ""
+    nfse_motivo: str = ""
+    nfse_proposta_economica: str = "false"
 
 
 @dataclass(frozen=True)
@@ -85,6 +107,9 @@ def ingest_nfstock_xml(
     output_dir: Path | None = None,
     apply: bool = False,
     supported_tomador_cnpjs: tuple[str, ...] = SUPPORTED_TOMADOR_CNPJS,
+    nfse_rules_path: Path | str = NFSE_RULES_PATH,
+    plano_contas_path: Path | str = PLANO_CONTAS_PATH,
+    mapeamento_dre_path: Path | str = MAPEAMENTO_DRE_PATH,
 ) -> NfstockIngestResult:
     source_dir = Path(source_dir)
     xml_base = Path(xml_base)
@@ -97,6 +122,11 @@ def ingest_nfstock_xml(
 
     output_dir.mkdir(parents=True, exist_ok=True)
     supported = tuple(normalize_cnpj(cnpj) for cnpj in supported_tomador_cnpjs)
+    nfse_rule_set = load_nfse_service_rules(
+        Path(nfse_rules_path),
+        Path(plano_contas_path),
+        Path(mapeamento_dre_path),
+    )
     existing_keys = _scan_existing_keys(xml_base, supported)
     seen_source_keys: set[str] = set()
     rows: list[NfstockIngestRow] = []
@@ -114,6 +144,7 @@ def ingest_nfstock_xml(
             continue
 
         dest_path = xml_base / candidate.cnpj_tomador / "xml" / source_path.name
+        classification = _classify_candidate_nfse(candidate, nfse_rule_set)
         if candidate.cnpj_tomador not in supported:
             rows.append(
                 _row_from_candidate(
@@ -121,6 +152,19 @@ def ingest_nfstock_xml(
                     dest_path,
                     STATUS_IGNORADO_CNPJ_TOMADOR_NAO_SUPORTADO,
                     "CNPJ tomador fora do perimetro desta fase.",
+                    classification=classification,
+                )
+            )
+            continue
+
+        if candidate.tipo_documento == "NFSE" and not candidate.dedup_key:
+            rows.append(
+                _row_from_candidate(
+                    candidate,
+                    dest_path,
+                    STATUS_REVISAR_CHAVE_NFSE_INSUFICIENTE,
+                    "NFS-e sem chave fiscal ou identificador composto minimo; nenhuma copia executada.",
+                    classification=classification,
                 )
             )
             continue
@@ -132,6 +176,7 @@ def ingest_nfstock_xml(
                     dest_path,
                     STATUS_JA_EXISTE,
                     "Arquivo de destino ja existe; nenhuma sobrescrita permitida.",
+                    classification=classification,
                 )
             )
             seen_source_keys.add(candidate.dedup_key)
@@ -144,6 +189,7 @@ def ingest_nfstock_xml(
                     dest_path,
                     STATUS_DUPLICADO,
                     "Duplicado por chave fiscal/conteudo em source ou destino.",
+                    classification=classification,
                 )
             )
             continue
@@ -157,7 +203,15 @@ def ingest_nfstock_xml(
         else:
             status = STATUS_COPIARIA
             motivo = "Dry-run: nenhuma copia executada."
-        rows.append(_row_from_candidate(candidate, dest_path, status, motivo))
+        rows.append(
+            _row_from_candidate(
+                candidate,
+                dest_path,
+                status,
+                motivo,
+                classification=classification,
+            )
+        )
 
     csv_path = output_dir / CSV_NAME
     json_path = output_dir / JSON_NAME
@@ -242,6 +296,7 @@ def _parse_candidate(
         except (ValueError, ET.ParseError, OSError) as exc:
             return None, STATUS_ERRO_PARSE, str(exc)
         chave = nfse.chave_acesso or _nfse_synthetic_key(nfse)
+        dedup_key = nfse_dedup_key(nfse)
         return (
             FiscalXmlCandidate(
                 tipo_documento="NFSE",
@@ -253,7 +308,8 @@ def _parse_candidate(
                 data_emissao=nfse.data_emissao.isoformat(),
                 valor_total=nfse.valor_liquido or nfse.valor_servicos,
                 chave=chave,
-                dedup_key=f"NFSE:{chave}",
+                dedup_key=dedup_key,
+                nfse=nfse,
             ),
             "",
             "",
@@ -293,6 +349,16 @@ def _row(
         data_emissao="",
         valor_total="",
         chave="",
+        nfse_status_classificacao="",
+        nfse_regra_id="",
+        nfse_conta_id="",
+        nfse_conta_nome="",
+        nfse_dre_linha_id="",
+        nfse_centro_custo="",
+        nfse_fonte="",
+        nfse_chave_dedup="",
+        nfse_motivo="",
+        nfse_proposta_economica="false",
         motivo=motivo,
     )
 
@@ -302,7 +368,13 @@ def _row_from_candidate(
     dest_path: Path,
     status: str,
     motivo: str,
+    *,
+    classification: NfseServiceClassification | None = None,
 ) -> NfstockIngestRow:
+    lancamento = classification.lancamento if classification is not None else None
+    proposta_economica = bool(
+        lancamento is not None and status in {STATUS_COPIADO, STATUS_COPIARIA}
+    )
     return NfstockIngestRow(
         status=status,
         tipo_documento=candidate.tipo_documento,
@@ -315,8 +387,27 @@ def _row_from_candidate(
         data_emissao=candidate.data_emissao,
         valor_total=f"{candidate.valor_total:.2f}",
         chave=candidate.chave,
+        nfse_status_classificacao=classification.status if classification is not None else "",
+        nfse_regra_id=classification.regra_id if classification is not None else "",
+        nfse_conta_id=lancamento.conta_id if lancamento is not None else "",
+        nfse_conta_nome=lancamento.conta_nome if lancamento is not None else "",
+        nfse_dre_linha_id=lancamento.dre_linha_id if lancamento is not None else "",
+        nfse_centro_custo=lancamento.centro_custo if lancamento is not None else "",
+        nfse_fonte=lancamento.origem if lancamento is not None else "",
+        nfse_chave_dedup=classification.nfse_key if classification is not None else candidate.dedup_key,
+        nfse_motivo=classification.motivo if classification is not None else "",
+        nfse_proposta_economica="true" if proposta_economica else "false",
         motivo=motivo,
     )
+
+
+def _classify_candidate_nfse(
+    candidate: FiscalXmlCandidate,
+    rule_set: NfseServiceRuleSet,
+) -> NfseServiceClassification | None:
+    if candidate.tipo_documento != "NFSE" or candidate.nfse is None:
+        return None
+    return classify_nfse_service(candidate.nfse, rule_set)
 
 
 def _write_csv(path: Path, rows: list[NfstockIngestRow]) -> None:
